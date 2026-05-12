@@ -1,4 +1,4 @@
-import type { BractJSConfig } from "bractjs";
+import type { BractJSConfig } from "@bractjs/bractjs";
 
 const config: BractJSConfig = {
   port: 3000,

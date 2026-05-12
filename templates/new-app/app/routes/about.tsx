@@ -1,4 +1,4 @@
-import { Link } from "bractjs";
+import { Link } from "@bractjs/bractjs";
 
 export function meta() {
   return [{ title: "About | {{APP_NAME}}" }];

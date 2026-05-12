@@ -23,6 +23,9 @@
     "typescript",
     "full-stack"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "src",
     "bin",

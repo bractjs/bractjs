@@ -11,7 +11,7 @@
     "allowImportingTsExtensions": true,
     "types": ["bun-types"],
     "paths": {
-      "bractjs": ["./src/index.ts"]
+      "@bractjs/bractjs": ["./src/index.ts"]
     }
   },
   "include": ["src", "bin"],

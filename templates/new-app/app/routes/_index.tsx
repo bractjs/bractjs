@@ -1,6 +1,6 @@
-import { useLoaderData } from "bractjs";
-import type { LoaderArgs } from "bractjs";
-import { Link } from "bractjs";
+import { useLoaderData } from "@bractjs/bractjs";
+import type { LoaderArgs } from "@bractjs/bractjs";
+import { Link } from "@bractjs/bractjs";
 
 interface HomeData {
   message: string;

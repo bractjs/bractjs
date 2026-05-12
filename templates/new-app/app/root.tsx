@@ -1,6 +1,6 @@
 // This is the root layout for your BractJS app.
 // Every route renders inside this component.
-import { Scripts, LiveReload, Outlet } from "bractjs";
+import { Scripts, LiveReload, Outlet } from "@bractjs/bractjs";
 
 export default function Root() {
   return (

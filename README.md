@@ -41,8 +41,8 @@ Place files inside `app/routes/`. BractJS scans them at startup.
 Every file in `app/routes/` can export any combination of these:
 
 ```tsx
-import type { LoaderArgs, ActionArgs, MetaArgs } from "bractjs";
-import { redirect } from "bractjs";
+import type { LoaderArgs, ActionArgs, MetaArgs } from "@bractjs/bractjs";
+import { redirect } from "@bractjs/bractjs";
 
 // Runs on every GET — return value becomes useLoaderData()
 export async function loader({ request, params, context }: LoaderArgs) {
@@ -86,7 +86,7 @@ export default function BlogPost() {
 Required. Provides the `<html>` document shell.
 
 ```tsx
-import { Scripts, LiveReload, Outlet } from "bractjs";
+import { Scripts, LiveReload, Outlet } from "@bractjs/bractjs";
 
 export function meta() {
   return [{ title: "My App" }, { name: "viewport", content: "width=device-width, initial-scale=1" }];
@@ -113,8 +113,8 @@ export default function Root() {
 `defer()` streams slow data without blocking the initial HTML response.
 
 ```tsx
-import { defer } from "bractjs";
-import { Await } from "bractjs";
+import { defer } from "@bractjs/bractjs";
+import { Await } from "@bractjs/bractjs";
 import { Suspense } from "react";
 
 export async function loader({ params }: LoaderArgs) {
@@ -148,7 +148,7 @@ export default function BlogPost() {
 Soft-navigates without a full reload. `prefetch="hover"` preloads the route chunk + loader data on mouse-enter.
 
 ```tsx
-import { Link } from "bractjs";
+import { Link } from "@bractjs/bractjs";
 
 <Link to="/blog/42">Read Post</Link>
 <Link to="/about" prefetch="hover">About</Link>
@@ -159,7 +159,7 @@ import { Link } from "bractjs";
 Fetch-based submission. Re-runs the current route's loader after the action completes.
 
 ```tsx
-import { Form } from "bractjs";
+import { Form } from "@bractjs/bractjs";
 
 <Form method="post" action="/blog/new">
   <input name="title" />
@@ -195,7 +195,7 @@ export default function BlogLayout() {
 | `useFetcher()` | `{ data, state, load, submit }` | Background fetch without navigation |
 
 ```tsx
-import { useLoaderData, useNavigation, useFetcher } from "bractjs";
+import { useLoaderData, useNavigation, useFetcher } from "@bractjs/bractjs";
 
 const { post } = useLoaderData<LoaderData>();
 
@@ -213,7 +213,7 @@ fetcher.load("/api/suggestions?q=bun");
 `<Image>` serves responsively-sized, format-converted images through a built-in `/_image` endpoint. Requires [ImageMagick](https://imagemagick.org) (`magick` or `convert`) — falls back to serving the original if not installed.
 
 ```tsx
-import { Image } from "bractjs";
+import { Image } from "@bractjs/bractjs";
 
 // Basic — lazy, WebP, 80% quality, responsive srcset
 <Image src="/public/hero.jpg" alt="Hero" width={1200} height={600} />
@@ -363,7 +363,7 @@ export function Counter() {
 Middleware runs before routing. Register on the module-level `pipeline` singleton.
 
 ```ts
-import { pipeline, requestLogger, cors, authGuard } from "bractjs";
+import { pipeline, requestLogger, cors, authGuard } from "@bractjs/bractjs";
 
 pipeline
   .use(requestLogger())
@@ -380,7 +380,7 @@ pipeline
 **Custom middleware:**
 
 ```ts
-import type { MiddlewareFn } from "bractjs";
+import type { MiddlewareFn } from "@bractjs/bractjs";
 
 const trace: MiddlewareFn = async (ctx, next) => {
   ctx.context.requestId = crypto.randomUUID();
@@ -395,7 +395,7 @@ const trace: MiddlewareFn = async (ctx, next) => {
 ## Sessions
 
 ```ts
-import { createCookieSession } from "bractjs";
+import { createCookieSession } from "@bractjs/bractjs";
 
 const session = createCookieSession({
   name: "__session",
