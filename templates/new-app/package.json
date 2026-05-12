@@ -8,7 +8,7 @@
     "start": "bractjs start"
   },
   "dependencies": {
-    "@bractjs/bractjs": "file:{{BRACT_PATH}}",
+    "@bractjs/bractjs": "latest",
     "react": "^19",
     "react-dom": "^19"
   },
