@@ -1,0 +1,58 @@
+{
+  "name": "bractjs",
+  "version": "0.1.0",
+  "description": "Production-grade SSR framework for Bun + React 19. File-based routing, streaming SSR, server actions, typed routes.",
+  "license": "MIT",
+  "homepage": "https://github.com/bractjs/bractjs#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bractjs/bractjs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bractjs/bractjs/issues"
+  },
+  "keywords": [
+    "bun",
+    "react",
+    "react19",
+    "ssr",
+    "framework",
+    "routing",
+    "server-actions",
+    "streaming",
+    "typescript",
+    "full-stack"
+  ],
+  "files": [
+    "src",
+    "bin",
+    "types",
+    "templates"
+  ],
+  "bin": {
+    "bractjs": "./bin/cli.ts"
+  },
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "dev": "bun run src/dev/server.ts",
+    "build": "bun run src/build/bundler.ts",
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "^19",
+    "react-dom": "^19"
+  }
+}

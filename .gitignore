@@ -1,0 +1,5 @@
+node_modules/
+build/
+.env
+.bract-image-cache/
+app/route-types.gen.ts

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun tsc *)",
+      "Bash(bunx tsc *)",
+      "Bash(bun -e ' *)"
+    ]
+  }
+}
