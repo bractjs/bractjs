@@ -1,6 +1,6 @@
 # BractJS
 
-> Production-grade SSR framework for Bun + React 19.  
+> Production-grade SSR framework for Bun + React.  
 > File-based routing · Parallel loaders · Streaming SSR · Built-in HMR · Server Actions
 
 ---
