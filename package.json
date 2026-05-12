@@ -1,5 +1,5 @@
 {
-  "name": "bractjs",
+  "name": "@bractjs/bractjs",
   "version": "0.1.0",
   "description": "Production-grade SSR framework for Bun + React 19. File-based routing, streaming SSR, server actions, typed routes.",
   "license": "MIT",
