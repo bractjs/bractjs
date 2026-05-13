@@ -134,6 +134,24 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 ---
 
+## Test Suite
+
+- [x] `matcher.test.ts` — route trie, static/param/catch-all priority
+- [x] `scanner.test.ts` — `filePathToPattern`, `pathToSegments`
+- [x] `loader.test.ts` — `safeRun`, `runLoaders`, `buildLoaderArgs`
+- [x] `meta.test.ts` — `mergeMeta`, `renderMetaTags`
+- [x] `session.test.ts` — `createCookieSession` roundtrip + HMAC rotation
+- [x] `integration.test.ts` — live `Bun.serve` HTML/JSON/action/404
+- [x] `errors.test.ts` — `BractJSError`, `HttpError`, type guards
+- [x] `deferred.test.ts` — `defer`, `isDeferred`, `stripDeferred`, `promisesOf`
+- [x] `response.test.ts` — `redirect`, `json`, `error` helpers
+- [x] `env.test.ts` — `safeStringify` (XSS escaping), `requireEnv`
+- [x] `middleware.test.ts` — `MiddlewarePipeline`, `cors()`, `authGuard()`, `requestLogger()`
+- [x] `manifest.test.ts` — `generateManifest`
+- [x] `action-handler.test.ts` — `handleActionRequest` routing guards, `resolveAction`
+
+---
+
 ## Future (Post v0.1.0)
 
 - [x] Module-level HMR (no full reload — fine-grained module swap)
