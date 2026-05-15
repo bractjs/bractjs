@@ -52,15 +52,20 @@ async function sign(data: string, secret: string): Promise<string> {
 }
 
 async function verify(data: string, sig: string, secrets: string[]): Promise<boolean> {
+  // Iterate ALL secrets without short-circuit, and do full-length constant-time
+  // compare against every candidate to avoid leaking which secret matched (or
+  // whether a length mismatch occurred) via timing.
+  let ok = false;
   for (const secret of secrets) {
     const expected = await sign(data, secret);
-    if (expected.length === sig.length) {
-      let diff = 0;
-      for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
-      if (diff === 0) return true;
+    const len = Math.max(expected.length, sig.length);
+    let diff = expected.length ^ sig.length;
+    for (let i = 0; i < len; i++) {
+      diff |= (expected.charCodeAt(i) || 0) ^ (sig.charCodeAt(i) || 0);
     }
+    if (diff === 0) ok = true;
   }
-  return false;
+  return ok;
 }
 
 function makeSession(data: SessionData): InternalSession {
@@ -77,6 +82,12 @@ function makeSession(data: SessionData): InternalSession {
 
 export function createCookieSession(options: CookieSessionOptions): SessionStorage {
   const { name, secrets, maxAge, secure = true, sameSite = "Lax" } = options;
+  if (!Array.isArray(secrets) || secrets.length === 0) {
+    throw new Error("createCookieSession: secrets must be a non-empty array");
+  }
+  if (!secrets.every((s) => typeof s === "string" && s.length >= 16)) {
+    throw new Error("createCookieSession: each secret must be a string of length >= 16");
+  }
 
   return {
     async getSession(cookie?: string | null): Promise<Session> {
