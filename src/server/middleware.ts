@@ -30,16 +30,20 @@ export class MiddlewarePipeline {
     ctx: MiddlewareContext,
     handler: () => Promise<Response>,
   ): Promise<Response> {
-    let index = 0;
     const fns = this.fns;
+    let lastCalled = -1;
 
-    const dispatch = (): Promise<Response> => {
-      if (index >= fns.length) return handler();
-      const fn = fns[index++];
-      return fn(ctx, dispatch);
+    const dispatch = (i: number): Promise<Response> => {
+      if (i <= lastCalled) {
+        return Promise.reject(new Error("middleware: next() called more than once"));
+      }
+      lastCalled = i;
+      if (i >= fns.length) return handler();
+      const fn = fns[i];
+      return fn(ctx, () => dispatch(i + 1));
     };
 
-    return dispatch();
+    return dispatch(0);
   }
 }
 

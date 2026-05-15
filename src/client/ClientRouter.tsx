@@ -95,9 +95,11 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
   // Module-level HMR: swap the current route module without a full reload.
   // The injected HMR client script calls window.__BRACTJS_HMR_ACCEPT__(pattern, mod)
   // after importing the freshly-built chunk from /_hmr/module.
+  // Dev gate: prod builds inject __BRACT_DEV__ = false; absence in browser also
+  // counts as prod since we never reference `process` here.
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") return;
-    const w = window as unknown as { __BRACTJS_HMR_ACCEPT__?: unknown };
+    const w = window as unknown as { __BRACT_DEV__?: boolean; __BRACTJS_HMR_ACCEPT__?: unknown };
+    if (w.__BRACT_DEV__ !== true) return;
     w.__BRACTJS_HMR_ACCEPT__ = (pattern: string, mod: RouteModuleClient) => {
       const current = matchPatternForPath(pathname, manifest);
       if (current === pattern) startTransition(() => setCurrentModule(mod));
