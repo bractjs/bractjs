@@ -37,7 +37,7 @@ test("GET /_data?path=/ returns JSON with route key", async () => {
 test("POST / runs action and returns 200 HTML", async () => {
   const form = new FormData();
   form.set("name", "bract");
-  const res = await fetch(`${BASE}/`, { method: "POST", body: form });
+  const res = await fetch(`${BASE}/`, { method: "POST", body: form, headers: { Origin: BASE } });
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toContain("text/html");
 });
