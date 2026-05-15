@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { createElement } from "react";
 import type { TrieNode } from "./matcher.ts";
 import { matchRoute } from "./matcher.ts";
@@ -10,6 +9,7 @@ import { json, error } from "./response.ts";
 import { isRedirect } from "../shared/errors.ts";
 import { pipeline, type MiddlewareContext } from "./middleware.ts";
 import { BractJSProvider } from "../shared/context.ts";
+import { isAllowedMutation } from "./csrf.ts";
 
 export interface HandlerConfig {
   appDir: string;
@@ -39,16 +39,9 @@ async function route(
   config: HandlerConfig,
   context: Record<string, unknown>,
 ): Promise<Response> {
-  const { appDir, publicDir, manifest } = config;
+  const { appDir, manifest } = config;
   const url = new URL(request.url);
   const { pathname, searchParams } = url;
-
-  // ── Static public assets ──────────────────────────────────────────────
-  if (pathname.startsWith("/public/")) {
-    const file = Bun.file(join(publicDir, pathname.slice("/public/".length)));
-    if (await file.exists()) return new Response(file);
-    return error("Not Found", 404);
-  }
 
   // ── /_data soft-nav JSON endpoint ─────────────────────────────────────
   if (pathname.startsWith("/_data")) {
@@ -77,8 +70,11 @@ async function route(
   // ── Action (mutating methods) ─────────────────────────────────────────
   let actionData: unknown = null;
   if (MUTATING_METHODS.has(request.method)) {
+    if (!isAllowedMutation(request)) return error("Forbidden", 403);
     try {
-      const formData = await request.formData();
+      const ct = request.headers.get("Content-Type") ?? "";
+      const isFormLike = ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded");
+      const formData = isFormLike ? await request.formData() : new FormData();
       actionData = await runAction(chain.route, { ...args, formData });
     } catch (err) {
       if (isRedirect(err)) return err as Response;

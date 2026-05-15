@@ -23,13 +23,13 @@ describe("handleActionRequest — routing", () => {
   });
 
   test("returns 400 when id query param is missing", async () => {
-    const req = new Request("http://localhost/_action", { method: "POST" });
+    const req = new Request("http://localhost/_action", { method: "POST", headers: { "X-BractJS-Action": "1" } });
     const res = await handleActionRequest(req);
     expect(res?.status).toBe(400);
   });
 
   test("returns 404 for unknown action id", async () => {
-    const req = new Request("http://localhost/_action?id=does-not-exist-xyz", { method: "POST" });
+    const req = new Request("http://localhost/_action?id=does-not-exist-xyz", { method: "POST", headers: { "X-BractJS-Action": "1" } });
     const res = await handleActionRequest(req);
     expect(res?.status).toBe(404);
   });
