@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rename } from "node:fs/promises";
 import type { ImageTransformParams, TransformResult, ImageFormat } from "./types.ts";
 
 const MAX_MEM = 200;
@@ -68,8 +68,15 @@ export async function setOnDisk(
 ): Promise<void> {
   await mkdir(dir, { recursive: true });
   const key = await cacheKey(src, params);
+  const jsonFinal = join(dir, `${key}.json`);
+  const binFinal = join(dir, `${key}.bin`);
+  const jsonTmp = `${jsonFinal}.tmp`;
+  const binTmp = `${binFinal}.tmp`;
+  // Write both temp files, then atomically rename. Readers see either both
+  // files present or neither — never a half-written pair.
   await Promise.all([
-    Bun.write(join(dir, `${key}.json`), JSON.stringify({ contentType: result.contentType, format: result.format })),
-    Bun.write(join(dir, `${key}.bin`), result.data),
+    Bun.write(jsonTmp, JSON.stringify({ contentType: result.contentType, format: result.format })),
+    Bun.write(binTmp, result.data),
   ]);
+  await Promise.all([rename(jsonTmp, jsonFinal), rename(binTmp, binFinal)]);
 }

@@ -1,6 +1,27 @@
 import type { ImageTransformParams, TransformResult, ImageFormat } from "./types.ts";
 import { MIME } from "./types.ts";
 
+// In-process semaphore (DoS guard): cap concurrent ImageMagick spawns so a
+// burst of /_image requests can't fork-bomb the server.
+const MAX_CONCURRENT = 4;
+let inFlight = 0;
+const waiters: Array<() => void> = [];
+
+async function acquireSlot(): Promise<void> {
+  if (inFlight < MAX_CONCURRENT) {
+    inFlight++;
+    return;
+  }
+  await new Promise<void>((resolve) => waiters.push(resolve));
+  inFlight++;
+}
+
+function releaseSlot(): void {
+  inFlight--;
+  const next = waiters.shift();
+  if (next) next();
+}
+
 // Probe for an available ImageMagick binary once, then cache the result.
 let _binary: string | null | undefined;
 
@@ -57,20 +78,24 @@ export async function transformImage(
     return { data, contentType: MIME[fmt] ?? "image/jpeg", format: fmt };
   }
 
-  const proc = Bun.spawn(buildArgs(binary, filePath, params), {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  await acquireSlot();
+  try {
+    const proc = Bun.spawn(buildArgs(binary, filePath, params), {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
 
-  const [data, , exitCode] = await Promise.all([
-    new Response(proc.stdout!).arrayBuffer(),
-    new Response(proc.stderr!).arrayBuffer(),
-    proc.exited,
-  ]);
+    const [data, exitCode] = await Promise.all([
+      new Response(proc.stdout!).arrayBuffer(),
+      proc.exited,
+    ]);
 
-  if (exitCode !== 0) {
-    throw new Error(`[bractjs] ImageMagick exited ${exitCode} for ${filePath}`);
+    if (exitCode !== 0) {
+      throw new Error(`[bractjs] ImageMagick exited ${exitCode} for ${filePath}`);
+    }
+
+    return { data, contentType: MIME[params.format], format: params.format };
+  } finally {
+    releaseSlot();
   }
-
-  return { data, contentType: MIME[params.format], format: params.format };
 }

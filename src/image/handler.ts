@@ -4,7 +4,8 @@ import { QUALITY_DEFAULT, FORMAT_DEFAULT, FIT_DEFAULT, MIME } from "./types.ts";
 import { transformImage } from "./optimizer.ts";
 import { getFromMemory, setInMemory, getFromDisk, setOnDisk } from "./cache.ts";
 
-const MAX_DIM = 4096;
+const ALLOWED_DIMS = new Set([320, 640, 768, 1024, 1280, 1536, 1920, 3840]);
+const MAX_AREA = 4_000_000;
 const CACHE_CTRL = "public, max-age=31536000, immutable";
 
 function parseParams(
@@ -24,8 +25,9 @@ function parseParams(
   const hRaw = sp.get("h");
   const w = wRaw ? parseInt(wRaw, 10) : undefined;
   const h = hRaw ? parseInt(hRaw, 10) : undefined;
-  if (w !== undefined && (isNaN(w) || w < 1 || w > MAX_DIM)) return null;
-  if (h !== undefined && (isNaN(h) || h < 1 || h > MAX_DIM)) return null;
+  if (w !== undefined && (isNaN(w) || !ALLOWED_DIMS.has(w))) return null;
+  if (h !== undefined && (isNaN(h) || !ALLOWED_DIMS.has(h))) return null;
+  if (w !== undefined && h !== undefined && w * h > MAX_AREA) return null;
 
   const q = Math.min(100, Math.max(1, parseInt(sp.get("q") ?? String(QUALITY_DEFAULT), 10)));
   const fmt = (sp.get("format") ?? FORMAT_DEFAULT) as ImageFormat;
