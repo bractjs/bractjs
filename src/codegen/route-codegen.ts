@@ -29,23 +29,44 @@ function substituteParams(pattern: string, params: string[]): string {
   ).join("/");
 }
 
+// Allowed pattern: "/" + (segment | ":ident") (segments are filename-derived).
+// Restricting upfront removes any chance that a hostile filename injects a
+// backtick, ${ }, or quote into the generated TS source.
+const SAFE_PATTERN_RE = /^\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*)(?:\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*))*$|^\/$/;
+const SAFE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function assertSafePattern(pattern: string): void {
+  if (!SAFE_PATTERN_RE.test(pattern)) {
+    throw new Error(`[bractjs] codegen: refusing to emit unsafe route pattern: ${JSON.stringify(pattern)}`);
+  }
+}
+function assertSafeParam(name: string): void {
+  if (!SAFE_IDENT_RE.test(name)) {
+    throw new Error(`[bractjs] codegen: refusing to emit unsafe param name: ${JSON.stringify(name)}`);
+  }
+}
+
 function builderEntry(pattern: string, params: string[]): string {
-  if (params.length === 0)
-    return "  \"" + pattern + "\": () => \"" + pattern + "\" as const,";
+  assertSafePattern(pattern);
+  params.forEach(assertSafeParam);
+  const key = JSON.stringify(pattern);
+  if (params.length === 0) return "  " + key + ": () => " + key + " as const,";
   const paramType = params.map((p) => p + ": string").join("; ");
   const body = substituteParams(pattern, params);
-  return "  \"" + pattern + "\": (params: { " + paramType + " }) => `" + body + "` as const,";
+  return "  " + key + ": (params: { " + paramType + " }) => `" + body + "` as const,";
 }
 
 function paramsTypeLines(routes: Array<{ pattern: string; params: string[] }>): string {
   const dynamic = routes.filter((r) => r.params.length > 0);
   if (dynamic.length === 0) return "export type RouteParams<_T extends AppRoutes> = Record<never, never>;";
   const branches = dynamic
-    .map((r) =>
-      "  T extends \"" + r.pattern + "\" ? { "
-      + r.params.map((p) => p + ": string").join("; ")
-      + " } :",
-    )
+    .map((r) => {
+      assertSafePattern(r.pattern);
+      r.params.forEach(assertSafeParam);
+      return "  T extends " + JSON.stringify(r.pattern) + " ? { "
+        + r.params.map((p) => p + ": string").join("; ")
+        + " } :";
+    })
     .join("\n");
   return "export type RouteParams<T extends AppRoutes> =\n" + branches + "\n  Record<never, never>;";
 }
@@ -65,7 +86,10 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
   }));
 
   const union = routes.length > 0
-    ? routes.map((r) => "  | \"" + r.pattern + "\"").join("\n")
+    ? routes.map((r) => {
+        assertSafePattern(r.pattern);
+        return "  | " + JSON.stringify(r.pattern);
+      }).join("\n")
     : "  never";
 
   const builderEntries = routes.map((r) => builderEntry(r.pattern, r.params)).join("\n");

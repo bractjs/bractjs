@@ -3,6 +3,19 @@ import type { BunPlugin } from "bun";
 const CLIENT_RE = /^["']use client["']/m;
 const SERVER_RE = /^["']use server["']/m;
 
+// Strip a UTF-8 BOM and any leading ASCII whitespace before testing the
+// directive regex. Editors that save files with BOM otherwise let "use server"
+// fall through and ship server code to the client bundle.
+function normalizeForDirectiveCheck(src: string): string {
+  return src.replace(/^﻿/, "").replace(/^\s+/, "");
+}
+function hasClientDirective(src: string): boolean {
+  return CLIENT_RE.test(normalizeForDirectiveCheck(src));
+}
+function hasServerDirective(src: string): boolean {
+  return SERVER_RE.test(normalizeForDirectiveCheck(src));
+}
+
 function extractExports(src: string): string[] {
   const names: string[] = [];
   for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s+(\w+)/gm)) names.push(m[1]);
@@ -39,7 +52,7 @@ export const useClientStubPlugin: BunPlugin = {
   setup(build) {
     build.onLoad({ filter: /\.(tsx?|jsx?)$/ }, async ({ path }) => {
       const src = await Bun.file(path).text();
-      if (!CLIENT_RE.test(src)) return undefined;
+      if (!hasClientDirective(src)) return undefined;
       const stubs = extractExports(src).map((n) => `export const ${n} = () => null;`).join("\n");
       return { contents: stubs || "export {};", loader: "ts" };
     });
@@ -66,7 +79,7 @@ export const useServerProxyPlugin: BunPlugin = {
   setup(build) {
     build.onLoad({ filter: /\.(tsx?|jsx?)$/ }, async ({ path }) => {
       const src = await Bun.file(path).text();
-      if (!SERVER_RE.test(src)) return undefined;
+      if (!hasServerDirective(src)) return undefined;
       const names = extractExports(src);
       if (names.length === 0) return { contents: "export {};", loader: "ts" };
       const proxies = await Promise.all(

@@ -4,6 +4,9 @@ import { MIME } from "./types.ts";
 // In-process semaphore (DoS guard): cap concurrent ImageMagick spawns so a
 // burst of /_image requests can't fork-bomb the server.
 const MAX_CONCURRENT = 4;
+// Per-spawn timeout (ms). A pathological input must not hold a slot forever;
+// without this, four hung spawns wedge the whole image pipeline.
+const SPAWN_TIMEOUT_MS = 15_000;
 let inFlight = 0;
 const waiters: Array<() => void> = [];
 
@@ -83,6 +86,8 @@ export async function transformImage(
     const proc = Bun.spawn(buildArgs(binary, filePath, params), {
       stdout: "pipe",
       stderr: "ignore",
+      timeout: SPAWN_TIMEOUT_MS,
+      killSignal: "SIGKILL",
     });
 
     const [data, exitCode] = await Promise.all([
@@ -91,6 +96,8 @@ export async function transformImage(
     ]);
 
     if (exitCode !== 0) {
+      // Non-zero exit covers normal failures AND timeout-induced SIGKILL,
+      // since Bun reports the signal as a non-zero exit code.
       throw new Error(`[bractjs] ImageMagick exited ${exitCode} for ${filePath}`);
     }
 

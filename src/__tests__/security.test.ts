@@ -1,6 +1,7 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile, symlink } from "node:fs/promises";
 import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
 import { createServer } from "../server/serve.ts";
 import { handleActionRequest } from "../server/action-handler.ts";
 import { loadServerActions } from "../server/action-registry.ts";
@@ -8,6 +9,8 @@ import { safeStringify } from "../server/env.ts";
 import { cors } from "../middleware/cors.ts";
 import { createCookieSession } from "../server/session.ts";
 import { MiddlewarePipeline, type MiddlewareContext } from "../server/middleware.ts";
+import { serveStatic } from "../server/static.ts";
+import { handleImageRequest } from "../image/handler.ts";
 
 const ACTION_TMP = resolve(import.meta.dir, ".tmp-security-action");
 let registeredActionId = "";
@@ -90,6 +93,36 @@ describe("action-handler — arg validation", () => {
     });
     const res = await handleActionRequest(req);
     expect(res?.status).toBe(400);
+  });
+
+  test("JSON body > 1 MiB rejected with 413 (advertised via Content-Length)", async () => {
+    const huge = "a".repeat(2 * 1024 * 1024);
+    const req = new Request(`http://x/_action?id=${registeredActionId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-BractJS-Action": "1",
+        "Content-Length": String(2 * 1024 * 1024 + 2),
+      },
+      body: `["${huge}"]`,
+    });
+    const res = await handleActionRequest(req);
+    expect(res?.status).toBe(413);
+  });
+
+  test("JSON body > 1 MiB rejected with 413 even when Content-Length lies", async () => {
+    const huge = "a".repeat(2 * 1024 * 1024);
+    const req = new Request(`http://x/_action?id=${registeredActionId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-BractJS-Action": "1",
+        "Content-Length": "10",
+      },
+      body: `["${huge}"]`,
+    });
+    const res = await handleActionRequest(req);
+    expect(res?.status).toBe(413);
   });
 });
 
@@ -271,3 +304,45 @@ describe("middleware — double next()", () => {
     await expect(pipeline.run(ctx, () => Promise.resolve(new Response("ok")))).rejects.toThrow(/more than once/);
   });
 });
+
+// ── Symlink escape (static + image) ─────────────────────────────────────
+
+describe("symlink escape — static", () => {
+  let pub: string;
+  let outside: string;
+  let buildDir: string;
+
+  beforeAll(async () => {
+    const root = await Bun.file(tmpdir()).exists() ? tmpdir() : ".";
+    pub = join(root, `bract-sym-pub-${Date.now()}`);
+    outside = join(root, `bract-sym-out-${Date.now()}`);
+    buildDir = join(root, `bract-sym-build-${Date.now()}`);
+    await mkdir(pub, { recursive: true });
+    await mkdir(outside, { recursive: true });
+    await mkdir(join(buildDir, "client"), { recursive: true });
+    await writeFile(join(outside, "secret.txt"), "PWNED");
+    // Symlink inside /public/ that points outside the root.
+    await symlink(join(outside, "secret.txt"), join(pub, "escape.txt"));
+  });
+
+  afterAll(async () => {
+    await rm(pub, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+    await rm(buildDir, { recursive: true, force: true });
+  });
+
+  test("static refuses to serve a symlink whose target is outside publicDir", async () => {
+    const res = await serveStatic("/public/escape.txt", buildDir, pub);
+    expect(res).toBeNull();
+  });
+
+  test("image /_image refuses src that symlinks outside publicDir", async () => {
+    const cacheDir = join(tmpdir(), `bract-sym-cache-${Date.now()}`);
+    await mkdir(cacheDir, { recursive: true });
+    const req = new Request(`http://x/_image?src=/public/escape.txt&w=320`);
+    const res = await handleImageRequest(req, pub, cacheDir);
+    expect(res?.status === 400 || res?.status === 404).toBe(true);
+    await rm(cacheDir, { recursive: true, force: true });
+  });
+});
+

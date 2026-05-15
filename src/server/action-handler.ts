@@ -3,6 +3,9 @@ import { json } from "./response.ts";
 import { isAllowedMutation } from "./csrf.ts";
 
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+// Cap action JSON bodies. Anything over this looks like an abuse attempt;
+// FormData uploads (large files) take the multipart branch and bypass this.
+const MAX_JSON_BODY_BYTES = 1_048_576; // 1 MiB
 
 function hasForbiddenKey(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
@@ -30,7 +33,20 @@ export async function handleActionRequest(request: Request): Promise<Response | 
     if (ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded")) {
       args = [await request.formData()];
     } else {
+      // Cheap pre-check: trust Content-Length if the client sent one.
+      const clRaw = request.headers.get("Content-Length");
+      if (clRaw) {
+        const cl = Number(clRaw);
+        if (Number.isFinite(cl) && cl > MAX_JSON_BODY_BYTES) {
+          return new Response("Payload Too Large", { status: 413 });
+        }
+      }
       const text = await request.text();
+      // Defense in depth: clients can lie about Content-Length, so verify the
+      // actual decoded text length too.
+      if (text.length > MAX_JSON_BODY_BYTES) {
+        return new Response("Payload Too Large", { status: 413 });
+      }
       if (!text) {
         args = [];
       } else {
