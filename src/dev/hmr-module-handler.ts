@@ -1,4 +1,5 @@
-import { resolve, join } from "node:path";
+import { resolve, join, sep } from "node:path";
+import { realpath } from "node:fs/promises";
 
 /**
  * Dev-only HTTP handler for /_hmr/module?file=routes/about.tsx
@@ -17,10 +18,19 @@ export async function handleHmrModuleRequest(
     return new Response("Missing file param", { status: 400 });
   }
 
-  // Resolve and guard against path traversal
+  // Resolve and guard against path traversal AND symlink escape.
   const rootDir = resolve(appDir);
-  const fullPath = resolve(join(rootDir, file));
-  if (!fullPath.startsWith(rootDir + "/") && fullPath !== rootDir) {
+  const candidate = resolve(join(rootDir, file));
+  if (!candidate.startsWith(rootDir + sep) && candidate !== rootDir) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  let fullPath: string;
+  try {
+    fullPath = await realpath(candidate);
+  } catch {
+    return new Response("Not Found", { status: 404 });
+  }
+  if (!fullPath.startsWith(rootDir + sep) && fullPath !== rootDir) {
     return new Response("Forbidden", { status: 403 });
   }
 

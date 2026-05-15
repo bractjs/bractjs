@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mkdir, rename } from "node:fs/promises";
+import { mkdir, rename, unlink } from "node:fs/promises";
 import type { ImageTransformParams, TransformResult, ImageFormat } from "./types.ts";
 
 const MAX_MEM = 200;
@@ -50,10 +50,14 @@ export async function getFromDisk(
   const key = await cacheKey(src, params);
   const metaFile = Bun.file(join(dir, `${key}.json`));
   const dataFile = Bun.file(join(dir, `${key}.bin`));
-  if (!(await metaFile.exists()) || !(await dataFile.exists())) return null;
+  // No existence pre-check: it would create a TOCTOU race where the file is
+  // deleted between exists() and read(). Just attempt the reads and let either
+  // a missing file or invalid JSON fall through to MISS.
   try {
-    const meta = await metaFile.json() as { contentType: string; format: ImageFormat };
-    const data = await dataFile.arrayBuffer();
+    const [meta, data] = await Promise.all([
+      metaFile.json() as Promise<{ contentType: string; format: ImageFormat }>,
+      dataFile.arrayBuffer(),
+    ]);
     return { data, contentType: meta.contentType, format: meta.format };
   } catch {
     return null;
@@ -74,9 +78,18 @@ export async function setOnDisk(
   const binTmp = `${binFinal}.tmp`;
   // Write both temp files, then atomically rename. Readers see either both
   // files present or neither — never a half-written pair.
-  await Promise.all([
-    Bun.write(jsonTmp, JSON.stringify({ contentType: result.contentType, format: result.format })),
-    Bun.write(binTmp, result.data),
-  ]);
-  await Promise.all([rename(jsonTmp, jsonFinal), rename(binTmp, binFinal)]);
+  try {
+    await Promise.all([
+      Bun.write(jsonTmp, JSON.stringify({ contentType: result.contentType, format: result.format })),
+      Bun.write(binTmp, result.data),
+    ]);
+    await Promise.all([rename(jsonTmp, jsonFinal), rename(binTmp, binFinal)]);
+  } catch (err) {
+    // Best-effort cleanup so failed writes don't leak .tmp files indefinitely.
+    await Promise.all([
+      unlink(jsonTmp).catch(() => {}),
+      unlink(binTmp).catch(() => {}),
+    ]);
+    throw err;
+  }
 }

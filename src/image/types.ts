@@ -25,3 +25,4 @@ export const MIME: Record<ImageFormat, string> = {
   jpeg: "image/jpeg",
   png:  "image/png",
 };
+export const ALLOWED_FITS: ReadonlySet<ImageFit> = new Set(["cover", "contain", "fill"]);

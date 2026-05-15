@@ -43,8 +43,10 @@ export function cors(options: CorsOptions): MiddlewareFn {
     }
 
     const response = await next();
-    const patched = new Response(response.body, response);
-    for (const [k, v] of Object.entries(corsHeaders)) patched.headers.set(k, v);
-    return patched;
+    // Mutate headers in place rather than wrapping body. Wrapping with
+    // `new Response(response.body, response)` makes the original Response
+    // unusable to anyone holding a reference (single-shot stream).
+    for (const [k, v] of Object.entries(corsHeaders)) response.headers.set(k, v);
+    return response;
   };
 }

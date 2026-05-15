@@ -1,6 +1,7 @@
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
+import { realpath } from "node:fs/promises";
 import type { ImageTransformParams, ImageFormat, ImageFit } from "./types.ts";
-import { QUALITY_DEFAULT, FORMAT_DEFAULT, FIT_DEFAULT, MIME } from "./types.ts";
+import { QUALITY_DEFAULT, FORMAT_DEFAULT, FIT_DEFAULT, MIME, ALLOWED_FITS } from "./types.ts";
 import { transformImage } from "./optimizer.ts";
 import { getFromMemory, setInMemory, getFromDisk, setOnDisk } from "./cache.ts";
 
@@ -8,18 +9,28 @@ const ALLOWED_DIMS = new Set([320, 640, 768, 1024, 1280, 1536, 1920, 3840]);
 const MAX_AREA = 4_000_000;
 const CACHE_CTRL = "public, max-age=31536000, immutable";
 
-function parseParams(
+async function parseParams(
   sp: URLSearchParams,
   publicDir: string,
-): { src: string; filePath: string; params: ImageTransformParams } | null {
+): Promise<{ src: string; filePath: string; params: ImageTransformParams } | null> {
   const src = sp.get("src");
   // src must be a /public/ path with no traversal sequences
   if (!src || !src.startsWith("/public/") || src.includes("..")) return null;
 
   const rel = src.slice("/public/".length);
   const root = resolve(publicDir);
-  const filePath = resolve(join(root, rel));
-  if (!filePath.startsWith(root + "/") && filePath !== root) return null;
+  const candidate = resolve(join(root, rel));
+  if (!candidate.startsWith(root + sep) && candidate !== root) return null;
+  // Re-check after symlink resolution. If the file doesn't exist yet, realpath
+  // throws — fall through and let the existence check below handle it.
+  let filePath = candidate;
+  try {
+    const real = await realpath(candidate);
+    if (!real.startsWith(root + sep) && real !== root) return null;
+    filePath = real;
+  } catch {
+    // missing file: defer to Bun.file(...).exists() below
+  }
 
   const wRaw = sp.get("w");
   const hRaw = sp.get("h");
@@ -31,8 +42,10 @@ function parseParams(
 
   const q = Math.min(100, Math.max(1, parseInt(sp.get("q") ?? String(QUALITY_DEFAULT), 10)));
   const fmt = (sp.get("format") ?? FORMAT_DEFAULT) as ImageFormat;
-  const fit = (sp.get("fit") ?? FIT_DEFAULT) as ImageFit;
+  const fitRaw = sp.get("fit") ?? FIT_DEFAULT;
   if (!MIME[fmt]) return null;
+  if (!ALLOWED_FITS.has(fitRaw as ImageFit)) return null;
+  const fit = fitRaw as ImageFit;
 
   return { src, filePath, params: { w, h, q, format: fmt, fit } };
 }
@@ -55,7 +68,7 @@ export async function handleImageRequest(
   const url = new URL(request.url);
   if (url.pathname !== "/_image") return null;
 
-  const parsed = parseParams(url.searchParams, publicDir);
+  const parsed = await parseParams(url.searchParams, publicDir);
   if (!parsed) return new Response("Bad Request", { status: 400 });
 
   const { src, filePath, params } = parsed;

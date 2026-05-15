@@ -18,6 +18,36 @@ describe("redirect", () => {
     const res = redirect("/");
     expect(await res.text()).toBe("");
   });
+
+  describe("open-redirect guard", () => {
+    test("rejects absolute http(s) URLs", () => {
+      expect(() => redirect("https://evil.com/")).toThrow();
+      expect(() => redirect("http://evil.com")).toThrow();
+    });
+
+    test("rejects protocol-relative URLs (//evil.com)", () => {
+      expect(() => redirect("//evil.com/path")).toThrow();
+    });
+
+    test("rejects backslash protocol-relative variant", () => {
+      expect(() => redirect("/\\evil.com")).toThrow();
+    });
+
+    test("rejects javascript: and data: schemes", () => {
+      expect(() => redirect("javascript:alert(1)")).toThrow();
+      expect(() => redirect("data:text/html,x")).toThrow();
+    });
+
+    test("allows same-path redirects", () => {
+      expect(redirect("/foo").headers.get("Location")).toBe("/foo");
+      expect(redirect("/foo?q=1#x").headers.get("Location")).toBe("/foo?q=1#x");
+    });
+
+    test("opt-in: allowExternal lets through absolute URL", () => {
+      const res = redirect("https://allowed.example/path", 302, undefined, { allowExternal: true });
+      expect(res.headers.get("Location")).toBe("https://allowed.example/path");
+    });
+  });
 });
 
 describe("json", () => {
