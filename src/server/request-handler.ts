@@ -6,7 +6,8 @@ import { runLoaders, runAction, buildLoaderArgs } from "./loader.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
 import { resolveMeta } from "./meta.ts";
 import { json, error } from "./response.ts";
-import { isRedirect } from "../shared/errors.ts";
+import { isRedirect, isHttpError } from "../shared/errors.ts";
+import { isDev } from "./env.ts";
 import { pipeline, type MiddlewareContext } from "./middleware.ts";
 import { BractJSProvider } from "../shared/context.ts";
 import { isAllowedMutation } from "./csrf.ts";
@@ -78,7 +79,9 @@ async function route(
       actionData = await runAction(chain.route, { ...args, formData });
     } catch (err) {
       if (isRedirect(err)) return err as Response;
-      throw err;
+      if (isHttpError(err)) return error(err.message, err.status);
+      if (isDev()) return error(err instanceof Error ? err.message : String(err), 500);
+      return error("Internal Server Error", 500);
     }
 
     // Client-side Form submits with this header — return JSON, not HTML.
@@ -93,7 +96,9 @@ async function route(
     loaderResults = await runLoaders(chain, args);
   } catch (err) {
     if (isRedirect(err)) return err as Response;
-    throw err;
+    if (isHttpError(err)) return error(err.message, err.status);
+    if (isDev()) return error(err instanceof Error ? err.message : String(err), 500);
+    return error("Internal Server Error", 500);
   }
 
   const loaderData = {

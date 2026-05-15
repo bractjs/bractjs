@@ -1,8 +1,11 @@
-export function redirect(url: string, status: number = 302): Response {
-  return new Response(null, {
-    status,
-    headers: { Location: url },
-  });
+export function redirect(
+  url: string,
+  status: number = 302,
+  headers?: HeadersInit,
+): Response {
+  const h = new Headers(headers);
+  h.set("Location", url);
+  return new Response(null, { status, headers: h });
 }
 
 export function json<T>(data: T, init?: ResponseInit): Response {

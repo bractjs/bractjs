@@ -68,8 +68,10 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
         setPathname(to);
         setCurrentModule(routeModule);
       });
-      if ((data.meta as { title?: string })?.title) {
-        document.title = (data.meta as { title: string }).title;
+      const metaList = data.meta as Array<Record<string, unknown>> | undefined;
+      const titleEntry = metaList?.find((m) => "title" in m);
+      if (titleEntry && typeof titleEntry.title === "string") {
+        document.title = titleEntry.title;
       }
     } catch (err) {
       console.error("[bractjs] loadRoute error:", err);

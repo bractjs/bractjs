@@ -36,11 +36,12 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   } = options;
 
   const devOverlay = isDev() ? errorOverlayScript + "\n" : "";
-  const metaHtml = renderMetaTags(mergeMeta(options.meta ?? []));
-  // Include manifest + routeFile so the client can pre-import the route module
-  // before hydrateRoot(), preventing the SSR/client tree mismatch.
+  const mergedMeta = mergeMeta(options.meta ?? []);
+  // metaHtml is injected into <head> via React (the renderToReadableStream tree
+  // is expected to use it). The merged descriptor array is what the client
+  // reads — keep it shaped, not stringified HTML.
   const bootstrapScriptContent =
-    devOverlay + `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, manifest, routeFile: options.routeFile, meta: metaHtml })};`;
+    devOverlay + `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, manifest, routeFile: options.routeFile, meta: mergedMeta })};`;
 
   let renderError: unknown;
 
