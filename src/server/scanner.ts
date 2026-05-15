@@ -1,3 +1,5 @@
+import { basename } from "node:path";
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type Segment = string | { param: string } | { catchAll: string };
@@ -54,8 +56,10 @@ export async function scanRoutes(appDir: string): Promise<RouteFile[]> {
   const routes: RouteFile[] = [];
 
   for await (const filePath of glob.scan(appDir)) {
-    // Skip layout files — handled separately
-    if (filePath.endsWith("/layout.tsx") || filePath.endsWith("/layout.ts")) {
+    // Skip layout files — handled separately. Use basename so this also
+    // skips top-level "routes/layout.tsx" on any OS.
+    const base = basename(filePath);
+    if (base === "layout.tsx" || base === "layout.ts") {
       continue;
     }
 

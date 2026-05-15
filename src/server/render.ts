@@ -35,7 +35,8 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     status = 200,
   } = options;
 
-  const devOverlay = isDev() ? errorOverlayScript + "\n" : "";
+  const devFlag = isDev() ? "window.__BRACT_DEV__=true;" : "";
+  const devOverlay = isDev() ? devFlag + errorOverlayScript + "\n" : "";
   const mergedMeta = mergeMeta(options.meta ?? []);
   // metaHtml is injected into <head> via React (the renderToReadableStream tree
   // is expected to use it). The merged descriptor array is what the client
