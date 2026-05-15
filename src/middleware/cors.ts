@@ -3,25 +3,39 @@ import type { MiddlewareFn } from "../server/middleware.ts";
 export interface CorsOptions {
   origin: string | string[];
   methods?: string[];
+  credentials?: boolean;
 }
 
 /**
  * Sets CORS headers. Handles OPTIONS preflight with 204.
+ *
+ * Never reflects the Origin header when "*" is configured — emits literal "*".
+ * Refuses to combine credentials:true with "*" (browsers reject it anyway).
+ * Always sets `Vary: Origin` so caches don't serve a cross-origin response to
+ * the wrong site.
  */
 export function cors(options: CorsOptions): MiddlewareFn {
-  const allowedOrigins = Array.isArray(options.origin)
-    ? options.origin
-    : [options.origin];
+  const allowedOrigins = Array.isArray(options.origin) ? options.origin : [options.origin];
   const allowedMethods = options.methods?.join(", ") ?? "GET, POST, PUT, DELETE, PATCH, OPTIONS";
+  const wildcard = allowedOrigins.includes("*");
+  const credentials = options.credentials === true;
+  if (wildcard && credentials) {
+    throw new Error("cors: credentials=true cannot be combined with origin='*'");
+  }
 
   return async (ctx, next) => {
     const origin = ctx.request.headers.get("Origin") ?? "";
-    const allowed = allowedOrigins.includes("*") || allowedOrigins.includes(origin);
     const corsHeaders: Record<string, string> = {
       "Access-Control-Allow-Methods": allowedMethods,
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Vary": "Origin",
     };
-    if (allowed) corsHeaders["Access-Control-Allow-Origin"] = origin || "*";
+    if (wildcard) {
+      corsHeaders["Access-Control-Allow-Origin"] = "*";
+    } else if (origin && allowedOrigins.includes(origin)) {
+      corsHeaders["Access-Control-Allow-Origin"] = origin;
+    }
+    if (credentials) corsHeaders["Access-Control-Allow-Credentials"] = "true";
 
     // Preflight
     if (ctx.request.method === "OPTIONS") {

@@ -3,7 +3,7 @@ import { createCookieSession } from "../server/session.ts";
 
 const sessionStorage = createCookieSession({
   name: "__test",
-  secrets: ["secret-one", "secret-two"],
+  secrets: ["secret-one-1234567890", "secret-two-1234567890"],
   secure: false,
   sameSite: "Lax",
 });
@@ -71,7 +71,7 @@ describe("createCookieSession — commitSession + roundtrip", () => {
   test("secret rotation: old secret still verifies", async () => {
     const oldStorage = createCookieSession({
       name: "__test",
-      secrets: ["secret-two"], // only the old secret
+      secrets: ["secret-two-1234567890"], // only the old secret
       secure: false,
     });
     const s1 = await oldStorage.getSession(null);
@@ -81,7 +81,7 @@ describe("createCookieSession — commitSession + roundtrip", () => {
     // New storage has new secret first, old secret second (rotation)
     const newStorage = createCookieSession({
       name: "__test",
-      secrets: ["secret-one", "secret-two"],
+      secrets: ["secret-one-1234567890", "secret-two-1234567890"],
       secure: false,
     });
     const cookieValue = cookie.split(";")[0];
