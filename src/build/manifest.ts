@@ -9,6 +9,8 @@ export interface RouteManifestEntry {
 
 export interface RouteManifest {
   version: 1;
+  /** "production" = produced by `bractjs build`. Absent on dev-rebuilder manifests. */
+  mode?: "production";
   clientEntry: string;
   rootChunk?: string;
   routes: Record<string, RouteManifestEntry>;
@@ -29,12 +31,13 @@ export function generateManifest(opts: {
   clientEntry: string;
   rootChunk?: string;
   routeChunks: Map<string, string>;
+  mode?: "production";
 }): RouteManifest {
   const routes: Record<string, RouteManifestEntry> = {};
   for (const [pattern, chunk] of opts.routeChunks) {
     routes[pattern] = { chunk, pattern };
   }
-  return { version: 1, clientEntry: opts.clientEntry, rootChunk: opts.rootChunk, routes };
+  return { version: 1, mode: opts.mode, clientEntry: opts.clientEntry, rootChunk: opts.rootChunk, routes };
 }
 
 /**

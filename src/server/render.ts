@@ -1,7 +1,7 @@
 import { renderToReadableStream } from "react-dom/server";
 import type { ReactNode } from "react";
 import type { MetaDescriptor } from "../shared/route-types.ts";
-import { safeStringify, isDev } from "./env.ts";
+import { safeStringify, isDevRuntime } from "./env.ts";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
 import { mergeMeta, renderMetaTags } from "./meta.ts";
 
@@ -35,8 +35,8 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     status = 200,
   } = options;
 
-  const devFlag = isDev() ? "window.__BRACT_DEV__=true;" : "";
-  const devOverlay = isDev() ? devFlag + errorOverlayScript + "\n" : "";
+  const devFlag = isDevRuntime() ? "window.__BRACT_DEV__=true;" : "";
+  const devOverlay = isDevRuntime() ? devFlag + errorOverlayScript + "\n" : "";
   const mergedMeta = mergeMeta(options.meta ?? []);
   // metaHtml is injected into <head> via React (the renderToReadableStream tree
   // is expected to use it). The merged descriptor array is what the client
