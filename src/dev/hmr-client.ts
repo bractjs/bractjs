@@ -32,7 +32,7 @@ export const hmrClientScript: string = `
         } else if (msg.type === "hmr:route" && msg.pattern != null && msg.chunkUrl) {
           // Validate chunk URL is a same-origin relative path before importing.
           // Prevents a compromised/MITM'd dev WS from executing arbitrary URLs.
-          if (typeof msg.chunkUrl !== 'string' || !/^\/build\//.test(msg.chunkUrl)) {
+          if (typeof msg.chunkUrl !== 'string' || !/^\\/build\\//.test(msg.chunkUrl)) {
             return;
           }
           // Cache-bust so the browser re-fetches the rebuilt chunk.
