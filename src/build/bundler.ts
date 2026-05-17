@@ -62,7 +62,11 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
   const rootBase = basename(rootFilePath, extname(rootFilePath)); // "root"
 
   for (const artifact of clientResult.outputs) {
-    if (artifact.kind !== "chunk" && artifact.kind !== "entry-point") continue;
+    // Only rename entry points. Bun's split chunks (kind === "chunk") already
+    // have content-hashed basenames (e.g. chunk-189z661a.js); renaming them
+    // would break sibling import refs, which Bun bakes in at bundle time and
+    // does NOT rewrite after rename.
+    if (artifact.kind !== "entry-point") continue;
     const hash = await contentHash(artifact.path);
     const ext = artifact.path.slice(artifact.path.lastIndexOf("."));
     const base = artifact.path.slice(0, artifact.path.lastIndexOf("."));
@@ -78,9 +82,9 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
     const rel = absPath.startsWith(outdirAbs + "/") ? absPath.slice(outdirAbs.length + 1) : basename(artifact.path);
     const outBase = basename(artifact.path, extname(artifact.path));
 
-    if (artifact.kind === "entry-point" && outBase === entryBase) {
+    if (outBase === entryBase) {
       clientEntry = publicPath;
-    } else if (artifact.kind === "entry-point" && outBase === rootBase) {
+    } else if (outBase === rootBase) {
       rootChunk = publicPath;
     } else {
       const matched = routes.find((r) => {
