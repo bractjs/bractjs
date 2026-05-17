@@ -155,7 +155,10 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
       // Update DevTools state (dev-only — no-op in prod since the import fails).
       const w = window as unknown as { __BRACT_DEV__?: boolean };
       if (w.__BRACT_DEV__ === true) {
-        void import("../../dev/devtools.ts").then(({ updateDevtoolsState }) => {
+        // Use the dev-only HTTP endpoint (registered in serve.ts) rather than
+        // a relative source-path import — Bun preserves dynamic-import paths
+        // as runtime URLs, and a relative .ts path 404s in the browser.
+        void import(/* @vite-ignore */ "/_bractjs/devtools.js").then(({ updateDevtoolsState }) => {
           updateDevtoolsState({
             route: toPathname,
             loaderData: data,
