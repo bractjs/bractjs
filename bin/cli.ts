@@ -77,6 +77,9 @@ switch (command) {
   }
 
   case "start": {
+    // Default to production so SSR-side gates (e.g. <LiveReload/>) emit prod
+    // output. Users can still override with `NODE_ENV=staging bractjs start`.
+    if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
     const { createServer } = await import("../src/server/serve.ts");
     createServer({ port: 3000, buildDir: "./build" });
     break;
