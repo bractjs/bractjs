@@ -71,6 +71,9 @@ switch (command) {
     break;
 
   case "build": {
+    // Force production so React's conditional exports resolve to the prod
+    // server build (react-dom/server.bun production) instead of the dev one.
+    if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
     const { runBuild } = await import("../src/build/bundler.ts");
     await runBuild({ port: 3000, appDir: "./app", publicDir: "./public", buildDir: "./build", manifest: { clientEntry: "", routes: {} } });
     break;
