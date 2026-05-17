@@ -28,6 +28,7 @@ logs/
 Thumbs.db
 
 # Editors
+bract-*.md
 .vscode/
 .idea/
 *.swp
@@ -38,4 +39,3 @@ coverage/
 
 # Private tooling
 .claude/
-
