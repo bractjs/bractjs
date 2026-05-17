@@ -1,5 +1,5 @@
 import { join, basename, extname, resolve } from "node:path";
-import { rename } from "node:fs/promises";
+import { rename, rm } from "node:fs/promises";
 import type { BractJSConfig } from "../server/serve.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import { contentHash } from "./hash.ts";
@@ -19,7 +19,14 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
   const routeFilePaths = routes.map((r) => join(appDir, r.filePath));
   const rootFilePath = join(appDir, "root.tsx");
 
-  // ── 1. Server bundle ────────────────────────────────────────────────────
+  // ── 1. Clean stale artefacts ────────────────────────────────────────────
+  const buildDir = config.buildDir ?? "build";
+  await Promise.all([
+    rm(join(buildDir, "client"), { recursive: true, force: true }),
+    rm(join(buildDir, "server"), { recursive: true, force: true }),
+  ]);
+
+  // ── 2. Server bundle ────────────────────────────────────────────────────
   const pkgRoot = join(import.meta.dir, "../..");
   const serverResult = await Bun.build({
     entrypoints: [join(pkgRoot, "src/server/index.ts")],
@@ -30,7 +37,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
   });
   if (!serverResult.success) throw new AggregateError(serverResult.logs, "Server build failed");
 
-  // ── 2. Client bundle (code-split) ───────────────────────────────────────
+  // ── 3. Client bundle (code-split) ───────────────────────────────────────
   const clientResult = await Bun.build({
     entrypoints: [join(pkgRoot, "src/client/entry.tsx"), rootFilePath, ...routeFilePaths],
     target: "browser",
@@ -45,7 +52,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
   });
   if (!clientResult.success) throw new AggregateError(clientResult.logs, "Client build failed");
 
-  // ── 3. Hash + rename output files ──────────────────────────────────────
+  // ── 4. Hash + rename output files ──────────────────────────────────────
   const routeChunks = new Map<string, string>();
   let clientEntry = "";
   let rootChunk: string | undefined;
@@ -62,7 +69,11 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
     const hashedPath = `${base}.${hash}${ext}`;
     await rename(artifact.path, hashedPath);
 
-    const publicPath = "/" + hashedPath.replace(/^build\//, "build/");
+    const hashedAbs = resolve(hashedPath);
+    const cwdAbs = resolve(".");
+    const publicPath = hashedAbs.startsWith(cwdAbs + "/")
+      ? "/" + hashedAbs.slice(cwdAbs.length + 1).replace(/\\/g, "/")
+      : "/" + hashedPath.replace(/^build\//, "build/");
     const absPath = resolve(artifact.path);
     const rel = absPath.startsWith(outdirAbs + "/") ? absPath.slice(outdirAbs.length + 1) : basename(artifact.path);
     const outBase = basename(artifact.path, extname(artifact.path));
@@ -80,7 +91,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
     }
   }
 
-  // ── 4. Write manifest ──────────────────────────────────────────────────
+  // ── 5. Write manifest ──────────────────────────────────────────────────
   const manifest = generateManifest({ clientEntry, rootChunk, routeChunks });
   await writeManifest(manifest, "build");
   console.log("[bract] build complete →", Object.keys(manifest.routes).length, "routes");
