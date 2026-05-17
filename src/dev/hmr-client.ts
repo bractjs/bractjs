@@ -18,7 +18,7 @@ export const hmrClientScript: string = `
     import('/_bractjs/devtools.js').then(function(m) {
       if (typeof m.injectDevtools === 'function') m.injectDevtools();
     }).catch(function() {
-      // DevTools module not available — skip silently.
+      // DevTools module not available - skip silently.
     });
   }
 
