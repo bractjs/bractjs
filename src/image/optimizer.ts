@@ -57,9 +57,14 @@ function resizeArgs(params: ImageTransformParams): string[] {
 
 function buildArgs(binary: string, input: string, params: ImageTransformParams): string[] {
   const base = binary === "magick" ? ["magick", "convert"] : ["convert"];
+  // SECURITY(low): prefix the input with `file:` so ImageMagick treats it as
+  // a filesystem path even if it contains a coder prefix like `mvg:` or
+  // `https:` (e.g. an attacker who plants a file named "https:evil.txt"
+  // inside publicDir). Defense in depth — realpath() already constrains the
+  // path to publicDir, so this prevents the "format coder hijack" class only.
   return [
     ...base,
-    input,
+    `file:${input}`,
     ...resizeArgs(params),
     "-quality", String(params.q),
     "-strip",

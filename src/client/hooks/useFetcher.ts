@@ -24,7 +24,12 @@ interface StreamFetcherResult<T = unknown> {
 // ── SSE async generator ────────────────────────────────────────────────────
 
 async function* sseStream<T>(actionId: string): AsyncGenerator<T> {
-  const res = await fetch(`/_stream?id=${encodeURIComponent(actionId)}`);
+  // Send X-BractJS-Action so the server's CSRF gate accepts this same-origin
+  // GET. Cross-origin <script>/<img>/<link rel=prefetch> tags cannot set this
+  // header, so the gate blocks CSRF invocations of server actions.
+  const res = await fetch(`/_stream?id=${encodeURIComponent(actionId)}`, {
+    headers: { "X-BractJS-Action": "1" },
+  });
   if (!res.ok || !res.body) {
     throw new Error(`[bractjs] /_stream ${res.status}`);
   }
