@@ -95,6 +95,25 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       return handleHmrModuleRequest(url, appDir);
     }
 
+    // Dev-only: serve the DevTools panel module imported by hmr-client.
+    // SECURITY(high): gated by isExplicitDev() so production never compiles
+    // and ships package internals as JS.
+    if (isExplicitDev() && pathname === "/_bractjs/devtools.js") {
+      const devtoolsEntry = resolve(import.meta.dir, "../dev/devtools.ts");
+      const built = await Bun.build({
+        entrypoints: [devtoolsEntry],
+        target: "browser",
+        minify: false,
+        sourcemap: "inline",
+      });
+      if (!built.success || built.outputs.length === 0) {
+        return new Response("DevTools build failed", { status: 500 });
+      }
+      return new Response(await built.outputs[0].text(), {
+        headers: { "Content-Type": "text/javascript", "Cache-Control": "no-store" },
+      });
+    }
+
     // Typed API routes (registered via bract.route())
     if (pathname.startsWith("/api")) {
       const { handleApiRequest } = await import("./api-route.ts");

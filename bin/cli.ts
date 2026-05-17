@@ -64,6 +64,9 @@ switch (command) {
     break;
 
   case "dev":
+    // Ensure dev-only handlers gated by isExplicitDev() (e.g. /_hmr/module,
+    // /_bractjs/devtools.js) are reachable when the user hasn't set NODE_ENV.
+    if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
     await import("../src/dev/server.ts");
     break;
 
