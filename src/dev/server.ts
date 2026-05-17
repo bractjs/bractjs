@@ -1,9 +1,14 @@
 import { createServer } from "../server/serve.ts";
+import { setRuntimeMode } from "../server/env.ts";
 import { createHmrServer } from "./hmr-server.ts";
 import { watchApp } from "./watcher.ts";
 import { rebuildClient } from "./rebuilder.ts";
 import { filePathToPattern } from "../server/scanner.ts";
 import { basename, extname } from "node:path";
+
+// Must precede any user-code import so SSR-time isDevRuntime() checks
+// (e.g. inside <LiveReload>) observe the dev mode.
+setRuntimeMode("dev");
 
 const hmr = createHmrServer(3001);
 

@@ -3,6 +3,24 @@ export function isDev(): boolean {
 }
 
 /**
+ * Runtime mode — what the server is actually doing, independent of NODE_ENV.
+ * `bractjs dev` sets this to "dev". `bractjs start` leaves it at "prod".
+ *
+ * Use this (not isDev()) to gate dev-only behavior like HMR injection or
+ * re-reading the route manifest on every request. NODE_ENV alone is unreliable:
+ * a user running `NODE_ENV=development bractjs start` would otherwise get a
+ * production server that still ships an HMR client trying to reconnect to a
+ * non-existent ws://localhost:3001 forever.
+ */
+let _runtimeMode: "dev" | "prod" = "prod";
+export function setRuntimeMode(m: "dev" | "prod"): void {
+  _runtimeMode = m;
+}
+export function isDevRuntime(): boolean {
+  return _runtimeMode === "dev";
+}
+
+/**
  * Strict "is development?" check used to gate sensitive output (error
  * messages, stack traces) that would otherwise leak in production.
  *

@@ -102,7 +102,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
   }
 
   // ── 5. Write manifest ──────────────────────────────────────────────────
-  const manifest = generateManifest({ clientEntry, rootChunk, routeChunks });
+  const manifest = generateManifest({ clientEntry, rootChunk, routeChunks, mode: "production" });
   await writeManifest(manifest, "build");
   console.log("[bract] build complete →", Object.keys(manifest.routes).length, "routes");
 }

@@ -2,7 +2,7 @@ import { scanRoutes } from "./scanner.ts";
 import { buildTrie } from "./matcher.ts";
 import { handleRequest, type HandlerConfig } from "./request-handler.ts";
 import { type ServerManifest } from "./render.ts";
-import { isDev, isExplicitDev } from "./env.ts";
+import { isDevRuntime, isExplicitDev } from "./env.ts";
 import { loadManifest } from "../build/manifest.ts";
 import { serveStatic } from "./static.ts";
 import { handleImageRequest } from "../image/handler.ts";
@@ -68,7 +68,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   const buildDir = resolve(config.buildDir ?? "./build");
   const imageCacheDir = resolve(config.imageCacheDir ?? ".bract-image-cache");
 
-  const manifestReady: Promise<ServerManifest> = !isDev() && !config.manifest
+  const manifestReady: Promise<ServerManifest> = !isDevRuntime() && !config.manifest
     ? loadManifest(buildDir).then((m) => ({
         clientEntry: m.clientEntry,
         rootChunk: m.rootChunk,
@@ -147,16 +147,42 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     if (staticRes) return staticRes;
 
     const trie = await trieReady;
-    const manifest = isDev() ? await readDevManifest(buildDir) : await manifestReady;
+    const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
     const handlerConfig: HandlerConfig = { appDir, publicDir, manifest };
     return handleRequest(request, trie, handlerConfig);
   };
+}
+
+/**
+ * In production-runtime mode, surface a warning when the manifest on disk
+ * wasn't produced by `bractjs build` (missing `"mode": "production"`).
+ * Almost always means the user is running `bractjs start` against a dev
+ * rebuilder's manifest, or hasn't run `bractjs build` at all.
+ */
+async function warnIfStaleBuild(buildDir: string): Promise<void> {
+  const f = Bun.file(join(buildDir, "route-manifest.json"));
+  if (!(await f.exists())) {
+    console.warn(`[bract] No build found at ${buildDir}/route-manifest.json. Run \`bractjs build\` before \`bractjs start\`.`);
+    return;
+  }
+  try {
+    const m = (await f.json()) as { mode?: string };
+    if (m.mode !== "production") {
+      console.warn(`[bract] Build at ${buildDir} was not produced by \`bractjs build\` (mode=${m.mode ?? "unset"}). Re-run \`bractjs build\` for a production-ready manifest.`);
+    }
+  } catch {
+    // Malformed manifest — the request path will surface the real error.
+  }
 }
 
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
 } {
   const port = config?.port ?? 3000;
+
+  if (!isDevRuntime()) {
+    void warnIfStaleBuild(resolve(config?.buildDir ?? "./build"));
+  }
 
   const fetchHandler = buildFetchHandler(config ?? {});
 
