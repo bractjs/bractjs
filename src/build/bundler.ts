@@ -8,6 +8,7 @@ import { serverOnlyPlugin, clientEnvPlugin } from "./env-plugin.ts";
 import { buildDefines } from "./defines.ts";
 import { writeRouteTypes } from "../codegen/route-codegen.ts";
 import { useClientStubPlugin, useServerProxyPlugin } from "./directives.ts";
+import { cssModulesPlugin } from "./plugins/css-modules.ts";
 
 export async function runBuild(config: BractJSConfig): Promise<void> {
   const appDir = config.appDir ?? "./app";
@@ -39,7 +40,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
     minify: config.minify ?? true,
     sourcemap: config.sourcemap ?? "external",
     define: buildDefines(config),
-    plugins: [serverOnlyPlugin, useServerProxyPlugin, clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>)],
+    plugins: [serverOnlyPlugin, useServerProxyPlugin, clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin],
   });
   if (!clientResult.success) throw new AggregateError(clientResult.logs, "Client build failed");
 

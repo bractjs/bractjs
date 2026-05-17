@@ -1,5 +1,5 @@
 import {
-  useState, useCallback, useEffect, startTransition,
+  useState, useCallback, useEffect, useRef, startTransition,
   type ReactNode, type ReactElement,
 } from "react";
 import {
@@ -11,6 +11,7 @@ import {
 } from "./router.tsx";
 import type { ServerManifest } from "../server/render.ts";
 import { matchPatternForPath } from "./nav-utils.ts";
+import { loaderCache, cacheKey } from "./cache.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,9 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
 
   const manifest = initialData.manifest;
 
+  // Stable ref to navigate so loadRoute can call it without a circular dep.
+  const navigateRef = useRef<(to: string) => Promise<void>>(null!);
+
   const setRoute = useCallback((state: Partial<RouteState>) => {
     if (state.loaderData !== undefined) setLoaderData(state.loaderData);
     if (state.actionData !== undefined) setActionData(state.actionData);
@@ -47,14 +51,98 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
   const loadRoute = useCallback(async (to: string) => {
     setNavState("loading");
     try {
-      const pattern = matchPatternForPath(to, manifest);
+      const toPathname = to.split("?")[0];
+      const pattern = matchPatternForPath(toPathname, manifest);
       const chunkUrl = pattern !== null ? manifest.routes[pattern]?.chunk : undefined;
-      const [routeModule, res] = await Promise.all([
-        chunkUrl ? import(/* @vite-ignore */ chunkUrl) : Promise.resolve(null),
-        fetch(`/_data?path=${encodeURIComponent(to)}`),
-      ]);
+
+      // Load the route module first so we can run client-side beforeLoad.
+      const routeModule = chunkUrl
+        ? (await import(/* @vite-ignore */ chunkUrl) as RouteModuleClient & { beforeLoad?: unknown })
+        : null;
+
+      // Run client-side beforeLoad if exported from the route module.
+      if (routeModule && typeof routeModule.beforeLoad === "function") {
+        const url = new URL(to, window.location.href);
+        try {
+          const result = await (routeModule.beforeLoad as (args: {
+            params: Record<string, string>;
+            context: Record<string, unknown>;
+            location: { pathname: string; search: string };
+          }) => Promise<Response | void>)({
+            params: {},
+            context: {},
+            location: { pathname: url.pathname, search: url.search },
+          });
+          if (result instanceof Response) {
+            const loc = result.headers.get("Location");
+            if (loc) { void navigateRef.current(loc); return; }
+          }
+        } catch (err) {
+          if (err instanceof Response) {
+            const loc = (err as Response).headers.get("Location");
+            if (loc) { void navigateRef.current(loc); return; }
+          }
+          throw err;
+        }
+      }
+
+      // Include search params in the /_data path param so loaders receive them.
+      const toWithSearch = to.includes("?") ? to : to + window.location.search;
+
+      // ── Cache lookup (B1 / B2) ──────────────────────────────────────────
+      // Read config and loaderDeps from the route module if available.
+      const routeConfig = (routeModule as Record<string, unknown> | null)?.config as
+        | { staleTime?: number; gcTime?: number }
+        | undefined;
+      const staleTime = routeConfig?.staleTime ?? 0;
+      const gcTime = routeConfig?.gcTime ?? 300_000;
+
+      const loaderDepsFn = (routeModule as Record<string, unknown> | null)?.loaderDeps as
+        | ((args: { searchParams: URLSearchParams }) => unknown[])
+        | undefined;
+      const searchParams = new URLSearchParams(toWithSearch.split("?")[1] ?? "");
+      const deps = loaderDepsFn ? loaderDepsFn({ searchParams }) : [toWithSearch];
+      const key = cacheKey(toPathname, deps);
+
+      const cached = loaderCache.get(key);
+      if (cached?.fresh) {
+        // Serve from cache immediately; skip fetch.
+        startTransition(() => {
+          setLoaderData(cached.data);
+          setParams((cached.data.params as Record<string, string>) ?? {});
+          setPathname(to);
+          setCurrentModule(routeModule);
+        });
+        setNavState("idle");
+        return;
+      }
+      if (cached && !cached.fresh) {
+        // Stale-while-revalidate: render stale data immediately, then refresh.
+        startTransition(() => {
+          setLoaderData(cached.data);
+          setParams((cached.data.params as Record<string, string>) ?? {});
+          setPathname(to);
+          setCurrentModule(routeModule);
+        });
+        setNavState("idle");
+        // Revalidate in background.
+        void fetch(`/_data?path=${encodeURIComponent(toWithSearch)}`)
+          .then((r) => r.ok ? r.json() : null)
+          .then((fresh) => {
+            if (!fresh) return;
+            loaderCache.set(key, fresh as Record<string, unknown>, staleTime, gcTime);
+            startTransition(() => {
+              setLoaderData(fresh as Record<string, unknown>);
+              setParams(((fresh as Record<string, unknown>).params as Record<string, string>) ?? {});
+            });
+          });
+        return;
+      }
+
+      // Cache miss — fetch from server.
+      const res = await fetch(`/_data?path=${encodeURIComponent(toWithSearch)}`);
       // Guard: always parse JSON, but only when the server signals success.
-      // Without r.ok check, a Bun 500 plain-text response causes
+      // Without res.ok check, a Bun 500 plain-text response causes
       // SyntaxError: JSON.parse: unexpected character — an unhandled rejection.
       if (!res.ok) {
         console.error(`[bractjs] /_data ${res.status} for ${to}`);
@@ -62,6 +150,20 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
         return;
       }
       const data = await res.json() as Record<string, unknown>;
+      if (staleTime > 0) loaderCache.set(key, data, staleTime, gcTime);
+
+      // Update DevTools state (dev-only — no-op in prod since the import fails).
+      const w = window as unknown as { __BRACT_DEV__?: boolean };
+      if (w.__BRACT_DEV__ === true) {
+        void import("../../dev/devtools.ts").then(({ updateDevtoolsState }) => {
+          updateDevtoolsState({
+            route: toPathname,
+            loaderData: data,
+            navState: "idle",
+            cacheEntries: loaderCache.entries(),
+          });
+        }).catch(() => {/* devtools not available in prod */});
+      }
       startTransition(() => {
         setLoaderData(data);
         setParams((data.params as Record<string, string>) ?? {});
@@ -85,9 +187,12 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
     history.pushState({}, "", to);
   }, [loadRoute]);
 
+  // Keep navigateRef current so loadRoute can redirect via navigate.
+  useEffect(() => { navigateRef.current = navigate; }, [navigate]);
+
   // Handle browser back / forward
   useEffect(() => {
-    const onPopState = () => { void loadRoute(location.pathname); };
+    const onPopState = () => { void loadRoute(location.pathname + location.search); };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [loadRoute]);
@@ -107,7 +212,6 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
     return () => { delete w.__BRACTJS_HMR_ACCEPT__; };
   }, [pathname, manifest]);
 
-  // Stub — real implementation in Prompt 2.6
   const submit = useCallback(async (
     _to: string,
     _opts: { method: string; body: FormData | Record<string, string> },

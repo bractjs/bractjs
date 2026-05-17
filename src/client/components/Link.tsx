@@ -7,12 +7,19 @@ import { prefetchRoute } from "../prefetch.ts";
 interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> {
   to: string;
   prefetch?: "hover" | "none";
+  /** Opt in to View Transitions API for this navigation (E1). */
+  viewTransition?: boolean;
   children: ReactNode;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function Link({ to, prefetch = "none", children, ...rest }: LinkProps) {
+// Feature-detection at module evaluation so every click doesn't repeat it.
+const supportsViewTransitions =
+  typeof document !== "undefined" &&
+  typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === "function";
+
+export function Link({ to, prefetch = "none", viewTransition = false, children, ...rest }: LinkProps) {
   const navCtx = useContext(NavigationContext);
   const routerCtx = useContext(RouterContext);
   const isLoading = navCtx?.state === "loading";
@@ -21,7 +28,14 @@ export function Link({ to, prefetch = "none", children, ...rest }: LinkProps) {
     if (!navCtx) return; // SSR: let browser handle naturally
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    void navCtx.navigate(to);
+
+    if (viewTransition && supportsViewTransitions) {
+      (document as Document & { startViewTransition(cb: () => void): void }).startViewTransition(
+        () => { void navCtx.navigate(to); },
+      );
+    } else {
+      void navCtx.navigate(to);
+    }
   }
 
   function handleMouseEnter() {

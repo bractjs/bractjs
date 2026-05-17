@@ -26,7 +26,10 @@ describe("safeRun", () => {
 
   test("wraps non-redirect errors in __error", async () => {
     const result = await safeRun(async () => { throw new Error("boom"); }, stubArgs);
-    expect(result).toMatchObject({ __error: expect.any(Error) });
+    // safeRun now returns a sanitized __error object ({ message } in prod,
+    // { message, stack } in dev) rather than the raw Error instance, to
+    // prevent error-subclass fields from leaking into the SSR HTML payload.
+    expect(result).toMatchObject({ __error: { message: expect.any(String) } });
   });
 
   test("re-throws HttpError (does not wrap)", async () => {
@@ -71,7 +74,7 @@ describe("runLoaders", () => {
       route: { ...emptyModule, loader: async () => ({ ok: true }) },
     };
     const results = await runLoaders(chain, stubArgs);
-    expect(results.root).toMatchObject({ __error: expect.any(Error) });
+    expect(results.root).toMatchObject({ __error: { message: expect.any(String) } });
     expect(results.route).toEqual({ ok: true });
   });
 });

@@ -25,6 +25,10 @@ export function cors(options: CorsOptions): MiddlewareFn {
 
   return async (ctx, next) => {
     const origin = ctx.request.headers.get("Origin") ?? "";
+    // SECURITY(high): Access-Control-Allow-Headers MUST NOT list
+    // `X-BractJS-Action`. That header is the CSRF gate in csrf.ts — its
+    // protection relies on browsers blocking non-allowlisted custom headers
+    // cross-origin. Adding it here would let any origin forge mutations.
     const corsHeaders: Record<string, string> = {
       "Access-Control-Allow-Methods": allowedMethods,
       "Access-Control-Allow-Headers": "Content-Type, Authorization",

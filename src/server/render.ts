@@ -62,6 +62,13 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Transfer-Encoding": "chunked",
+      // SECURITY(medium): baseline hardening headers. Apps that need a tighter
+      // CSP (e.g. with nonces for the inline bootstrap script) can override
+      // via middleware. We omit CSP here because the inline bootstrap script
+      // injected by safeStringify would require nonce wiring throughout.
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "SAMEORIGIN",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
     },
   });
 }

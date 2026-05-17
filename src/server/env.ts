@@ -2,6 +2,22 @@ export function isDev(): boolean {
   return Bun.env.NODE_ENV !== "production";
 }
 
+/**
+ * Strict "is development?" check used to gate sensitive output (error
+ * messages, stack traces) that would otherwise leak in production.
+ *
+ * Unlike isDev(), this returns true ONLY when NODE_ENV is explicitly set
+ * to "development". An unset/empty NODE_ENV is treated as production so an
+ * operator who forgets to set it never leaks internals.
+ *
+ * SECURITY(high): always use this for guarding info-disclosure code paths
+ * (server errors → response bodies) rather than isDev().
+ */
+export function isExplicitDev(): boolean {
+  const v = Bun.env.NODE_ENV;
+  return v === "development" || v === "dev";
+}
+
 export function requireEnv(key: string): string {
   const value = Bun.env[key];
   if (!value) {

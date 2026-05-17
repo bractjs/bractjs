@@ -1,5 +1,23 @@
 // Server
 export { createServer, renderRoute, redirect, json, error } from "./server/index.ts";
+export { buildFetchHandler } from "./server/serve.ts";
+export { defineContext } from "./server/context.ts";
+export type { ContextFactory } from "./server/context.ts";
+export { route } from "./server/api-route.ts";
+export type { ApiRouteDefinition, AppApiRoutes } from "./server/api-route.ts";
+export { validate } from "./server/validate.ts";
+export type { FieldErrors, ValidationError } from "./server/validate.ts";
+export type { BractAdapter } from "./server/adapter.ts";
+export { BunAdapter } from "./server/adapter.ts";
+
+// Adapters
+export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloudflare.ts";
+
+// Build plugins
+export { cssModulesPlugin, transformCssModule } from "./build/plugins/css-modules.ts";
+
+// Client RPC
+export { createClient } from "./client/rpc.ts";
 export type { BractJSConfig, RenderOptions, ServerManifest } from "./server/index.ts";
 
 // Shared types
@@ -49,3 +67,12 @@ export { useActionData } from "./client/hooks/useActionData.ts";
 export { useParams } from "./client/hooks/useParams.ts";
 export { useNavigation } from "./client/hooks/useNavigation.ts";
 export { useFetcher } from "./client/hooks/useFetcher.ts";
+export { useSearchParams } from "./client/hooks/useSearchParams.ts";
+export type { SearchParamsResult } from "./client/hooks/useSearchParams.ts";
+export { useBlocker } from "./client/hooks/useBlocker.ts";
+export { useLocale } from "./client/hooks/useLocale.ts";
+export { useLocalizedLink } from "./client/hooks/useLocalizedLink.ts";
+
+// i18n utilities (server-side)
+export { wrapRoutesWithLocale, stripLocale, localizedDataPath } from "./server/i18n.ts";
+export type { I18nConfig } from "./server/serve.ts";

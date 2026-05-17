@@ -163,3 +163,52 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] `"use server"` / `"use client"` directive system
 - [ ] Built-in i18n routing
 - [ ] Streaming `useFetcher()` (SSE-backed)
+
+---
+
+## Phase A — Type Completeness
+
+> Highest leverage additions — no new runtime dependencies, closes the biggest DX gaps vs TanStack Router and React Router.
+
+- [ ] `useSearchParams()` hook — typed, schema-driven search params per route; codegen emits `SearchParams<T>` per route; triggers loader re-run on change
+- [ ] Typed route context — `defineContext()` factory runs before loaders, injects typed `context.*` into all loaders/actions (replaces `context: unknown`)
+- [ ] `beforeLoad()` on route definitions — client-side navigation guard; runs before loader, supports auth redirects and unsaved-form blocking (`useBlocker()` pattern)
+
+---
+
+## Phase B — Performance Primitives
+
+> Makes navigating data-heavy apps feel instant. Critical for dashboards, admin panels, paginated lists.
+
+- [ ] Loader caching with `staleTime` / `gcTime` — serve cached loader data instantly on back-navigation, revalidate in background (SWR semantics)
+- [ ] `loaderDeps` — declare which search params / context values a loader depends on; drives cache invalidation (requires Phase A search params)
+- [ ] Streaming `useFetcher()` via SSE — live data without WebSockets (chat, notifications, progress bars)
+
+---
+
+## Phase C — Full-Stack DX
+
+> Closes the type-safety gap for API routes; reduces action boilerplate.
+
+- [ ] Type-safe API route client — `createClient<AppType>()` generates a fully-typed fetch client from route definitions (Hono `hc<T>()` equivalent); zero manual API contracts, status codes typed, URL helpers
+- [ ] Action validator helper — `validate(schema)` wrapper for Zod/Valibot in actions; auto-validates FormData/JSON and returns typed body; 400 on schema failure
+
+---
+
+## Phase D — Runtime Portability
+
+> Unlocks adoption beyond Bun-only deployments.
+
+- [ ] Adapter interface — abstract `Bun.serve` behind a `serve(adapter)` API so the same app runs on Cloudflare Workers, Deno, and Node.js with a one-line swap
+- [ ] Cloudflare Workers adapter — first non-Bun target; validates the adapter contract
+- [ ] CSS modules — scoped styles with zero runtime; build-time class name hashing
+
+---
+
+## Phase E — Polish
+
+> Low-effort, high-visibility improvements.
+
+- [ ] View Transitions API — `viewTransition` prop on `<Link>` opts into browser-native animated page transitions; CSS-driven, zero framework complexity
+- [ ] Built-in i18n routing — locale prefix routing (`/en/`, `/fr/`) with typed route helpers
+- [ ] DevTools panel — in-browser overlay showing matched route, loader data, navigation state, cache entries (TanStack Router devtools equivalent)

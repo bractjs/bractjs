@@ -14,8 +14,11 @@ async function parseParams(
   publicDir: string,
 ): Promise<{ src: string; filePath: string; params: ImageTransformParams } | null> {
   const src = sp.get("src");
-  // src must be a /public/ path with no traversal sequences
-  if (!src || !src.startsWith("/public/") || src.includes("..")) return null;
+  // src must be a /public/ path with no ".." path segment. We check segments
+  // (not substring) so filenames like "foo..bar.jpg" are still allowed —
+  // realpath()/prefix check below is the authoritative escape guard.
+  if (!src || !src.startsWith("/public/")) return null;
+  if (src.split("/").includes("..")) return null;
 
   const rel = src.slice("/public/".length);
   const root = resolve(publicDir);

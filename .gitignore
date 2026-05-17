@@ -1,6 +1,41 @@
-.claude/
+# Dependencies
 node_modules/
+
+# Build outputs
 build/
+dist/
+*.tsbuildinfo
+
+# Environment & secrets
 .env
-.bract-image-cache/
+.env.*
+!.env.example
+
+# Generated files
 app/route-types.gen.ts
+
+# Cache
+.bract-image-cache/
+.cache/
+.bun/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+
+# Private tooling
+.claude/
+

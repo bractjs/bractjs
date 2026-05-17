@@ -80,6 +80,7 @@ function makeSession(data: SessionData): InternalSession {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+// SECURITY(medium): caller can opt out of the Secure flag by passing secure:false; this is safe only on HTTP-only local dev — never use in production without HTTPS.
 export function createCookieSession(options: CookieSessionOptions): SessionStorage {
   const { name, secrets, maxAge, secure = true, sameSite = "Lax" } = options;
   if (!Array.isArray(secrets) || secrets.length === 0) {

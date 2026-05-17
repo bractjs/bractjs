@@ -13,6 +13,15 @@
  */
 export const hmrClientScript: string = `
 (function () {
+  // Inject DevTools panel in dev mode (E3).
+  if (typeof customElements !== 'undefined') {
+    import('/_bractjs/devtools.js').then(function(m) {
+      if (typeof m.injectDevtools === 'function') m.injectDevtools();
+    }).catch(function() {
+      // DevTools module not available — skip silently.
+    });
+  }
+
   function connect() {
     var ws = new WebSocket("ws://localhost:3001");
     ws.onmessage = function (event) {
@@ -21,6 +30,11 @@ export const hmrClientScript: string = `
         if (msg.type === "hmr:reload") {
           location.reload();
         } else if (msg.type === "hmr:route" && msg.pattern != null && msg.chunkUrl) {
+          // Validate chunk URL is a same-origin relative path before importing.
+          // Prevents a compromised/MITM'd dev WS from executing arbitrary URLs.
+          if (typeof msg.chunkUrl !== 'string' || !/^\/build\//.test(msg.chunkUrl)) {
+            return;
+          }
           // Cache-bust so the browser re-fetches the rebuilt chunk.
           // The chunk was built with splitting, so it shares the same React
           // instance as client.js — no dual-React issue.

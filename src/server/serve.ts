@@ -8,13 +8,23 @@ import { serveStatic } from "./static.ts";
 import { handleImageRequest } from "../image/handler.ts";
 import { loadServerActions } from "./action-registry.ts";
 import { handleActionRequest } from "./action-handler.ts";
+import { BunAdapter, type BractAdapter } from "./adapter.ts";
 import { resolve, join } from "node:path";
+
+export interface I18nConfig {
+  locales: string[];
+  defaultLocale: string;
+}
 
 export interface BractJSConfig {
   port: number;
   appDir: string;
   publicDir: string;
   manifest: ServerManifest;
+  /** Optional custom adapter (Cloudflare Workers, Deno, Node, etc.). Defaults to Bun.serve(). */
+  adapter?: BractAdapter;
+  /** i18n locale prefix routing (E2). */
+  i18n?: I18nConfig;
   // Build options (used by src/build/bundler.ts)
   sourcemap?: "none" | "linked" | "inline" | "external";
   minify?: boolean;
@@ -47,18 +57,18 @@ async function readDevManifest(buildDir: string): Promise<ServerManifest> {
   };
 }
 
-export function createServer(config?: Partial<BractJSConfig>): {
-  server: ReturnType<typeof Bun.serve>;
-  stop(): void;
-} {
-  const port = config?.port ?? 3000;
-  const appDir = resolve(config?.appDir ?? "./app");
-  const publicDir = resolve(config?.publicDir ?? "./public");
-  const buildDir = resolve(config?.buildDir ?? "./build");
-  const imageCacheDir = resolve(config?.imageCacheDir ?? ".bract-image-cache");
+/**
+ * Build the core application fetch handler.
+ * This is adapter-agnostic: it returns a (request) => Promise<Response> function
+ * that any adapter can call.
+ */
+export function buildFetchHandler(config: Partial<BractJSConfig>) {
+  const appDir = resolve(config.appDir ?? "./app");
+  const publicDir = resolve(config.publicDir ?? "./public");
+  const buildDir = resolve(config.buildDir ?? "./build");
+  const imageCacheDir = resolve(config.imageCacheDir ?? ".bract-image-cache");
 
-  // In production, load the pre-built manifest; otherwise use provided or default
-  const manifestReady: Promise<ServerManifest> = !isDev() && !config?.manifest
+  const manifestReady: Promise<ServerManifest> = !isDev() && !config.manifest
     ? loadManifest(buildDir).then((m) => ({
         clientEntry: m.clientEntry,
         rootChunk: m.rootChunk,
@@ -66,62 +76,95 @@ export function createServer(config?: Partial<BractJSConfig>): {
           Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk }]),
         ),
       }))
-    : Promise.resolve(config?.manifest ?? DEFAULT_MANIFEST);
+    : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);
 
-  // Build route trie and register server actions concurrently at startup.
   const trieReady = scanRoutes(appDir).then(buildTrie);
   const actionsReady = loadServerActions(appDir);
 
-  const server = Bun.serve({
-    port,
-    async fetch(request) {
-      const url = new URL(request.url);
-      const { pathname } = url;
+  return async function fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const { pathname } = url;
 
-      // Dev-only: on-demand module compilation for HMR module swap
-      if (isDev() && pathname === "/_hmr/module") {
-        const { handleHmrModuleRequest } = await import("../dev/hmr-module-handler.ts");
-        return handleHmrModuleRequest(url, appDir);
-      }
+    // Dev-only: on-demand module compilation for HMR module swap
+    if (isDev() && pathname === "/_hmr/module") {
+      const { handleHmrModuleRequest } = await import("../dev/hmr-module-handler.ts");
+      return handleHmrModuleRequest(url, appDir);
+    }
 
-      // Server actions endpoint
-      if (pathname.startsWith("/_action")) {
-        await actionsReady;
-        const actionRes = await handleActionRequest(request);
-        if (actionRes) return actionRes;
-      }
+    // Typed API routes (registered via bract.route())
+    if (pathname.startsWith("/api")) {
+      const { handleApiRequest } = await import("./api-route.ts");
+      const apiRes = await handleApiRequest(request);
+      if (apiRes) return apiRes;
+    }
 
-      // Image optimization endpoint
-      if (pathname === "/_image") {
-        const imgRes = await handleImageRequest(request, publicDir, imageCacheDir);
-        if (imgRes) return imgRes;
-      }
+    // Server actions endpoint (exact path; handler also validates).
+    if (pathname === "/_action") {
+      await actionsReady;
+      const actionRes = await handleActionRequest(request);
+      if (actionRes) return actionRes;
+    }
 
-      // Serve hashed client assets + public/ with correct cache headers
-      const staticRes = await serveStatic(pathname, buildDir, publicDir);
-      if (staticRes) return staticRes;
+    // SSE streaming endpoint for async-generator server actions.
+    if (pathname === "/_stream") {
+      await actionsReady;
+      const { handleStreamRequest } = await import("./stream-handler.ts");
+      const streamRes = await handleStreamRequest(request);
+      if (streamRes) return streamRes;
+    }
 
-      const trie = await trieReady;
-      const manifest = isDev() ? await readDevManifest(buildDir) : await manifestReady;
-      const handlerConfig: HandlerConfig = { appDir, publicDir, manifest };
-      return handleRequest(request, trie, handlerConfig);
-    },
-    // Return JSON for any uncaught exception so the client's r.json() never sees
-    // plain-text "Internal Server Error" bodies → prevents JSON.parse errors.
-    error(err: Error) {
-      console.error("[bractjs] unhandled server error:", err);
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    },
-  });
+    // Image optimization endpoint
+    if (pathname === "/_image") {
+      const imgRes = await handleImageRequest(request, publicDir, imageCacheDir);
+      if (imgRes) return imgRes;
+    }
+
+    // Serve hashed client assets + public/ with correct cache headers
+    const staticRes = await serveStatic(pathname, buildDir, publicDir);
+    if (staticRes) return staticRes;
+
+    const trie = await trieReady;
+    const manifest = isDev() ? await readDevManifest(buildDir) : await manifestReady;
+    const handlerConfig: HandlerConfig = { appDir, publicDir, manifest };
+    return handleRequest(request, trie, handlerConfig);
+  };
+}
+
+export function createServer(config?: Partial<BractJSConfig>): {
+  stop(): void;
+} {
+  const port = config?.port ?? 3000;
+
+  const fetchHandler = buildFetchHandler(config ?? {});
+
+  // Use provided adapter or fall back to the default Bun adapter.
+  const adapter = config?.adapter ?? new BunAdapter();
+
+  if (adapter instanceof BunAdapter) {
+    adapter.setHandler(fetchHandler);
+    adapter.listen(port);
+
+    console.log(`[bract] Server running at http://localhost:${port}`);
+
+    return {
+      stop() { adapter.stop(); },
+    };
+  }
+
+  // Custom adapter: wire fetch handler in and call listen if available.
+  if ("setHandler" in adapter && typeof (adapter as unknown as { setHandler: unknown }).setHandler === "function") {
+    (adapter as unknown as { setHandler: (h: (r: Request) => Promise<Response>) => void }).setHandler(fetchHandler);
+  }
+  adapter.listen?.(port);
 
   console.log(`[bract] Server running at http://localhost:${port}`);
 
   return {
-    server,
-    stop() { server.stop(); },
+    stop() {
+      if ("stop" in adapter && typeof (adapter as unknown as { stop: unknown }).stop === "function") {
+        (adapter as unknown as { stop: () => void }).stop();
+      }
+    },
   };
 }
 

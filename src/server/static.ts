@@ -25,12 +25,19 @@ async function safeRealpath(root: string, requested: string): Promise<string | n
  * Returns null if the path doesn't match or the file isn't found.
  * Guards against path traversal AND symlink escape.
  */
+// Reject only `..` as a full path segment (e.g. "/a/../b"), not legitimate
+// filenames that happen to contain ".." as a substring like "file..backup.txt".
+// safeRealpath() is the authoritative escape check; this is defense-in-depth.
+function hasDotDotSegment(pathname: string): boolean {
+  return pathname.split("/").includes("..");
+}
+
 export async function serveStatic(
   pathname: string,
   buildDir: string,
   publicDir: string,
 ): Promise<Response | null> {
-  if (pathname.includes("..")) return null;
+  if (hasDotDotSegment(pathname)) return null;
 
   if (pathname.startsWith("/build/client/")) {
     const rel = pathname.slice("/build/client/".length);
