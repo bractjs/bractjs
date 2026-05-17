@@ -1,6 +1,6 @@
 {
   "name": "@bractjs/bractjs",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Production-grade SSR framework for Bun + React 19. File-based routing, streaming SSR, server actions, typed routes.",
   "license": "MIT",
   "homepage": "https://github.com/bractjs/bractjs#readme",
