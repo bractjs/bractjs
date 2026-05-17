@@ -78,6 +78,61 @@ const HEADER =
   "\n" +
   "/* eslint-disable */\n";
 
+function searchParamsTypeLines(routes: Array<{ pattern: string }>): string {
+  // Route files may declare `export type SearchParams = { page: string }`.
+  // We emit a mapped type that falls back to Record<string,string> per route.
+  // Users augment via module augmentation or via their route file's export.
+  if (routes.length === 0) {
+    return "export type SearchParams<_T extends AppRoutes> = Record<string, string>;";
+  }
+  const branches = routes
+    .map((r) => {
+      assertSafePattern(r.pattern);
+      return "  T extends " + JSON.stringify(r.pattern) + " ? RouteSearchParamsMap[" + JSON.stringify(r.pattern) + "] :";
+    })
+    .join("\n");
+  const mapEntries = routes
+    .map((r) => "  " + JSON.stringify(r.pattern) + ": Record<string, string>;")
+    .join("\n");
+  return [
+    "// Augment RouteSearchParamsMap to type search params per route:",
+    "// declare module 'bractjs' { interface RouteSearchParamsMap { '/blog': { page: string } } }",
+    "export interface RouteSearchParamsMap {",
+    mapEntries,
+    "}",
+    "",
+    "export type SearchParams<T extends AppRoutes> =",
+    branches,
+    "  Record<string, string>;",
+  ].join("\n");
+}
+
+function contextTypeLines(routes: Array<{ pattern: string }>): string {
+  if (routes.length === 0) {
+    return "export type Context<_T extends AppRoutes> = Record<string, unknown>;";
+  }
+  const branches = routes
+    .map((r) => {
+      assertSafePattern(r.pattern);
+      return "  T extends " + JSON.stringify(r.pattern) + " ? RouteContextMap[" + JSON.stringify(r.pattern) + "] :";
+    })
+    .join("\n");
+  const mapEntries = routes
+    .map((r) => "  " + JSON.stringify(r.pattern) + ": Record<string, unknown>;")
+    .join("\n");
+  return [
+    "// Augment RouteContextMap to type context per route:",
+    "// declare module 'bractjs' { interface RouteContextMap { '/blog': { user: User } } }",
+    "export interface RouteContextMap {",
+    mapEntries,
+    "}",
+    "",
+    "export type Context<T extends AppRoutes> =",
+    branches,
+    "  Record<string, unknown>;",
+  ].join("\n");
+}
+
 export async function generateRouteTypes(appDir: string): Promise<string> {
   const routeFiles = await scanRoutes(appDir);
   const routes = routeFiles.map((r) => ({
@@ -101,13 +156,20 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
     "",
     paramsTypeLines(routes),
     "",
+    searchParamsTypeLines(routes),
+    "",
+    contextTypeLines(routes),
+    "",
     "export type TypedLoaderArgs<T extends AppRoutes> = {",
     "  request: Request;",
     "  params: RouteParams<T>;",
-    "  context: Record<string, unknown>;",
+    "  context: Context<T>;",
     "};",
     "export type TypedActionArgs<T extends AppRoutes> =",
     "  TypedLoaderArgs<T> & { formData: FormData };",
+    "",
+    "/** A locale-prefixed variant of a route (E2 i18n routing). */",
+    "export type LocalizedRoute<T extends AppRoutes> = `/${string}${T}`;",
     "",
     "export const routes = {",
     builderEntries,

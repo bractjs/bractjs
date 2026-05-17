@@ -43,6 +43,13 @@ export function clientEnvPlugin(
       build.onLoad({ filter: /\.(ts|tsx|js|jsx)$/ }, async (args) => {
         if (args.path.includes("/node_modules/")) return undefined;
         const src = await Bun.file(args.path).text();
+        // SECURITY(medium): textual regex replace runs over the whole source,
+        // including inside string literals and comments. A bare `process.env.X`
+        // anywhere — even in a documentation string — becomes the literal value
+        // (or "undefined"). This is acceptable for client builds because
+        // unwanted occurrences only yield the string "undefined", never a
+        // server secret. The allowedKeys gate is the authoritative leak check;
+        // never widen it without auditing callers.
         const contents = src.replace(
           /process\.env\.([A-Z_][A-Z0-9_]*)/g,
           (_match, key: string) =>

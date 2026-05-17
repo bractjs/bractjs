@@ -1,5 +1,7 @@
 import { resolve, join, sep } from "node:path";
 import { realpath } from "node:fs/promises";
+import { serverOnlyPlugin } from "../build/env-plugin.ts";
+import { useServerProxyPlugin } from "../build/directives.ts";
 
 /**
  * Dev-only HTTP handler for /_hmr/module?file=routes/about.tsx
@@ -18,6 +20,14 @@ export async function handleHmrModuleRequest(
     return new Response("Missing file param", { status: 400 });
   }
 
+  // SECURITY(high): restrict to JS/TS source files. Without this, /_hmr/module
+  // would build and ship the contents of any file inside appDir (e.g. .env,
+  // .json, .md) as JavaScript to the browser — useful only for compiling
+  // route modules, so allowlist their extensions.
+  if (!/\.(tsx?|jsx?)$/.test(file)) {
+    return new Response("Forbidden", { status: 403 });
+  }
+
   // Resolve and guard against path traversal AND symlink escape.
   const rootDir = resolve(appDir);
   const candidate = resolve(join(rootDir, file));
@@ -34,12 +44,18 @@ export async function handleHmrModuleRequest(
     return new Response("Forbidden", { status: 403 });
   }
 
-  // Build in-memory (no outdir → outputs held in memory, no disk write)
+  // SECURITY(high): apply the same client-bundle guard plugins the production
+  // build uses. Without these, a route module that imports `*.server.ts` or
+  // contains "use server" exports would have that server source compiled and
+  // shipped to the browser as JavaScript over /_hmr/module — leaking
+  // credentials, DB code, etc. The serverOnlyPlugin hard-fails such imports
+  // and useServerProxyPlugin rewrites "use server" exports to fetch stubs.
   const result = await Bun.build({
     entrypoints: [fullPath],
     target: "browser",
     minify: false,
     sourcemap: "inline",
+    plugins: [serverOnlyPlugin, useServerProxyPlugin],
   });
 
   if (!result.success || result.outputs.length === 0) {
