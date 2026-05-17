@@ -33,6 +33,12 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
     target: "bun",
     outdir: "build/server",
     sourcemap: config.sourcemap ?? "external",
+    // Force production so Bun picks the `jsx`/`jsxs` runtime instead of
+    // `jsxDEV` — `jsxDEV` only exists on react/jsx-dev-runtime, which is a
+    // no-op when bundled under NODE_ENV=production, leaving the call site
+    // calling an undefined function. Same fix applied to the client bundle
+    // implicitly via buildDefines().
+    define: { "process.env.NODE_ENV": JSON.stringify("production") },
     plugins: [useClientStubPlugin],
   });
   if (!serverResult.success) throw new AggregateError(serverResult.logs, "Server build failed");

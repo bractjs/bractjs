@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "bractjs dev",
-    "build": "bractjs build",
-    "start": "bractjs start"
+    "build": "NODE_ENV=production bractjs build",
+    "start": "NODE_ENV=production bractjs start"
   },
   "dependencies": {
     "@bractjs/bractjs": "latest",
