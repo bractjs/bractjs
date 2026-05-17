@@ -16,7 +16,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
   // ── 0. Codegen — typed routes ───────────────────────────────────────────
   await writeRouteTypes(appDir);
   const routes = await scanRoutes(appDir);
-  const routeFilePaths = routes.map((r) => r.filePath);
+  const routeFilePaths = routes.map((r) => join(appDir, r.filePath));
   const rootFilePath = join(appDir, "root.tsx");
 
   // ── 1. Server bundle ────────────────────────────────────────────────────
