@@ -20,8 +20,9 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
   const rootFilePath = join(appDir, "root.tsx");
 
   // ── 1. Server bundle ────────────────────────────────────────────────────
+  const pkgRoot = join(import.meta.dir, "../..");
   const serverResult = await Bun.build({
-    entrypoints: ["src/server/index.ts"],
+    entrypoints: [join(pkgRoot, "src/server/index.ts")],
     target: "bun",
     outdir: "build/server",
     sourcemap: config.sourcemap ?? "external",
@@ -31,7 +32,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
 
   // ── 2. Client bundle (code-split) ───────────────────────────────────────
   const clientResult = await Bun.build({
-    entrypoints: ["src/client/entry.tsx", rootFilePath, ...routeFilePaths],
+    entrypoints: [join(pkgRoot, "src/client/entry.tsx"), rootFilePath, ...routeFilePaths],
     target: "browser",
     splitting: true,
     outdir: "build/client",
