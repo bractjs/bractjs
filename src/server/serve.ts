@@ -2,7 +2,7 @@ import { scanRoutes } from "./scanner.ts";
 import { buildTrie } from "./matcher.ts";
 import { handleRequest, type HandlerConfig } from "./request-handler.ts";
 import { type ServerManifest } from "./render.ts";
-import { isDev } from "./env.ts";
+import { isDev, isExplicitDev } from "./env.ts";
 import { loadManifest } from "../build/manifest.ts";
 import { serveStatic } from "./static.ts";
 import { handleImageRequest } from "../image/handler.ts";
@@ -85,8 +85,12 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     const url = new URL(request.url);
     const { pathname } = url;
 
-    // Dev-only: on-demand module compilation for HMR module swap
-    if (isDev() && pathname === "/_hmr/module") {
+    // Dev-only: on-demand module compilation for HMR module swap.
+    // SECURITY(high): use isExplicitDev() (NODE_ENV === "development") rather
+    // than isDev() (NODE_ENV !== "production"). An operator who forgets to set
+    // NODE_ENV would otherwise expose /_hmr/module in production, letting
+    // anyone compile and download arbitrary appDir .ts/.tsx files as JS.
+    if (isExplicitDev() && pathname === "/_hmr/module") {
       const { handleHmrModuleRequest } = await import("../dev/hmr-module-handler.ts");
       return handleHmrModuleRequest(url, appDir);
     }

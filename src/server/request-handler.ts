@@ -78,10 +78,23 @@ async function route(
         headers: request.headers,
         method: "GET",
       });
-      const args = buildLoaderArgs(loaderRequest, match.params, {});
+      // SECURITY(high): /_data must run the same auth/redirect gates as a full
+      // page request — otherwise a SPA-style soft navigation to a protected
+      // route would bypass beforeLoad() / defineContext() and leak loader data.
+      const routeContext = await runRouteContext(
+        chain.route as Parameters<typeof runRouteContext>[0],
+        loaderRequest,
+        match.params,
+        context,
+      );
+      const args = buildLoaderArgs(loaderRequest, match.params, routeContext);
+      const beforeLoadResponse = await runBeforeLoad(chain.route, args);
+      if (beforeLoadResponse) return beforeLoadResponse;
       const results = await runLoaders(chain, args);
       return json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params });
     } catch (err) {
+      if (isRedirect(err)) return err as Response;
+      if (isHttpError(err)) return json({ error: err.message }, { status: err.status });
       console.error("[bractjs] /_data error:", err);
       return json({ error: "Internal Server Error" }, { status: 500 });
     }

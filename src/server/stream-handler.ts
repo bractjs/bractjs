@@ -1,5 +1,6 @@
 import { resolveAction } from "./action-registry.ts";
 import { isExplicitDev } from "./env.ts";
+import { isAllowedMutation } from "./csrf.ts";
 
 // ── SSE helpers ────────────────────────────────────────────────────────────
 
@@ -22,6 +23,22 @@ export async function handleStreamRequest(request: Request): Promise<Response | 
   const url = new URL(request.url);
   // SECURITY(medium): exact-match prevents URL confusion.
   if (url.pathname !== "/_stream") return null;
+
+  // SECURITY(high): server actions can have side effects. A cross-origin
+  // <script>/<img>/<link rel=prefetch> pointing at /_stream?id=… would
+  // otherwise invoke any registered action with the user's cookies. Require
+  // the same gate as /_action: either a same-origin Origin header, or the
+  // client-issued X-BractJS-Action header (blocked cross-origin by CORS).
+  if (!isAllowedMutation(request)) {
+    return new Response(sseChunk("error", { message: "Forbidden" }), {
+      status: 403,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
 
   const actionId = url.searchParams.get("id");
   // Guard: reject missing or clearly invalid IDs before registry lookup.
