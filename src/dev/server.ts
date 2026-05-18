@@ -20,7 +20,8 @@ console.log(`[bractjs] initial client build in ${initialMs}ms`);
 // Load user lifecycle hooks if defined (e.g. app/lifecycle.ts)
 let lifecycle: LifecycleHooks = {};
 try {
-  const mod = await import("../../app/lifecycle.ts");
+  const lifecyclePath = `${process.cwd()}/app/lifecycle.ts`;
+  const mod = await import(lifecyclePath);
   if (mod.default) lifecycle = mod.default;
 } catch {
   // No lifecycle file — that's fine
