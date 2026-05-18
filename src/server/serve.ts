@@ -222,28 +222,37 @@ export function createServer(config?: Partial<BractJSConfig>): {
     }
   };
 
-  const gracefulShutdown = async (signal?: string) => {
+  const gracefulShutdown = (signal?: string) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
     if (signal) console.log(`\n[bract] Received ${signal}, shutting down…`);
     try {
-      await activeOnShutdown?.();
+      const result = activeOnShutdown?.();
+      if (result instanceof Promise) {
+        result.catch((err) => console.error("[bract] onShutdown error:", err)).finally(() => {
+          stopAdapter();
+          process.exit(0);
+        });
+      } else {
+        stopAdapter();
+        process.exit(0);
+      }
     } catch (err) {
       console.error("[bract] onShutdown error:", err);
+      stopAdapter();
+      process.exit(1);
     }
-    stopAdapter();
-    process.exit(0);
   };
 
   if (!signalsRegistered) {
     signalsRegistered = true;
-    process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
-    process.on("SIGINT",  () => void gracefulShutdown("SIGINT"));
-    process.on("SIGUSR2", () => void gracefulShutdown("SIGUSR2"));
-    process.on("beforeExit", () => void gracefulShutdown());
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
+    process.on("SIGUSR2", () => gracefulShutdown("SIGUSR2"));
+    process.on("beforeExit", () => gracefulShutdown());
     process.on("uncaughtException", (err) => {
       console.error("[bract] Uncaught exception:", err);
-      void gracefulShutdown("uncaughtException");
+      gracefulShutdown("uncaughtException");
     });
   }
 
