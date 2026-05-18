@@ -4,6 +4,21 @@ All notable changes to Bract are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Server lifecycle hooks** — `onStart` and `onShutdown` callbacks on `BractJSConfig`
+  - `onStart` runs once after the server begins accepting requests (DB connect, cache warm-up, etc.)
+  - `onShutdown` runs before process exit — handles `SIGTERM`, `SIGINT`, `SIGUSR2`, `beforeExit`, and `uncaughtException` so connections are always closed
+  - Signal handlers are registered once (module-level guard) — safe across HMR restarts
+  - `gracefulShutdown` is idempotent — multi-signal storms do not double-invoke `onShutdown`
+- **`defineLifecycle(hooks)`** — typed helper for declaring lifecycle hooks in `app/lifecycle.ts`
+  - `LifecycleHooks` interface exported from the public API
+- Dev server auto-loads `app/lifecycle.ts` (default export) if present
+
+---
+
 ## [0.1.0] — 2026-05-11
 
 ### Added

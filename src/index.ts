@@ -19,6 +19,8 @@ export { cssModulesPlugin, transformCssModule } from "./build/plugins/css-module
 // Client RPC
 export { createClient } from "./client/rpc.ts";
 export type { BractJSConfig, RenderOptions, ServerManifest } from "./server/index.ts";
+export { defineLifecycle } from "./server/lifecycle.ts";
+export type { LifecycleHooks } from "./server/lifecycle.ts";
 
 // Shared types
 export type {

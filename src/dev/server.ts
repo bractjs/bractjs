@@ -5,6 +5,7 @@ import { watchApp } from "./watcher.ts";
 import { rebuildClient } from "./rebuilder.ts";
 import { filePathToPattern } from "../server/scanner.ts";
 import { basename, extname } from "node:path";
+import type { LifecycleHooks } from "../server/lifecycle.ts";
 
 // Must precede any user-code import so SSR-time isDevRuntime() checks
 // (e.g. inside <LiveReload>) observe the dev mode.
@@ -16,7 +17,16 @@ const hmr = createHmrServer(3001);
 const { duration: initialMs } = await rebuildClient();
 console.log(`[bractjs] initial client build in ${initialMs}ms`);
 
-createServer({ port: 3000 });
+// Load user lifecycle hooks if defined (e.g. app/lifecycle.ts)
+let lifecycle: LifecycleHooks = {};
+try {
+  const mod = await import("../../app/lifecycle.ts");
+  if (mod.default) lifecycle = mod.default;
+} catch {
+  // No lifecycle file — that's fine
+}
+
+createServer({ port: 3000, ...lifecycle });
 
 watchApp("./app", async (file) => {
   const { duration } = await rebuildClient();
