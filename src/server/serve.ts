@@ -183,6 +183,7 @@ async function warnIfStaleBuild(buildDir: string): Promise<void> {
 // HMR restarts and multiple createServer() calls in the same process.
 let signalsRegistered = false;
 let isShuttingDown = false;
+let activeOnShutdown: (() => Promise<void> | void) | undefined;
 
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
@@ -209,6 +210,8 @@ export function createServer(config?: Partial<BractJSConfig>): {
     adapter.listen?.(port);
   }
 
+  activeOnShutdown = config?.onShutdown;
+
   console.log(`[bract] Server running at http://localhost:${port}`);
 
   const stopAdapter = () => {
@@ -224,7 +227,7 @@ export function createServer(config?: Partial<BractJSConfig>): {
     isShuttingDown = true;
     if (signal) console.log(`\n[bract] Received ${signal}, shutting down…`);
     try {
-      await config?.onShutdown?.();
+      await activeOnShutdown?.();
     } catch (err) {
       console.error("[bract] onShutdown error:", err);
     }
