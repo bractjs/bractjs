@@ -15,6 +15,10 @@ export interface BractJSConfig {
   minify?: boolean;
   /** process.env keys allowed to be inlined into client bundles. */
   clientEnv?: string[];
+  /** Called once after the server starts listening. Use to open DB connections, warm caches, etc. */
+  onStart?: () => Promise<void> | void;
+  /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */
+  onShutdown?: () => Promise<void> | void;
 }
 
 export interface ServerManifest {

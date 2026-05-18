@@ -32,6 +32,10 @@ export interface BractJSConfig {
   buildDir?: string;
   /** Directory for transformed image cache. Defaults to .bract-image-cache */
   imageCacheDir?: string;
+  /** Called once after the server starts listening. Use to open DB connections, warm caches, etc. */
+  onStart?: () => Promise<void> | void;
+  /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */
+  onShutdown?: () => Promise<void> | void;
 }
 
 const DEFAULT_MANIFEST: ServerManifest = {
@@ -175,6 +179,11 @@ async function warnIfStaleBuild(buildDir: string): Promise<void> {
   }
 }
 
+// Module-level guards so signal handlers are registered exactly once across
+// HMR restarts and multiple createServer() calls in the same process.
+let signalsRegistered = false;
+let isShuttingDown = false;
+
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
 } {
@@ -192,28 +201,55 @@ export function createServer(config?: Partial<BractJSConfig>): {
   if (adapter instanceof BunAdapter) {
     adapter.setHandler(fetchHandler);
     adapter.listen(port);
-
-    console.log(`[bract] Server running at http://localhost:${port}`);
-
-    return {
-      stop() { adapter.stop(); },
-    };
+  } else {
+    // Custom adapter: wire fetch handler in and call listen if available.
+    if ("setHandler" in adapter && typeof (adapter as unknown as { setHandler: unknown }).setHandler === "function") {
+      (adapter as unknown as { setHandler: (h: (r: Request) => Promise<Response>) => void }).setHandler(fetchHandler);
+    }
+    adapter.listen?.(port);
   }
-
-  // Custom adapter: wire fetch handler in and call listen if available.
-  if ("setHandler" in adapter && typeof (adapter as unknown as { setHandler: unknown }).setHandler === "function") {
-    (adapter as unknown as { setHandler: (h: (r: Request) => Promise<Response>) => void }).setHandler(fetchHandler);
-  }
-  adapter.listen?.(port);
 
   console.log(`[bract] Server running at http://localhost:${port}`);
 
+  const stopAdapter = () => {
+    if (adapter instanceof BunAdapter) {
+      adapter.stop();
+    } else if ("stop" in adapter && typeof (adapter as unknown as { stop: unknown }).stop === "function") {
+      (adapter as unknown as { stop: () => void }).stop();
+    }
+  };
+
+  const gracefulShutdown = async (signal?: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    if (signal) console.log(`\n[bract] Received ${signal}, shutting down…`);
+    try {
+      await config?.onShutdown?.();
+    } catch (err) {
+      console.error("[bract] onShutdown error:", err);
+    }
+    stopAdapter();
+    process.exit(0);
+  };
+
+  if (!signalsRegistered) {
+    signalsRegistered = true;
+    process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+    process.on("SIGINT",  () => void gracefulShutdown("SIGINT"));
+    process.on("SIGUSR2", () => void gracefulShutdown("SIGUSR2"));
+    process.on("beforeExit", () => void gracefulShutdown());
+    process.on("uncaughtException", (err) => {
+      console.error("[bract] Uncaught exception:", err);
+      void gracefulShutdown("uncaughtException");
+    });
+  }
+
+  void Promise.resolve(config?.onStart?.()).catch((err) => {
+    console.error("[bract] onStart error:", err);
+  });
+
   return {
-    stop() {
-      if ("stop" in adapter && typeof (adapter as unknown as { stop: unknown }).stop === "function") {
-        (adapter as unknown as { stop: () => void }).stop();
-      }
-    },
+    stop() { void gracefulShutdown(); },
   };
 }
 

@@ -22,6 +22,11 @@ export interface RenderOptions {
   status?: number;
 }
 
+export interface LifecycleHooks {
+  onStart?: () => Promise<void> | void;
+  onShutdown?: () => Promise<void> | void;
+}
+export declare function defineLifecycle(hooks: LifecycleHooks): LifecycleHooks;
 export declare function createServer(config?: Partial<BractJSConfig>): { stop(): void };
 export declare function renderRoute(options: RenderOptions): Promise<Response>;
 export declare function redirect(url: string, status?: number): Response;
