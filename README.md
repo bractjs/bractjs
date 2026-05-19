@@ -507,6 +507,67 @@ All fields are optional. BractJS works with zero configuration.
 | `bractjs start` | Serve the production build |
 | `bractjs codegen [app] [out]` | Generate typed route types into `app/route-types.gen.ts` |
 
+The CLI is a thin convenience layer. Every command delegates to a public programmatic API — you can call the same functions directly from your own scripts without the CLI.
+
+---
+
+## Programmatic API
+
+All three runtime operations are importable, so BractJS can be embedded in existing servers or custom build scripts without the CLI.
+
+### `createDevServer(options?)`
+
+```ts
+import { createDevServer } from "@bractjs/bractjs";
+
+const dev = await createDevServer({
+  port: 3000,    // HTTP port (default: config.port ?? 3000)
+  hmrPort: 3001, // HMR WebSocket port (default: 3001)
+  config: { appDir: "./app", clientEnv: ["PUBLIC_API_URL"] },
+  skipUserConfig: false, // set true to skip loading bractjs.config.ts from cwd
+});
+
+// Later — stops the HTTP server and HMR WebSocket server
+dev.stop();
+```
+
+### `runBuild(config?)`
+
+```ts
+import { runBuild } from "@bractjs/bractjs";
+
+await runBuild({
+  appDir: "./app",
+  buildDir: "./dist",
+  minify: true,
+  sourcemap: "external",
+  clientEnv: ["PUBLIC_API_URL"],
+});
+```
+
+`runBuild` only accepts build-relevant fields (`appDir`, `buildDir`, `sourcemap`, `minify`, `clientEnv`, `plugins`). Server-only fields like `port`, `manifest`, and `publicDir` are not accepted — this makes it safe to call from a build script without constructing a full server config.
+
+### `loadUserConfig()`
+
+```ts
+import { loadUserConfig } from "@bractjs/bractjs";
+
+const cfg = await loadUserConfig();
+// Reads bractjs.config.ts (or .js) from process.cwd()
+// Returns {} if no config file exists
+```
+
+### `createServer(config?)` (production)
+
+Already exported. Starts the production HTTP server directly:
+
+```ts
+import { createServer } from "@bractjs/bractjs";
+import lifecycle from "./app/lifecycle.ts";
+
+createServer({ port: 3000, buildDir: "./build", ...lifecycle });
+```
+
 ---
 
 ## App Directory Structure
@@ -602,7 +663,7 @@ bractjs/
 
 ## Status
 
-**v0.1.0 complete.** All core phases shipped:
+**v0.1.21.** All core phases shipped:
 
 - File-based routing with trie matcher and layout chains
 - Streaming SSR (`renderToReadableStream`) with `defer()` and `<Await>`
@@ -611,12 +672,10 @@ bractjs/
 - Cookie sessions with HMAC-SHA256 and secret rotation
 - Middleware pipeline with `requestLogger`, `cors`, `authGuard`
 - Production build with content-hashed assets and code splitting
-
-Post-v0.1.0 features also shipped:
-
 - `<Image>` with on-demand ImageMagick optimization and LRU cache
 - Typed routes codegen (`AppRoutes`, `RouteParams<T>`, `TypedLoaderArgs<T>`, `routes` builder)
 - `"use server"` / `"use client"` directive system with `/_action` endpoint
+- **Programmatic API** — `createDevServer`, `runBuild`, `loadUserConfig` importable without the CLI
 
 Remaining on the roadmap: Edge runtime (Cloudflare Workers), CSS modules, i18n routing, streaming `useFetcher()`.
 

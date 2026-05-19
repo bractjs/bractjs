@@ -67,7 +67,8 @@ switch (command) {
     // Ensure dev-only handlers gated by isExplicitDev() (e.g. /_hmr/module,
     // /_bractjs/devtools.js) are reachable when the user hasn't set NODE_ENV.
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
-    await import("../src/dev/server.ts");
+    const { createDevServer } = await import("../src/dev/server.ts");
+    await createDevServer();
     break;
 
   case "build": {
@@ -77,14 +78,7 @@ switch (command) {
     const { runBuild } = await import("../src/build/bundler.ts");
     const { loadUserConfig } = await import("../src/config/load.ts");
     const userCfg = await loadUserConfig();
-    await runBuild({
-      port: 3000,
-      appDir: "./app",
-      publicDir: "./public",
-      buildDir: "./build",
-      manifest: { clientEntry: "", routes: {} },
-      ...userCfg,
-    });
+    await runBuild({ appDir: "./app", buildDir: "./build", ...userCfg });
     break;
   }
 

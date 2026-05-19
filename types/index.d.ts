@@ -7,7 +7,7 @@ export type {
 } from "./route.d.ts";
 
 // ── Config + Server ───────────────────────────────────────────────────────
-export type { BractJSConfig, ServerManifest } from "./config.d.ts";
+export type { BractJSConfig, ServerManifest, BuildConfig } from "./config.d.ts";
 import type { MetaDescriptor } from "./route.d.ts";
 import type { BractJSConfig, ServerManifest } from "./config.d.ts";
 
@@ -205,3 +205,19 @@ export declare function transformCssModule(filePath: string): Promise<{ map: Rec
 
 // ── buildFetchHandler (D1) ───────────────────────────────────────────────
 export declare function buildFetchHandler(config: Partial<import("./config.d.ts").BractJSConfig>): (request: Request) => Promise<Response>;
+
+// ── Programmatic API ─────────────────────────────────────────────────────
+export declare function runBuild(config: import("./config.d.ts").BuildConfig): Promise<void>;
+
+export interface DevServerOptions {
+  port?: number;
+  hmrPort?: number;
+  config?: Partial<BractJSConfig>;
+  skipUserConfig?: boolean;
+}
+export interface DevServer {
+  stop(): void;
+}
+export declare function createDevServer(options?: DevServerOptions): Promise<DevServer>;
+
+export declare function loadUserConfig(): Promise<Partial<BractJSConfig>>;

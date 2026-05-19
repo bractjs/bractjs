@@ -1,6 +1,6 @@
 import { join, basename, extname, resolve } from "node:path";
 import { rename, rm } from "node:fs/promises";
-import type { BractJSConfig } from "../server/serve.ts";
+import type { BunPlugin } from "bun";
 import { scanRoutes } from "../server/scanner.ts";
 import { contentHash } from "./hash.ts";
 import { generateManifest, writeManifest } from "./manifest.ts";
@@ -10,7 +10,17 @@ import { writeRouteTypes } from "../codegen/route-codegen.ts";
 import { useClientStubPlugin, useServerProxyPlugin } from "./directives.ts";
 import { cssModulesPlugin } from "./plugins/css-modules.ts";
 
-export async function runBuild(config: BractJSConfig): Promise<void> {
+/** Subset of config fields relevant to the build pipeline. */
+export interface BuildConfig {
+  appDir?: string;
+  buildDir?: string;
+  sourcemap?: "none" | "linked" | "inline" | "external";
+  minify?: boolean;
+  clientEnv?: string[];
+  plugins?: BunPlugin[];
+}
+
+export async function runBuild(config: BuildConfig): Promise<void> {
   const appDir = config.appDir ?? "./app";
 
   // ── 0. Codegen — typed routes ───────────────────────────────────────────
