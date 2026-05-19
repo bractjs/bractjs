@@ -29,6 +29,8 @@ export interface BractJSConfig {
   sourcemap?: "none" | "linked" | "inline" | "external";
   minify?: boolean;
   clientEnv?: string[];
+  /** User Bun bundler plugins appended to the client build (e.g. bun-plugin-tailwind). */
+  plugins?: import("bun").BunPlugin[];
   buildDir?: string;
   /** Directory for transformed image cache. Defaults to .bract-image-cache */
   imageCacheDir?: string;

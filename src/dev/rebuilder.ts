@@ -48,7 +48,7 @@ export async function rebuildClient(
       // structure. publicPath + ../ traversals produce wrong absolute URLs.
       minify: false,
       sourcemap: "inline",
-      plugins: [useServerProxyPlugin],
+      plugins: [useServerProxyPlugin, ...(config?.plugins ?? [])],
     });
   } finally {
     await rm(shimPath, { force: true });
