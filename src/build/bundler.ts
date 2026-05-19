@@ -54,7 +54,7 @@ export async function runBuild(config: BractJSConfig): Promise<void> {
     minify: config.minify ?? true,
     sourcemap: config.sourcemap ?? "external",
     define: buildDefines(config),
-    plugins: [serverOnlyPlugin, useServerProxyPlugin, clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin],
+    plugins: [serverOnlyPlugin, useServerProxyPlugin, clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
   });
   if (!clientResult.success) throw new AggregateError(clientResult.logs, "Client build failed");
 
