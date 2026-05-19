@@ -149,6 +149,7 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] `middleware.test.ts` — `MiddlewarePipeline`, `cors()`, `authGuard()`, `requestLogger()`
 - [x] `manifest.test.ts` — `generateManifest`
 - [x] `action-handler.test.ts` — `handleActionRequest` routing guards, `resolveAction`
+- [x] `programmatic-api.test.ts` — `createDevServer`, `runBuild`, `loadUserConfig` exports + `BuildConfig` type narrowing
 
 ---
 
@@ -163,6 +164,7 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] `"use server"` / `"use client"` directive system
 - [ ] Built-in i18n routing
 - [ ] Streaming `useFetcher()` (SSE-backed)
+- [x] Programmatic API — `createDevServer`, `runBuild`, `loadUserConfig` importable without CLI
 
 ---
 

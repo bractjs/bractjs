@@ -78,3 +78,10 @@ export { useLocalizedLink } from "./client/hooks/useLocalizedLink.ts";
 // i18n utilities (server-side)
 export { wrapRoutesWithLocale, stripLocale, localizedDataPath } from "./server/i18n.ts";
 export type { I18nConfig } from "./server/serve.ts";
+
+// Programmatic API — importable alternatives to the CLI commands
+export { createDevServer } from "./dev/server.ts";
+export type { DevServerOptions, DevServer } from "./dev/server.ts";
+export { runBuild } from "./build/bundler.ts";
+export type { BuildConfig } from "./build/bundler.ts";
+export { loadUserConfig } from "./config/load.ts";

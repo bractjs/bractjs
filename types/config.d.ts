@@ -31,3 +31,13 @@ export interface ServerManifest {
   /** Map of URL pattern → route asset info. */
   routes: Record<string, { file?: string; chunk?: string }>;
 }
+
+/** Subset of BractJSConfig used by the build pipeline. All fields optional. */
+export interface BuildConfig {
+  appDir?: string;
+  buildDir?: string;
+  sourcemap?: "none" | "linked" | "inline" | "external";
+  minify?: boolean;
+  clientEnv?: string[];
+  plugins?: import("bun").BunPlugin[];
+}
