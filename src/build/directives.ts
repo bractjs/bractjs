@@ -1,4 +1,5 @@
 import type { BunPlugin } from "bun";
+import { relative, resolve, isAbsolute } from "node:path";
 
 const CLIENT_RE = /^["']use client["']/m;
 const SERVER_RE = /^["']use server["']/m;
@@ -37,13 +38,35 @@ function extractExports(src: string): string[] {
   return names;
 }
 
-async function actionId(filePath: string, name: string): Promise<string> {
-  const raw = new TextEncoder().encode(filePath + "#" + name);
+/**
+ * Compute stable action ID from a path key (relative when appDir provided)
+ * and an exported function name. Server-side counterpart is `computeId` in
+ * `src/server/action-registry.ts` — both MUST hash identical input strings
+ * or the client proxy hits a 404 at `/_action?id=...`.
+ */
+async function actionId(pathKey: string, name: string): Promise<string> {
+  const raw = new TextEncoder().encode(pathKey + "#" + name);
   const buf = await crypto.subtle.digest("SHA-256", raw);
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
     .slice(0, 16);
+}
+
+/**
+ * Convert the absolute path Bun's onLoad passes us into the path key we hash
+ * for action IDs. When `appDir` is provided, returns appDir-relative path so
+ * IDs survive CI→prod machine moves and compiled-binary embedding. Without
+ * `appDir`, falls back to the absolute path (legacy behavior).
+ */
+function pathKeyForAction(absPath: string, appDir?: string): string {
+  if (!appDir) return absPath;
+  const absAppDir = isAbsolute(appDir) ? appDir : resolve(appDir);
+  const rel = relative(absAppDir, absPath);
+  // If the file lives outside appDir (escape), `relative` returns a path
+  // starting with "..". Fall back to the absolute path so external imports
+  // remain hashable but stay distinct from in-tree files.
+  return rel.startsWith("..") ? absPath : rel;
 }
 
 /** Server build: stub "use client" modules → null components to prevent browser API crashes. */
@@ -73,22 +96,38 @@ const PROXY_HELPER = `async function __bract(id: string, args: unknown[]): Promi
   return r.json() as Promise<unknown>;
 }`;
 
-/** Client build: replace "use server" exports with fetch proxy stubs. */
-export const useServerProxyPlugin: BunPlugin = {
-  name: "bractjs:use-server-proxy",
-  setup(build) {
-    build.onLoad({ filter: /\.(tsx?|jsx?)$/ }, async ({ path }) => {
-      const src = await Bun.file(path).text();
-      if (!hasServerDirective(src)) return undefined;
-      const names = extractExports(src);
-      if (names.length === 0) return { contents: "export {};", loader: "ts" };
-      const proxies = await Promise.all(
-        names.map(async (name) => {
-          const id = await actionId(path, name);
-          return `export const ${name} = (...args: unknown[]) => __bract("${id}", args);`;
-        }),
-      );
-      return { contents: PROXY_HELPER + "\n" + proxies.join("\n"), loader: "ts" };
-    });
-  },
-};
+/**
+ * Client build: replace "use server" exports with fetch proxy stubs.
+ *
+ * Factory form so the plugin can compute appDir-relative action IDs that
+ * match the server registry across machines and inside compiled binaries.
+ * Pass the same `appDir` used by `loadServerActions` on the server.
+ */
+export function createUseServerProxyPlugin(appDir?: string): BunPlugin {
+  return {
+    name: "bractjs:use-server-proxy",
+    setup(build) {
+      build.onLoad({ filter: /\.(tsx?|jsx?)$/ }, async ({ path }) => {
+        const src = await Bun.file(path).text();
+        if (!hasServerDirective(src)) return undefined;
+        const names = extractExports(src);
+        if (names.length === 0) return { contents: "export {};", loader: "ts" };
+        const key = pathKeyForAction(path, appDir);
+        const proxies = await Promise.all(
+          names.map(async (name) => {
+            const id = await actionId(key, name);
+            return `export const ${name} = (...args: unknown[]) => __bract("${id}", args);`;
+          }),
+        );
+        return { contents: PROXY_HELPER + "\n" + proxies.join("\n"), loader: "ts" };
+      });
+    },
+  };
+}
+
+/**
+ * Backwards-compatible default — hashes by absolute path. New code should
+ * call `createUseServerProxyPlugin(appDir)` so IDs are stable across the
+ * client bundle and server registry regardless of where the build runs.
+ */
+export const useServerProxyPlugin: BunPlugin = createUseServerProxyPlugin();

@@ -481,8 +481,22 @@ createServer({ port: 3000, ...lifecycle });
 | Hook | When it runs |
 |------|-------------|
 | `onStart` | Once, after the server begins accepting requests |
-| `onShutdown` | Before process exit — any signal or uncaught exception |
+| `onShutdown` | Before process exit — any signal, programmatic `stop()`, or uncaught exception |
 | `onError` | Every unexpected error: loader failures, action throws, uncaught exceptions. Redirects and `HttpError` throws are intentional control flow and are **not** reported. |
+
+### Programmatic stop vs signal-driven termination
+
+`createServer()` returns a `{ stop }` handle:
+
+```ts
+const srv = createServer({ port: 3000 });
+// later:
+srv.stop();          // runs onShutdown, closes the listener, does NOT exit the process
+```
+
+`stop()` returns the process to a normal idle state — useful in tests, integration harnesses, or any parent that wants to manage its own lifecycle. It does **not** call `process.exit()`.
+
+The full termination path (`process.exit(0)`) only fires when a signal handler picks up the shutdown: `SIGTERM`, `SIGINT`, `SIGUSR2`, or `uncaughtException`. If you want a programmatic stop to terminate the process, call `process.exit(0)` yourself after `stop()` returns.
 
 ---
 
@@ -515,8 +529,99 @@ All fields are optional. BractJS works with zero configuration.
 | `bractjs build` | Dual server + client build with content-hashed output |
 | `bractjs start` | Serve the production build |
 | `bractjs codegen [app] [out]` | Generate typed route types into `app/route-types.gen.ts` |
+| `bractjs codegen:registry [app]` | Generate `app/_generated/{routes,actions}.ts` (single-binary prep) |
+| `bractjs codegen:manifest [app] [build]` | Snapshot `route-manifest.json` into `app/_generated/manifest.ts` |
+| `bractjs compile [outfile] [entry]` | Full single-binary pipeline (codegen → build → compile) |
 
 The CLI is a thin convenience layer. Every command delegates to a public programmatic API — you can call the same functions directly from your own scripts without the CLI.
+
+---
+
+## Single-Binary Deployment (`bun build --compile`)
+
+BractJS can be packaged as a single executable using Bun's `--compile` flag. Because `bun build --compile` can't trace runtime filesystem scans or dynamic `import(absPath)` calls, BractJS provides a codegen step that materialises every route, layout, and server action into static imports. The compiled binary has zero filesystem dependence at startup.
+
+### One-shot
+
+```sh
+bractjs compile ./myapp
+# Equivalent to:
+#   bractjs codegen:registry      # writes app/_generated/{routes,actions}.ts
+#   bractjs build                 # writes build/client/* + route-manifest.json
+#   bractjs codegen:manifest      # snapshots manifest → app/_generated/manifest.ts
+#   bun build --compile app/server.ts --outfile ./myapp
+```
+
+### Manual pipeline (custom build step)
+
+```sh
+bractjs codegen:registry                          # A — scan routes/actions
+bractjs build                                     # B — client + server bundles
+bractjs codegen:manifest                          # C — embed manifest as a TS constant
+bun build --compile app/server.ts \               # D — single binary
+  --asset build/client/ \                         #     (embeds JS/CSS into the binary)
+  --outfile ./myapp
+```
+
+Asset embedding (`--asset build/client/`) is optional. Without it you ship `myapp` + the `build/client/` folder side-by-side. With it, you get a true single file.
+
+### The `app/server.ts` entry
+
+The scaffold template (`bractjs new`) includes `app/server.ts`:
+
+```ts
+import { createServer } from "@bractjs/bractjs";
+import { routeFiles, moduleRegistry } from "./_generated/routes.ts";
+import { actionModules } from "./_generated/actions.ts";
+import { manifest } from "./_generated/manifest.ts";
+
+createServer({
+  port: Number(process.env.PORT ?? 3000),
+  appDir: "./app",
+  publicDir: "./public",
+  manifest,
+  routeFiles,      // skips Bun.Glob route scan
+  moduleRegistry,  // skips dynamic import(absPath) of route modules
+  actionModules,   // skips Bun.Glob + dynamic import for "use server" files
+});
+```
+
+When all four of `manifest`, `routeFiles`, `moduleRegistry`, and `actionModules` are present, the server boots with **no filesystem reads of `appDir`** — the routing trie, layout chain, server-action registry, and asset manifest all come from the pre-imported modules.
+
+### Custom client builds — required plugins
+
+If you write your own `Bun.build()` call (instead of running `bractjs build`), you MUST apply these plugins or face crashes / secret leaks:
+
+| Bundle | Plugin | What breaks without it |
+|---|---|---|
+| Server | `useClientStubPlugin` | Server binary crashes when React tries to invoke browser-only hooks/APIs from `"use client"` modules |
+| Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB queries, secrets) ship inside the browser JS |
+| Client | `serverOnlyPlugin` | Imports of `*.server.ts` leak into the client bundle |
+| Client | `clientEnvPlugin(allowedKeys, env)` | Server env vars leak into the browser bundle |
+| Client | `cssModulesPlugin` | `*.module.css` imports don't resolve |
+
+```ts
+import {
+  useClientStubPlugin,
+  createUseServerProxyPlugin,
+  serverOnlyPlugin,
+  clientEnvPlugin,
+  cssModulesPlugin,
+} from "@bractjs/bractjs";
+
+// Server bundle (target: "bun"):
+plugins: [useClientStubPlugin];
+
+// Client bundle (target: "browser"):
+plugins: [
+  serverOnlyPlugin,
+  createUseServerProxyPlugin("./app"),
+  clientEnvPlugin(["PUBLIC_API_URL"], Bun.env as Record<string, string>),
+  cssModulesPlugin,
+];
+```
+
+The `createUseServerProxyPlugin(appDir)` factory exists because server-action IDs are SHA-256 hashes of the appDir-relative path. If the server and client compute different paths (e.g. CI vs prod), every `/_action?id=...` returns 404. Always pass the same `appDir` you pass to `createServer`.
 
 ---
 
@@ -585,8 +690,13 @@ createServer({ port: 3000, buildDir: "./build", ...lifecycle });
 my-app/
 ├── app/
 │   ├── root.tsx              # required — <html> shell
+│   ├── server.ts             # bun build --compile entrypoint (single-binary build)
 │   ├── lifecycle.ts          # optional — onStart / onShutdown / onError hooks
 │   ├── route-types.gen.ts    # generated by bractjs codegen
+│   ├── _generated/           # generated by bractjs codegen:registry / codegen:manifest
+│   │   ├── routes.ts         # static imports for routes + layouts + root
+│   │   ├── actions.ts        # static imports for "use server" modules
+│   │   └── manifest.ts       # inline ServerManifest constant
 │   ├── actions.ts            # "use server" actions
 │   └── routes/
 │       ├── _index.tsx        # → /
@@ -604,6 +714,8 @@ my-app/
     ├── client/
     └── route-manifest.json
 ```
+
+The `_generated/` directory is only required for the single-binary workflow. Regular `bractjs dev` / `bractjs build` / `bractjs start` work without it.
 
 ---
 
@@ -632,8 +744,17 @@ Build pipeline (`bractjs build`):
 ```
 1. codegen        → app/route-types.gen.ts
 2. server bundle  → Bun.build (target: bun)   + useClientStubPlugin
-3. client bundle  → Bun.build (target: browser, splitting) + useServerProxyPlugin
+3. client bundle  → Bun.build (target: browser, splitting) + createUseServerProxyPlugin(appDir)
 4. content-hash   → rename outputs, write route-manifest.json
+```
+
+Single-binary pipeline (`bractjs compile`):
+```
+A. registry codegen → app/_generated/{routes,actions}.ts (static imports)
+B. dual build       → build/server/, build/client/, route-manifest.json
+C. manifest codegen → app/_generated/manifest.ts (inline constant)
+D. bun build        → single executable with no runtime fs scans
+   --compile app/server.ts [--asset build/client/]
 ```
 
 ---
@@ -646,7 +767,7 @@ bractjs/
 │   ├── server/      # SSR, routing, loaders, actions, sessions, action-registry
 │   ├── client/      # hydrateRoot, contexts, hooks, Link/Form/Image components
 │   ├── build/       # Bun.build orchestration, manifest, hashing, directives
-│   ├── codegen/     # route-types.gen.ts generator
+│   ├── codegen/     # route-types.gen.ts + module-registry codegen (_generated/*)
 │   ├── image/       # /_image handler, ImageMagick optimizer, LRU cache
 │   ├── dev/         # watcher, HMR server + client, error overlay
 │   ├── shared/      # types, errors, deferred, context
@@ -685,8 +806,9 @@ bractjs/
 - Typed routes codegen (`AppRoutes`, `RouteParams<T>`, `TypedLoaderArgs<T>`, `routes` builder)
 - `"use server"` / `"use client"` directive system with `/_action` endpoint
 - **Programmatic API** — `createDevServer`, `runBuild`, `loadUserConfig` importable without the CLI
+- **Native `bun build --compile` support** — module-registry codegen produces single-binary deployables; build plugins exported from the public API; action IDs use relative paths for cross-machine stability
 
-Remaining on the roadmap: Edge runtime (Cloudflare Workers), CSS modules, i18n routing, streaming `useFetcher()`.
+Remaining on the roadmap: streaming `useFetcher()` (full implementation).
 
 ---
 

@@ -7,7 +7,7 @@ import { generateManifest, writeManifest } from "./manifest.ts";
 import { serverOnlyPlugin, clientEnvPlugin } from "./env-plugin.ts";
 import { buildDefines } from "./defines.ts";
 import { writeRouteTypes } from "../codegen/route-codegen.ts";
-import { useClientStubPlugin, useServerProxyPlugin } from "./directives.ts";
+import { useClientStubPlugin, createUseServerProxyPlugin } from "./directives.ts";
 import { cssModulesPlugin } from "./plugins/css-modules.ts";
 
 /** Subset of config fields relevant to the build pipeline. */
@@ -64,7 +64,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     minify: config.minify ?? true,
     sourcemap: config.sourcemap ?? "external",
     define: buildDefines(config),
-    plugins: [serverOnlyPlugin, useServerProxyPlugin, clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
+    plugins: [serverOnlyPlugin, createUseServerProxyPlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
   });
   if (!clientResult.success) throw new AggregateError(clientResult.logs, "Client build failed");
 

@@ -35,6 +35,28 @@ async function scaffoldNew(appName: string): Promise<void> {
     process.exit(result.exitCode ?? 1);
   }
 
+  // Seed `app/_generated/` so the template's `app/server.ts` typechecks
+  // before the user runs a build. Only the route/action registries can run
+  // here (no manifest yet — that needs `bractjs build` first). The manifest
+  // module is stubbed in below.
+  console.log("Seeding _generated/ registries...");
+  try {
+    const { writeModuleRegistries } = await import("../src/codegen/module-registry.ts");
+    await writeModuleRegistries(join(appDir, "app"));
+    // Manifest stub — overwritten by `bractjs codegen:manifest` after a build
+    const stubManifest = [
+      "// Stub manifest — replaced by `bractjs codegen:manifest` after running",
+      "// `bractjs build`. Allows `app/server.ts` to typecheck before the",
+      "// first build completes.",
+      `import type { ServerManifest } from "@bractjs/bractjs";`,
+      `export const manifest: ServerManifest = { clientEntry: "/build/client/client.js", routes: {} };`,
+      "",
+    ].join("\n");
+    await Bun.write(join(appDir, "app", "_generated", "manifest.ts"), stubManifest);
+  } catch (err) {
+    console.warn("[bract] codegen seed skipped:", err instanceof Error ? err.message : err);
+  }
+
   console.log(`\n✓ Created ${appName}\n`);
   console.log("Next steps:");
   console.log(`  cd ${appName}`);
@@ -99,14 +121,80 @@ switch (command) {
     break;
   }
 
+  case "codegen:registry": {
+    // Phase A of the `bun build --compile` pipeline: scan routes/layouts and
+    // server actions, then write static-import registries under
+    // `<appDir>/_generated/` so the resulting bundle has no fs-scan or
+    // `import(absPath)` calls at runtime.
+    const { writeModuleRegistries } = await import("../src/codegen/module-registry.ts");
+    const appDir = resolve(process.cwd(), process.argv[3] ?? "./app");
+    const { routesPath, actionsPath } = await writeModuleRegistries(appDir);
+    console.log("[bract] registry codegen →", routesPath);
+    console.log("[bract] registry codegen →", actionsPath);
+    break;
+  }
+
+  case "codegen:manifest": {
+    // Phase C of the pipeline: snapshot `<buildDir>/route-manifest.json`
+    // into `<appDir>/_generated/manifest.ts` so the compiled binary never
+    // reads the JSON from disk at startup. Must run AFTER the client build.
+    const { writeManifestModule } = await import("../src/codegen/module-registry.ts");
+    const appDir = resolve(process.cwd(), process.argv[3] ?? "./app");
+    const buildDir = resolve(process.cwd(), process.argv[4] ?? "./build");
+    const out = await writeManifestModule(appDir, buildDir);
+    console.log("[bract] manifest codegen →", out);
+    break;
+  }
+
+  case "compile": {
+    // Convenience: run the entire `bun build --compile` pipeline.
+    // A) registry codegen → B) client build → C) manifest codegen → D) compile.
+    // The user can also invoke A/C and D separately if they want a custom
+    // client build step.
+    if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
+    const { writeModuleRegistries, writeManifestModule } = await import("../src/codegen/module-registry.ts");
+    const { runBuild } = await import("../src/build/bundler.ts");
+    const { loadUserConfig } = await import("../src/config/load.ts");
+
+    const appDir = resolve(process.cwd(), "./app");
+    const buildDir = resolve(process.cwd(), "./build");
+    const outFile = process.argv[3] ?? "./bractjs-app";
+    const entryPath = process.argv[4] ?? "./app/server.ts";
+
+    console.log("[bract] (1/4) registry codegen…");
+    await writeModuleRegistries(appDir);
+
+    console.log("[bract] (2/4) client + server build…");
+    const userCfg = await loadUserConfig();
+    await runBuild({ appDir: "./app", buildDir: "./build", ...userCfg });
+
+    console.log("[bract] (3/4) manifest codegen…");
+    await writeManifestModule(appDir, buildDir);
+
+    console.log("[bract] (4/4) bun build --compile →", outFile);
+    const result = Bun.spawnSync(
+      ["bun", "build", "--compile", entryPath, "--outfile", outFile],
+      { cwd: process.cwd(), stdio: ["inherit", "inherit", "inherit"] },
+    );
+    if (result.exitCode !== 0) {
+      console.error("[bract] bun build --compile failed");
+      process.exit(result.exitCode ?? 1);
+    }
+    console.log(`[bract] ✓ single-binary build complete: ${outFile}`);
+    break;
+  }
+
   default:
     console.log(
       "Usage: bractjs <command>\n" +
-        "  new      <app-name>    Scaffold a new BractJS app\n" +
-        "  dev                    Start dev server with HMR\n" +
-        "  build                  Build for production\n" +
-        "  start                  Start production server\n" +
-        "  codegen  [app] [out]   Generate typed route types",
+        "  new      <app-name>            Scaffold a new BractJS app\n" +
+        "  dev                            Start dev server with HMR\n" +
+        "  build                          Build for production (build/ dir)\n" +
+        "  start                          Start production server\n" +
+        "  codegen  [app] [out]           Generate typed route types\n" +
+        "  codegen:registry  [app]        Generate _generated/{routes,actions}.ts\n" +
+        "  codegen:manifest  [app] [build]  Generate _generated/manifest.ts\n" +
+        "  compile  [outfile] [entry]     Full single-binary pipeline",
     );
     process.exit(1);
 }

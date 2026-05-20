@@ -1,5 +1,5 @@
 import type { BractJSConfig } from "../server/serve.ts";
-import { useServerProxyPlugin } from "../build/directives.ts";
+import { createUseServerProxyPlugin } from "../build/directives.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import { generateManifest, writeManifest } from "../build/manifest.ts";
 import { mkdir, rename, rm } from "node:fs/promises";
@@ -48,7 +48,7 @@ export async function rebuildClient(
       // structure. publicPath + ../ traversals produce wrong absolute URLs.
       minify: false,
       sourcemap: "inline",
-      plugins: [useServerProxyPlugin, ...(config?.plugins ?? [])],
+      plugins: [createUseServerProxyPlugin(appDir), ...(config?.plugins ?? [])],
     });
   } finally {
     await rm(shimPath, { force: true });

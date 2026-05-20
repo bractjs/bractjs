@@ -157,7 +157,10 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
       if (w.__BRACT_DEV__ === true) {
         // Use the dev-only HTTP endpoint (registered in serve.ts) rather than
         // a relative source-path import — Bun preserves dynamic-import paths
-        // as runtime URLs, and a relative .ts path 404s in the browser.
+        // as runtime URLs, and a relative .ts path 404s in the browser. TS
+        // can't resolve the absolute URL spec, but `.catch()` below swallows
+        // the import failure in prod where the endpoint isn't registered.
+        // @ts-expect-error TS2307 — runtime URL served by serve.ts in dev only
         void import(/* @vite-ignore */ "/_bractjs/devtools.js").then(({ updateDevtoolsState }) => {
           updateDevtoolsState({
             route: toPathname,

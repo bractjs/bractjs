@@ -4,20 +4,40 @@ import { realpath } from "node:fs/promises";
 const IMMUTABLE = "public, max-age=31536000, immutable";
 const NO_CACHE = "no-cache";
 
-// Resolve to a canonical path that follows symlinks. Returns null if the
-// target doesn't exist OR escapes the given root after symlink expansion.
+/**
+ * Resolve to a canonical path that follows symlinks, with a fallback for
+ * `bun build --compile` binaries.
+ *
+ * Three outcomes:
+ * 1. realpath succeeds + stays inside `root` → return resolved path
+ * 2. realpath throws AND `Bun.file(candidate)` exists → return the candidate
+ *    path. This is the embedded-asset case: `bun --compile` exposes assets
+ *    through virtual paths that don't appear in the filesystem, so realpath
+ *    errors with ENOENT/EINVAL but `Bun.file()` still reads them.
+ * 3. otherwise → null (escape, ENOENT, etc.)
+ *
+ * The structural `startsWith(root + sep)` check at the top runs before any
+ * I/O and is the authoritative traversal guard — the realpath check is
+ * defense-in-depth against symlink escape, which can't happen inside an
+ * embedded virtual filesystem.
+ */
 async function safeRealpath(root: string, requested: string): Promise<string | null> {
   const candidate = resolve(join(root, requested));
-  // Cheap structural reject before touching the FS.
+  // Cheap structural reject before touching the FS. This blocks `..` escapes
+  // unconditionally, in both the normal-FS and embedded-binary paths.
   if (!candidate.startsWith(root + sep) && candidate !== root) return null;
-  let real: string;
   try {
-    real = await realpath(candidate);
+    const real = await realpath(candidate);
+    if (!real.startsWith(root + sep) && real !== root) return null;
+    return real;
   } catch {
+    // realpath fails for paths embedded by `bun build --compile --asset`.
+    // The structural check above already prevented traversal, so the only
+    // remaining concern is whether the asset actually exists — defer to
+    // Bun.file() which reads from the embed table.
+    if (await Bun.file(candidate).exists()) return candidate;
     return null;
   }
-  if (!real.startsWith(root + sep) && real !== root) return null;
-  return real;
 }
 
 /**

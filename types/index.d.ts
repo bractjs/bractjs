@@ -4,6 +4,7 @@ import type { ReactNode, Context } from "react";
 export type {
   LoaderArgs, ActionArgs, MetaDescriptor, MetaArgs,
   LoaderFunction, ActionFunction, MetaFunction, RouteModule,
+  RouteFile, Segment,
 } from "./route.d.ts";
 
 // ── Config + Server ───────────────────────────────────────────────────────
@@ -206,6 +207,34 @@ export declare function makeCloudflareHandler(
 // ── CSS Modules (D3) ─────────────────────────────────────────────────────
 export declare const cssModulesPlugin: unknown; // BunPlugin
 export declare function transformCssModule(filePath: string): Promise<{ map: Record<string, string>; css: string }>;
+
+// ── Build plugins (required for native `bun build --compile` workflow) ───
+//
+// Apply all of these on the relevant bundle or face crashes / secret leaks:
+//   server bundle  → useClientStubPlugin
+//   client bundle  → createUseServerProxyPlugin(appDir), serverOnlyPlugin,
+//                    clientEnvPlugin(allowedKeys, env), cssModulesPlugin
+export declare const useClientStubPlugin: unknown; // BunPlugin
+export declare function createUseServerProxyPlugin(appDir?: string): unknown; // BunPlugin
+export declare const useServerProxyPlugin: unknown; // BunPlugin (legacy — uses absolute paths)
+export declare const serverOnlyPlugin: unknown; // BunPlugin
+export declare function clientEnvPlugin(
+  allowedKeys: string[],
+  envValues: Record<string, string>,
+): unknown; // BunPlugin
+
+// ── Module-registry codegen (drives `bun build --compile`) ────────────────
+export interface CodegenResult {
+  routesPath: string;
+  actionsPath: string;
+}
+/** Scan appDir; write `<appDir>/_generated/routes.ts` and `actions.ts`. */
+export declare function writeModuleRegistries(appDir: string): Promise<CodegenResult>;
+/** Read `<buildDir>/route-manifest.json`; write `<appDir>/_generated/manifest.ts`. */
+export declare function writeManifestModule(appDir: string, buildDir: string): Promise<string>;
+
+/** Pre-loaded route/layout/root modules keyed by appDir-relative path. */
+export type ModuleRegistry = Record<string, import("./route.d.ts").RouteModule | Record<string, unknown>>;
 
 // ── buildFetchHandler (D1) ───────────────────────────────────────────────
 export declare function buildFetchHandler(config: Partial<import("./config.d.ts").BractJSConfig>): (request: Request) => Promise<Response>;

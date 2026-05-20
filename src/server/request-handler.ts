@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import type { TrieNode } from "./matcher.ts";
 import { matchRoute } from "./matcher.ts";
-import { resolveRouteChain } from "./layout.ts";
+import { resolveRouteChain, type ModuleRegistry } from "./layout.ts";
 import { runLoaders, runAction, buildLoaderArgs, runRouteContext, runBeforeLoad } from "./loader.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
 import { resolveMeta } from "./meta.ts";
@@ -18,6 +18,12 @@ export interface HandlerConfig {
   publicDir: string;
   manifest: ServerManifest;
   onError?: OnErrorHook;
+  /**
+   * Pre-loaded route/layout/root modules keyed by appDir-relative path.
+   * Provided by codegen (`_generated/routes.ts`) for compiled binaries
+   * where dynamic `import(absPath)` is unavailable. Falsy in dev mode.
+   */
+  moduleRegistry?: ModuleRegistry;
 }
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
@@ -47,7 +53,7 @@ async function route(
   config: HandlerConfig,
   context: Record<string, unknown>,
 ): Promise<Response> {
-  const { appDir, manifest, onError } = config;
+  const { appDir, manifest, onError, moduleRegistry } = config;
   const url = new URL(request.url);
   const { pathname, searchParams } = url;
 
@@ -70,7 +76,7 @@ async function route(
     if (!match) return json({ error: "Not Found" }, { status: 404 });
 
     try {
-      const chain = await resolveRouteChain(match.routeFile, appDir);
+      const chain = await resolveRouteChain(match.routeFile, appDir, moduleRegistry);
       // Reconstruct a Request that carries the original search params so loaders
       // can access them via request.url / new URL(request.url).searchParams.
       const targetUrl = new URL(request.url);
@@ -107,7 +113,7 @@ async function route(
   const match = matchRoute(pathname, trie);
   if (!match) return error("Not Found", 404);
 
-  const chain = await resolveRouteChain(match.routeFile, appDir);
+  const chain = await resolveRouteChain(match.routeFile, appDir, moduleRegistry);
   // Run per-route context factory (defineContext export) before loaders.
   const routeContext = await runRouteContext(
     chain.route as Parameters<typeof runRouteContext>[0],

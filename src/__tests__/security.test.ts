@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mkdir, rm, writeFile, symlink } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { resolve, join, relative, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "../server/serve.ts";
 import { handleActionRequest } from "../server/action-handler.ts";
@@ -15,8 +15,16 @@ import { handleImageRequest } from "../image/handler.ts";
 const ACTION_TMP = resolve(import.meta.dir, ".tmp-security-action");
 let registeredActionId = "";
 
-async function computeId(filePath: string, name: string): Promise<string> {
-  const raw = new TextEncoder().encode(filePath + "#" + name);
+// Mirrors `pathKeyForAction` — action IDs hash the appDir-relative path so
+// they stay consistent between the server registry and the client proxy.
+function pathKey(absPath: string, appDir: string): string {
+  const absAppDir = isAbsolute(appDir) ? appDir : resolve(appDir);
+  const rel = relative(absAppDir, absPath);
+  return rel.startsWith("..") ? absPath : rel;
+}
+
+async function computeId(absPath: string, name: string, appDir: string): Promise<string> {
+  const raw = new TextEncoder().encode(pathKey(absPath, appDir) + "#" + name);
   const buf = await crypto.subtle.digest("SHA-256", raw);
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -42,7 +50,7 @@ beforeAll(async () => {
   const actionFile = join(ACTION_TMP, "routes", "_index.tsx");
   await writeFile(actionFile, `"use server";\nexport async function ping(...args) { return args; }\n`);
   await loadServerActions(ACTION_TMP);
-  registeredActionId = await computeId(actionFile, "ping");
+  registeredActionId = await computeId(actionFile, "ping", ACTION_TMP);
 });
 
 afterAll(async () => {

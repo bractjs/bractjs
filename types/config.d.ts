@@ -1,4 +1,5 @@
 import type { BunPlugin } from "bun";
+import type { RouteFile, RouteModule } from "./route.d.ts";
 
 export interface BractJSConfig {
   /** TCP port to listen on. Default: 3000. */
@@ -23,6 +24,23 @@ export interface BractJSConfig {
   onStart?: () => Promise<void> | void;
   /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */
   onShutdown?: () => Promise<void> | void;
+  /**
+   * Pre-scanned route list. Typically imported from `app/_generated/routes.ts`.
+   * Required for `bun build --compile` binaries where the routes/ directory
+   * isn't on a scannable filesystem.
+   */
+  routeFiles?: RouteFile[];
+  /**
+   * Pre-loaded route/layout/root modules keyed by appDir-relative path.
+   * Typically imported from `app/_generated/routes.ts`.
+   */
+  moduleRegistry?: Record<string, RouteModule | Record<string, unknown>>;
+  /**
+   * Pre-imported server-action modules. Typically imported from
+   * `app/_generated/actions.ts`. Each `relPath` MUST match what the client
+   * proxy plugin hashed during the client build.
+   */
+  actionModules?: Array<{ relPath: string; mod: Record<string, unknown> }>;
 }
 
 export interface ServerManifest {

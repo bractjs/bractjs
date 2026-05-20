@@ -14,7 +14,36 @@ export { BunAdapter } from "./server/adapter.ts";
 export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloudflare.ts";
 
 // Build plugins
+//
+// These plugins are REQUIRED when users compose their own `Bun.build` call
+// (e.g. native `bun build --compile` or a custom client bundle step). Missing
+// any of them breaks security or runtime behaviour:
+//
+// - `useClientStubPlugin` (server bundle): replaces "use client" modules with
+//   null stubs. Without it, the server binary crashes when React tries to
+//   call browser-only hooks/APIs.
+// - `createUseServerProxyPlugin(appDir)` (client bundle): replaces
+//   "use server" exports with fetch proxies. Without it, server-action
+//   bodies — including DB queries and secrets — ship inside the browser JS.
+// - `serverOnlyPlugin` (client bundle): hard-fails imports of `*.server.ts`
+//   files so server-only code can never be tree-walked into the client bundle.
+// - `clientEnvPlugin(allowedKeys, env)` (client bundle): allowlists which
+//   `process.env.*` references survive into the browser bundle.
+// - `cssModulesPlugin` (client bundle): handles `*.module.css` imports.
 export { cssModulesPlugin, transformCssModule } from "./build/plugins/css-modules.ts";
+export { useClientStubPlugin, createUseServerProxyPlugin, useServerProxyPlugin } from "./build/directives.ts";
+export { serverOnlyPlugin, clientEnvPlugin } from "./build/env-plugin.ts";
+
+// Module-registry codegen (drives `bun build --compile` workflow)
+export {
+  writeModuleRegistries,
+  writeManifestModule,
+  generateRouteRegistry,
+  generateActionRegistry,
+  generateManifestModule,
+} from "./codegen/module-registry.ts";
+export type { CodegenResult } from "./codegen/module-registry.ts";
+export type { ModuleRegistry } from "./server/layout.ts";
 
 // Client RPC
 export { createClient } from "./client/rpc.ts";
@@ -34,6 +63,7 @@ export type {
   RouteModule,
   RouteDefinition,
 } from "./shared/route-types.ts";
+export type { RouteFile, Segment } from "./server/scanner.ts";
 
 export { BractJSError, HttpError, isRedirect, isHttpError, isBractJSError } from "./shared/errors.ts";
 export { Deferred, defer, isDeferred } from "./shared/deferred.ts";
