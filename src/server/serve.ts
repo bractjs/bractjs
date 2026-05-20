@@ -10,6 +10,7 @@ import { loadServerActions } from "./action-registry.ts";
 import { handleActionRequest } from "./action-handler.ts";
 import { BunAdapter, type BractAdapter } from "./adapter.ts";
 import { resolve, join } from "node:path";
+import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
 export interface I18nConfig {
   locales: string[];
@@ -38,6 +39,8 @@ export interface BractJSConfig {
   onStart?: () => Promise<void> | void;
   /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */
   onShutdown?: () => Promise<void> | void;
+  /** Called for every unexpected error: loader failures, action throws, and uncaught process exceptions. Redirects and HttpErrors are intentional control flow and are NOT reported here. The request is undefined for process-level exceptions. */
+  onError?: OnErrorHook;
 }
 
 const DEFAULT_MANIFEST: ServerManifest = {
@@ -86,6 +89,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
 
   const trieReady = scanRoutes(appDir).then(buildTrie);
   const actionsReady = loadServerActions(appDir);
+  const onError = config.onError;
 
   return async function fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -154,7 +158,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
 
     const trie = await trieReady;
     const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
-    const handlerConfig: HandlerConfig = { appDir, publicDir, manifest };
+    const handlerConfig: HandlerConfig = { appDir, publicDir, manifest, onError };
     return handleRequest(request, trie, handlerConfig);
   };
 }
@@ -186,6 +190,7 @@ async function warnIfStaleBuild(buildDir: string): Promise<void> {
 let signalsRegistered = false;
 let isShuttingDown = false;
 let activeOnShutdown: (() => Promise<void> | void) | undefined;
+let activeOnError: OnErrorHook | undefined;
 
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
@@ -213,6 +218,7 @@ export function createServer(config?: Partial<BractJSConfig>): {
   }
 
   activeOnShutdown = config?.onShutdown;
+  activeOnError = config?.onError;
 
   console.log(`[bract] Server running at http://localhost:${port}`);
 
@@ -254,7 +260,7 @@ export function createServer(config?: Partial<BractJSConfig>): {
     process.on("beforeExit", () => gracefulShutdown());
     process.on("uncaughtException", (err) => {
       console.error("[bract] Uncaught exception:", err);
-      gracefulShutdown("uncaughtException");
+      void fireOnError(activeOnError, err).then(() => gracefulShutdown("uncaughtException"));
     });
   }
 
