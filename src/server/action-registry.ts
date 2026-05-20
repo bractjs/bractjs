@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, relative, resolve, isAbsolute } from "node:path";
 
 // Anchored at start-of-file. Allow whitespace and line/block comments before
 // the "use server" string literal. This prevents false matches from a "use
@@ -6,13 +6,29 @@ import { join } from "node:path";
 const SERVER_RE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use server["']/;
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 
-async function computeId(filePath: string, name: string): Promise<string> {
-  const raw = new TextEncoder().encode(filePath + "#" + name);
+/**
+ * Hash key for an action — must use the same string the client-side proxy
+ * plugin hashes (`pathKey + "#" + name`). Mismatch → `/_action?id=...` 404.
+ */
+async function computeId(pathKey: string, name: string): Promise<string> {
+  const raw = new TextEncoder().encode(pathKey + "#" + name);
   const buf = await crypto.subtle.digest("SHA-256", raw);
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
     .slice(0, 16);
+}
+
+/**
+ * Convert an absolute file path to the appDir-relative key used for hashing.
+ * Matches `pathKeyForAction` in `src/build/directives.ts`. Files outside
+ * appDir keep their absolute path so external imports stay hashable but
+ * distinct from in-tree files.
+ */
+function pathKeyForAction(absPath: string, appDir: string): string {
+  const absAppDir = isAbsolute(appDir) ? appDir : resolve(appDir);
+  const rel = relative(absAppDir, absPath);
+  return rel.startsWith("..") ? absPath : rel;
 }
 
 export function resolveAction(id: string): ((...args: unknown[]) => Promise<unknown>) | null {
@@ -47,7 +63,28 @@ export async function loadServerActions(appDir: string): Promise<void> {
 
     for (const [name, val] of Object.entries(mod)) {
       if (typeof val !== "function") continue;
-      const id = await computeId(filePath, name);
+      const id = await computeId(pathKeyForAction(filePath, appDir), name);
+      registry.set(id, val as (...args: unknown[]) => Promise<unknown>);
+    }
+  }
+}
+
+/**
+ * Registry-driven counterpart to `loadServerActions`. Skips the filesystem
+ * scan and dynamic imports — every entry was already statically imported by
+ * `_generated/actions.ts`, so we just iterate and register.
+ *
+ * Each entry's `relPath` MUST be appDir-relative (matches what
+ * `createUseServerProxyPlugin(appDir)` hashed during the client build).
+ * Mismatched relPaths produce silent `/_action?id=...` 404s.
+ */
+export async function loadServerActionsFromRegistry(
+  entries: Array<{ relPath: string; mod: Record<string, unknown> }>,
+): Promise<void> {
+  for (const { relPath, mod } of entries) {
+    for (const [name, val] of Object.entries(mod)) {
+      if (typeof val !== "function") continue;
+      const id = await computeId(relPath, name);
       registry.set(id, val as (...args: unknown[]) => Promise<unknown>);
     }
   }

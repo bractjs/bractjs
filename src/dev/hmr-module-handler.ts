@@ -1,7 +1,7 @@
 import { resolve, join, sep } from "node:path";
 import { realpath } from "node:fs/promises";
 import { serverOnlyPlugin } from "../build/env-plugin.ts";
-import { useServerProxyPlugin } from "../build/directives.ts";
+import { createUseServerProxyPlugin } from "../build/directives.ts";
 
 /**
  * Dev-only HTTP handler for /_hmr/module?file=routes/about.tsx
@@ -55,7 +55,7 @@ export async function handleHmrModuleRequest(
     target: "browser",
     minify: false,
     sourcemap: "inline",
-    plugins: [serverOnlyPlugin, useServerProxyPlugin],
+    plugins: [serverOnlyPlugin, createUseServerProxyPlugin(rootDir)],
   });
 
   if (!result.success || result.outputs.length === 0) {

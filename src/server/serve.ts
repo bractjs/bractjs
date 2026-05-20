@@ -1,4 +1,4 @@
-import { scanRoutes } from "./scanner.ts";
+import { scanRoutes, type RouteFile } from "./scanner.ts";
 import { buildTrie } from "./matcher.ts";
 import { handleRequest, type HandlerConfig } from "./request-handler.ts";
 import { type ServerManifest } from "./render.ts";
@@ -6,9 +6,10 @@ import { isDevRuntime, isExplicitDev } from "./env.ts";
 import { loadManifest } from "../build/manifest.ts";
 import { serveStatic } from "./static.ts";
 import { handleImageRequest } from "../image/handler.ts";
-import { loadServerActions } from "./action-registry.ts";
+import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
 import { handleActionRequest } from "./action-handler.ts";
 import { BunAdapter, type BractAdapter } from "./adapter.ts";
+import type { ModuleRegistry } from "./layout.ts";
 import { resolve, join } from "node:path";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
@@ -41,6 +42,25 @@ export interface BractJSConfig {
   onShutdown?: () => Promise<void> | void;
   /** Called for every unexpected error: loader failures, action throws, and uncaught process exceptions. Redirects and HttpErrors are intentional control flow and are NOT reported here. The request is undefined for process-level exceptions. */
   onError?: OnErrorHook;
+  /**
+   * Pre-scanned route list (typically exported from `app/_generated/routes.ts`).
+   * When provided, skips the startup `Bun.Glob` scan of `appDir`. Required for
+   * `bun build --compile` binaries where the embedded filesystem has no
+   * scannable routes/ directory.
+   */
+  routeFiles?: RouteFile[];
+  /**
+   * Pre-loaded route/layout/root modules keyed by appDir-relative path.
+   * Required alongside `routeFiles` for compiled binaries — `resolveRouteChain`
+   * uses this map instead of `import(absPath)` at request time.
+   */
+  moduleRegistry?: ModuleRegistry;
+  /**
+   * Pre-imported server-action modules (typically `app/_generated/actions.ts`).
+   * When provided, skips the startup `Bun.Glob` scan + dynamic import that
+   * `loadServerActions` does.
+   */
+  actionModules?: Array<{ relPath: string; mod: Record<string, unknown> }>;
 }
 
 const DEFAULT_MANIFEST: ServerManifest = {
@@ -87,8 +107,17 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       }))
     : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);
 
-  const trieReady = scanRoutes(appDir).then(buildTrie);
-  const actionsReady = loadServerActions(appDir);
+  // Codegen / compiled-binary path: when the caller supplies pre-scanned
+  // routes, skip the runtime `Bun.Glob` scan that `bun build --compile`
+  // can't satisfy (the routes/ directory isn't on the filesystem in a
+  // single-binary deployment). Same idea for server actions.
+  const trieReady = config.routeFiles
+    ? Promise.resolve(buildTrie(config.routeFiles))
+    : scanRoutes(appDir).then(buildTrie);
+  const actionsReady = config.actionModules
+    ? loadServerActionsFromRegistry(config.actionModules)
+    : loadServerActions(appDir);
+  const moduleRegistry = config.moduleRegistry;
   const onError = config.onError;
 
   return async function fetch(request: Request): Promise<Response> {
@@ -158,7 +187,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
 
     const trie = await trieReady;
     const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
-    const handlerConfig: HandlerConfig = { appDir, publicDir, manifest, onError };
+    const handlerConfig: HandlerConfig = { appDir, publicDir, manifest, onError, moduleRegistry };
     return handleRequest(request, trie, handlerConfig);
   };
 }
@@ -230,26 +259,30 @@ export function createServer(config?: Partial<BractJSConfig>): {
     }
   };
 
-  const gracefulShutdown = (signal?: string) => {
+  // Programmatic / beforeExit path — runs the user hook, stops the adapter,
+  // and returns. Does NOT call process.exit() so callers (tests, parent
+  // supervisors) can keep running. `gracefulShutdown` below wraps this and
+  // adds an explicit exit for signal handlers, where termination is the
+  // whole point.
+  const shutdownOnce = async (signal?: string): Promise<void> => {
     if (isShuttingDown) return;
     isShuttingDown = true;
     if (signal) console.log(`\n[bract] Received ${signal}, shutting down…`);
     try {
       const result = activeOnShutdown?.();
       if (result instanceof Promise) {
-        result.catch((err) => console.error("[bract] onShutdown error:", err)).finally(() => {
-          stopAdapter();
-          process.exit(0);
-        });
-      } else {
-        stopAdapter();
-        process.exit(0);
+        try { await result; }
+        catch (err) { console.error("[bract] onShutdown error:", err); }
       }
     } catch (err) {
       console.error("[bract] onShutdown error:", err);
+    } finally {
       stopAdapter();
-      process.exit(1);
     }
+  };
+
+  const gracefulShutdown = (signal?: string, exitCode = 0): void => {
+    void shutdownOnce(signal).finally(() => process.exit(exitCode));
   };
 
   if (!signalsRegistered) {
@@ -257,10 +290,15 @@ export function createServer(config?: Partial<BractJSConfig>): {
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
     process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
     process.on("SIGUSR2", () => gracefulShutdown("SIGUSR2"));
-    process.on("beforeExit", () => gracefulShutdown());
+    // `beforeExit` fires when the event loop is naturally draining — we
+    // already shut down the adapter at that point, but we must NOT call
+    // process.exit(). Doing so re-enters the lifecycle and prevents test
+    // runners (and any parent process supervising us) from observing a
+    // clean exit code. Just run the user hook + stop the listener.
+    process.on("beforeExit", () => { void shutdownOnce(); });
     process.on("uncaughtException", (err) => {
       console.error("[bract] Uncaught exception:", err);
-      void fireOnError(activeOnError, err).then(() => gracefulShutdown("uncaughtException"));
+      void fireOnError(activeOnError, err).then(() => gracefulShutdown("uncaughtException", 1));
     });
   }
 
@@ -269,7 +307,12 @@ export function createServer(config?: Partial<BractJSConfig>): {
   });
 
   return {
-    stop() { void gracefulShutdown(); },
+    // Programmatic stop — runs `onShutdown`, then closes the listener. Does
+    // NOT call `process.exit()`. Tests rely on this so the runner can print
+    // its summary; long-running supervisors rely on it so a stop() doesn't
+    // tear down the whole worker. Use SIGTERM/SIGINT if you actually want
+    // the process to exit.
+    stop() { void shutdownOnce(); },
   };
 }
 

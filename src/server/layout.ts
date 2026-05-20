@@ -14,6 +14,14 @@ export interface ResolvedRoute extends RouteFile {
   layoutFiles: string[];
 }
 
+/**
+ * Pre-loaded module map keyed by appDir-relative path (e.g. "root.tsx",
+ * "routes/blog/layout.tsx"). When `resolveRouteChain` is called with a
+ * registry, all module lookups go through the registry instead of dynamic
+ * `import(absPath)` — this is what makes `bun build --compile` viable.
+ */
+export type ModuleRegistry = Record<string, RouteModule | Record<string, unknown>>;
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /** Derive the ancestor directory segments from a route's urlPattern. */
@@ -55,6 +63,31 @@ export async function resolveLayoutChain(
   return { ...routeFile, layoutFiles };
 }
 
+/**
+ * Registry-driven equivalent of `resolveLayoutChain`. Skips all filesystem
+ * checks — returns the appDir-relative keys that exist in the registry, in
+ * the same root-first, outermost-to-innermost order. Required for compiled
+ * binaries where `Bun.file().exists()` against the original app paths is
+ * unreliable.
+ */
+export function resolveLayoutChainFromRegistry(
+  routeFile: RouteFile,
+  registry: ModuleRegistry,
+): ResolvedRoute {
+  const layoutFiles: string[] = [];
+  if (registry["root.tsx"]) layoutFiles.push("root.tsx");
+  else if (registry["root.ts"]) layoutFiles.push("root.ts");
+
+  for (const dir of layoutDirs(routeFile.urlPattern)) {
+    const tsxKey = `routes/${dir}/layout.tsx`;
+    const tsKey = `routes/${dir}/layout.ts`;
+    if (registry[tsxKey]) layoutFiles.push(tsxKey);
+    else if (registry[tsKey]) layoutFiles.push(tsKey);
+  }
+
+  return { ...routeFile, layoutFiles };
+}
+
 // ── importRouteModule ──────────────────────────────────────────────────────
 
 export async function importRouteModule(filePath: string): Promise<RouteModule> {
@@ -69,12 +102,52 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
   };
 }
 
+/**
+ * Project a registry entry (raw `import * as ns` namespace) into the
+ * subset shape `RouteModule` requires. Mirrors `importRouteModule` but
+ * skips the dynamic `import()` because the module is already loaded.
+ */
+function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined): RouteModule {
+  if (!mod) return {};
+  const m = mod as Record<string, unknown>;
+  return {
+    loader: m.loader as RouteModule["loader"],
+    action: m.action as RouteModule["action"],
+    meta: m.meta as RouteModule["meta"],
+    handle: m.handle as RouteModule["handle"],
+    ErrorBoundary: m.ErrorBoundary as RouteModule["ErrorBoundary"],
+    default: m.default as RouteModule["default"],
+  };
+}
+
 // ── resolveRouteChain ──────────────────────────────────────────────────────
 
+/**
+ * Build the route + layout chain for a matched route.
+ *
+ * Two modes:
+ * - Registry mode (production / compiled binary): when `registry` is provided,
+ *   no filesystem checks and no dynamic imports run. Every module lookup is a
+ *   `Record` access keyed by appDir-relative path.
+ * - Dev mode (no registry): existing filesystem-probe + `import(absPath)`
+ *   path, used by `bractjs dev` so edits to layouts/routes don't require a
+ *   codegen rerun.
+ */
 export async function resolveRouteChain(
   routeFile: RouteFile,
-  appDir: string
+  appDir: string,
+  registry?: ModuleRegistry,
 ): Promise<LayoutChain> {
+  if (registry) {
+    const resolved = resolveLayoutChainFromRegistry(routeFile, registry);
+    const [rootKey, ...layoutKeys] = resolved.layoutFiles;
+    const rootMod = rootKey ? pickRouteModule(registry[rootKey]) : {};
+    const layoutMods = layoutKeys.map((k) => pickRouteModule(registry[k]));
+    const routeKey = routeFile.filePath.split("\\").join("/");
+    const routeMod = pickRouteModule(registry[routeKey]);
+    return { root: rootMod, layouts: layoutMods, route: routeMod };
+  }
+
   const resolved = await resolveLayoutChain(routeFile, appDir);
 
   const [rootMod, ...layoutMods] = await Promise.all(

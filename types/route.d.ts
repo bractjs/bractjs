@@ -50,3 +50,11 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
   ErrorBoundary?: ComponentType<{ error: unknown }>;
   default?: ComponentType;
 }
+
+export type Segment = string | { param: string } | { catchAll: string };
+
+export interface RouteFile {
+  filePath: string;
+  urlPattern: string;
+  segments: Segment[];
+}

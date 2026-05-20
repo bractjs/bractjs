@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bractjs dev",
     "build": "NODE_ENV=production bractjs build",
-    "start": "NODE_ENV=production bractjs start"
+    "start": "NODE_ENV=production bractjs start",
+    "compile": "NODE_ENV=production bractjs compile"
   },
   "dependencies": {
     "@bractjs/bractjs": "latest",

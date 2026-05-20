@@ -165,6 +165,7 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [ ] Built-in i18n routing
 - [ ] Streaming `useFetcher()` (SSE-backed)
 - [x] Programmatic API — `createDevServer`, `runBuild`, `loadUserConfig` importable without CLI
+- [x] Native `bun build --compile` support — single-binary deployment via module-registry codegen (`bractjs codegen:registry`, `bractjs codegen:manifest`, `bractjs compile`)
 
 ---
 
