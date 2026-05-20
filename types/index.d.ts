@@ -22,9 +22,13 @@ export interface RenderOptions {
   status?: number;
 }
 
+export type OnErrorHook = (err: unknown, request?: Request) => Promise<void> | void;
+
 export interface LifecycleHooks {
   onStart?: () => Promise<void> | void;
   onShutdown?: () => Promise<void> | void;
+  /** Called for every unexpected error: loader failures, action throws, and uncaught process exceptions. Redirects and HttpErrors are NOT reported here. The request is undefined for process-level exceptions. */
+  onError?: OnErrorHook;
 }
 export declare function defineLifecycle(hooks: LifecycleHooks): LifecycleHooks;
 export declare function createServer(config?: Partial<BractJSConfig>): { stop(): void };

@@ -11,11 +11,13 @@ import { isExplicitDev } from "./env.ts";
 import { pipeline, type MiddlewareContext } from "./middleware.ts";
 import { BractJSProvider } from "../shared/context.ts";
 import { isAllowedMutation } from "./csrf.ts";
+import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
 export interface HandlerConfig {
   appDir: string;
   publicDir: string;
   manifest: ServerManifest;
+  onError?: OnErrorHook;
 }
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
@@ -45,7 +47,7 @@ async function route(
   config: HandlerConfig,
   context: Record<string, unknown>,
 ): Promise<Response> {
-  const { appDir, manifest } = config;
+  const { appDir, manifest, onError } = config;
   const url = new URL(request.url);
   const { pathname, searchParams } = url;
 
@@ -90,12 +92,13 @@ async function route(
       const args = buildLoaderArgs(loaderRequest, match.params, routeContext);
       const beforeLoadResponse = await runBeforeLoad(chain.route, args);
       if (beforeLoadResponse) return beforeLoadResponse;
-      const results = await runLoaders(chain, args);
+      const results = await runLoaders(chain, args, onError);
       return json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params });
     } catch (err) {
       if (isRedirect(err)) return err as Response;
       if (isHttpError(err)) return json({ error: err.message }, { status: err.status });
       console.error("[bractjs] /_data error:", err);
+      await fireOnError(onError, err, request);
       return json({ error: "Internal Server Error" }, { status: 500 });
     }
   }
@@ -138,6 +141,7 @@ async function route(
     } catch (err) {
       if (isRedirect(err)) return err as Response;
       if (isHttpError(err)) return error(err.message, err.status);
+      await fireOnError(onError, err, request);
       if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
       return error("Internal Server Error", 500);
     }
@@ -151,10 +155,11 @@ async function route(
   // ── Loaders ───────────────────────────────────────────────────────────
   let loaderResults;
   try {
-    loaderResults = await runLoaders(chain, args);
+    loaderResults = await runLoaders(chain, args, onError);
   } catch (err) {
     if (isRedirect(err)) return err as Response;
     if (isHttpError(err)) return error(err.message, err.status);
+    await fireOnError(onError, err, request);
     if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
     return error("Internal Server Error", 500);
   }

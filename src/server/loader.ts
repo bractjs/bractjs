@@ -3,6 +3,7 @@ import type { LayoutChain } from "./layout.ts";
 import { isRedirect, isHttpError } from "../shared/errors.ts";
 import { isExplicitDev } from "./env.ts";
 import type { ContextFactory } from "./context.ts";
+import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,8 @@ export interface LoaderResults {
 
 export async function safeRun<T>(
   fn: ((args: LoaderArgs) => Promise<T> | T) | undefined,
-  args: LoaderArgs
+  args: LoaderArgs,
+  onError?: OnErrorHook,
 ): Promise<T | { __error: unknown } | null> {
   if (!fn) return null;
 
@@ -35,6 +37,7 @@ export async function safeRun<T>(
     // surface structured user-facing errors should throw an HttpError, not
     // a custom Error subclass.
     console.error("[bractjs] loader error:", err);
+    await fireOnError(onError, err, args.request);
     const safe = isExplicitDev()
       ? {
           message: err instanceof Error ? err.message : String(err),
@@ -74,20 +77,22 @@ export async function runBeforeLoad(
 
 export async function runLoaders(
   chain: LayoutChain,
-  args: LoaderArgs
+  args: LoaderArgs,
+  onError?: OnErrorHook,
 ): Promise<LoaderResults> {
   const layoutLoaders = chain.layouts.map((mod) =>
-    safeRun(mod.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args)
+    safeRun(mod.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError)
   );
 
   const [root, ...layoutResults] = await Promise.all([
-    safeRun(chain.root.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args),
+    safeRun(chain.root.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError),
     ...layoutLoaders,
   ]);
 
   const route = await safeRun(
     chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined,
-    args
+    args,
+    onError,
   );
 
   return { root, layouts: layoutResults, route };
