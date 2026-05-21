@@ -1,10 +1,18 @@
 import type { BunPlugin } from "bun";
 import { resolve } from "node:path";
 
-// Resolved at module load so the lookup is cheap (every onLoad call uses it).
-// Equivalent to the absolute path of the directory holding this file
-// (`<bractjs>/src/build/`). We strip `/src/build` to get the framework root.
-const FRAMEWORK_SRC_ROOT = resolve(import.meta.dir, "..");
+// Lazy: this module is re-exported from the package barrel, so it may be
+// statically pulled into client bundles. `import.meta.dir` is undefined in the
+// browser, and a top-level `resolve(import.meta.dir, "..")` would throw
+// "Path must be a string" at module load — before any plugin is even invoked.
+// Defer the resolve until a plugin actually runs (always server-side).
+let frameworkSrcRoot: string | undefined;
+function getFrameworkSrcRoot(): string {
+  if (frameworkSrcRoot === undefined) {
+    frameworkSrcRoot = resolve(import.meta.dir, "..");
+  }
+  return frameworkSrcRoot;
+}
 
 // ── Server-only import guard ───────────────────────────────────────────────
 
@@ -56,7 +64,7 @@ export function clientEnvPlugin(
         // the client. Without this guard, linking the framework via `file:`
         // produces a build that fails to parse its own source.
         if (args.path.includes("/node_modules/")) return undefined;
-        if (args.path.startsWith(FRAMEWORK_SRC_ROOT)) return undefined;
+        if (args.path.startsWith(getFrameworkSrcRoot())) return undefined;
         const src = await Bun.file(args.path).text();
         // SECURITY(medium): textual regex replace runs over the whole source,
         // including inside string literals and comments. A bare `process.env.X`
