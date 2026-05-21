@@ -1,4 +1,10 @@
 import type { BunPlugin } from "bun";
+import { resolve } from "node:path";
+
+// Resolved at module load so the lookup is cheap (every onLoad call uses it).
+// Equivalent to the absolute path of the directory holding this file
+// (`<bractjs>/src/build/`). We strip `/src/build` to get the framework root.
+const FRAMEWORK_SRC_ROOT = resolve(import.meta.dir, "..");
 
 // ── Server-only import guard ───────────────────────────────────────────────
 
@@ -41,15 +47,24 @@ export function clientEnvPlugin(
     name: "bractjs-client-env",
     setup(build) {
       build.onLoad({ filter: /\.(ts|tsx|js|jsx)$/ }, async (args) => {
+        // Skip third-party packages and the framework's own source. The
+        // framework source contains literal strings like
+        // `"process.env.NODE_ENV"` (as keys of Bun.build's `define:` maps)
+        // that would otherwise be rewritten to `""undefined""`, breaking
+        // syntax. The framework also doesn't need allowlist enforcement —
+        // it accesses Bun.env directly on the server, not process.env on
+        // the client. Without this guard, linking the framework via `file:`
+        // produces a build that fails to parse its own source.
         if (args.path.includes("/node_modules/")) return undefined;
+        if (args.path.startsWith(FRAMEWORK_SRC_ROOT)) return undefined;
         const src = await Bun.file(args.path).text();
         // SECURITY(medium): textual regex replace runs over the whole source,
         // including inside string literals and comments. A bare `process.env.X`
-        // anywhere — even in a documentation string — becomes the literal value
-        // (or "undefined"). This is acceptable for client builds because
-        // unwanted occurrences only yield the string "undefined", never a
-        // server secret. The allowedKeys gate is the authoritative leak check;
-        // never widen it without auditing callers.
+        // anywhere in user code — even in a documentation string — becomes
+        // the literal value (or "undefined"). This is acceptable for client
+        // builds because unwanted occurrences only yield the string
+        // "undefined", never a server secret. The allowedKeys gate is the
+        // authoritative leak check; never widen it without auditing callers.
         const contents = src.replace(
           /process\.env\.([A-Z_][A-Z0-9_]*)/g,
           (_match, key: string) =>

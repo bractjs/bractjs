@@ -4,7 +4,7 @@ All notable changes to Bract are documented here.
 
 ---
 
-## [Unreleased]
+## [0.1.23] — 2026-05-20
 
 ### Added
 
