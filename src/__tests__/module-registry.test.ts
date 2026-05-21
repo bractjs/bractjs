@@ -50,7 +50,7 @@ describe("generateRouteRegistry", () => {
     expect(src).toContain(`import * as mod_routes__index_tsx from "../routes/_index.tsx";`);
     expect(src).toContain(`"root.tsx": mod_root_tsx,`);
     expect(src).toContain(`"routes/blog/layout.tsx": mod_routes_blog_layout_tsx,`);
-    expect(src).toContain(`export const moduleRegistry: Record<string, RouteModule>`);
+    expect(src).toContain(`export const moduleRegistry: ModuleRegistry`);
     expect(src).toContain(`export const routeFiles: RouteFile[]`);
   });
 

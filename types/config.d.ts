@@ -46,8 +46,10 @@ export interface BractJSConfig {
 export interface ServerManifest {
   /** Hashed path to the main client entry bundle. */
   clientEntry: string;
+  /** Hashed path to the root.tsx chunk (when emitted as a separate entry). */
+  rootChunk?: string;
   /** Map of URL pattern → route asset info. */
-  routes: Record<string, { file?: string; chunk?: string }>;
+  routes: Record<string, { file?: string; chunk?: string; imports?: string[] }>;
 }
 
 /** Subset of BractJSConfig used by the build pipeline. All fields optional. */
