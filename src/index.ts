@@ -78,6 +78,8 @@ export { cors } from "./middleware/cors.ts";
 export type { CorsOptions } from "./middleware/cors.ts";
 export { authGuard } from "./middleware/authGuard.ts";
 export type { AuthGuardOptions, SessionStorageLike, SessionLike } from "./middleware/authGuard.ts";
+export { csp, getCspNonce, CSP_NONCE_KEY } from "./server/csp.ts";
+export type { CspOptions } from "./server/csp.ts";
 
 // Session
 export { createCookieSession } from "./server/session.ts";

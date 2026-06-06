@@ -80,20 +80,18 @@ export async function runLoaders(
   args: LoaderArgs,
   onError?: OnErrorHook,
 ): Promise<LoaderResults> {
+  // Run every loader in the chain concurrently — root, all layouts, and the
+  // route loader. The route loader is usually the slowest and most important
+  // one, so it must not be serialized behind the layout wave.
   const layoutLoaders = chain.layouts.map((mod) =>
     safeRun(mod.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError)
   );
 
-  const [root, ...layoutResults] = await Promise.all([
+  const [root, route, ...layoutResults] = await Promise.all([
     safeRun(chain.root.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError),
+    safeRun(chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError),
     ...layoutLoaders,
   ]);
-
-  const route = await safeRun(
-    chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined,
-    args,
-    onError,
-  );
 
   return { root, layouts: layoutResults, route };
 }

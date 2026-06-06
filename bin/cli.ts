@@ -173,8 +173,29 @@ switch (command) {
 
     console.log("[bract] (4/4) bun build --compile →", outFile);
     const result = Bun.spawnSync(
-      ["bun", "build", "--compile", entryPath, "--outfile", outFile],
-      { cwd: process.cwd(), stdio: ["inherit", "inherit", "inherit"] },
+      [
+        "bun",
+        "build",
+        "--compile",
+        // Bun executables disable tsconfig autoload by default. Re-enable it so
+        // React TSX keeps using the app's jsx settings at runtime.
+        "--compile-autoload-tsconfig",
+        entryPath,
+        "--outfile",
+        outFile,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: ["inherit", "inherit", "inherit"],
+        env: {
+          ...process.env,
+          // Bun executable compile currently miscompiles React TSX under
+          // NODE_ENV=production (emits jsxDEV calls against a runtime that
+          // doesn't provide jsxDEV). Force a safe compile-time env while still
+          // keeping Bract's client/server build phase in production mode.
+          NODE_ENV: "development",
+        },
+      },
     );
     if (result.exitCode !== 0) {
       console.error("[bract] bun build --compile failed");
@@ -198,4 +219,3 @@ switch (command) {
     );
     process.exit(1);
 }
-

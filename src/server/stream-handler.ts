@@ -1,6 +1,5 @@
 import { resolveAction } from "./action-registry.ts";
 import { isExplicitDev } from "./env.ts";
-import { isAllowedMutation } from "./csrf.ts";
 
 // ── SSE helpers ────────────────────────────────────────────────────────────
 
@@ -24,12 +23,14 @@ export async function handleStreamRequest(request: Request): Promise<Response | 
   // SECURITY(medium): exact-match prevents URL confusion.
   if (url.pathname !== "/_stream") return null;
 
-  // SECURITY(high): server actions can have side effects. A cross-origin
-  // <script>/<img>/<link rel=prefetch> pointing at /_stream?id=… would
-  // otherwise invoke any registered action with the user's cookies. Require
-  // the same gate as /_action: either a same-origin Origin header, or the
-  // client-issued X-BractJS-Action header (blocked cross-origin by CORS).
-  if (!isAllowedMutation(request)) {
+  // SECURITY(high): /_stream invokes side-effecting server actions over GET.
+  // GET can't carry a body and browsers issue cross-origin GETs from
+  // <script>/<img>/<link rel=prefetch> *without* an Origin header, so a bare
+  // same-origin-Origin gate is not enough here. Require the client-issued
+  // X-BractJS-Action header outright: it's a custom header, so browsers block
+  // it cross-origin without a CORS preflight, and the real client (useFetcher)
+  // always sends it. This is strictly tighter than the /_action gate.
+  if (!request.headers.get("X-BractJS-Action")) {
     return new Response(sseChunk("error", { message: "Forbidden" }), {
       status: 403,
       headers: {

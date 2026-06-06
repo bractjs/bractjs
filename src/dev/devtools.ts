@@ -25,55 +25,99 @@ declare global {
 }
 
 const PANEL_ID = "bractjs-devtools-panel";
+const REFRESH_MS = 1000;
+
+function readState(): DevtoolsState {
+  return window.__BRACTJS_DEVTOOLS__ ?? {
+    route: null,
+    loaderData: {},
+    navState: "idle",
+    cacheEntries: [],
+    beforeLoadTrace: [],
+  };
+}
 
 class BractJSDevtools extends HTMLElement {
   private open = false;
   private panel: HTMLDivElement | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly handleKeydown = (e: KeyboardEvent) => {
+    if (e.ctrlKey && e.shiftKey && e.key === "B") {
+      e.preventDefault();
+      this.togglePanel();
+    }
+  };
 
   connectedCallback() {
     this.style.cssText = "position:fixed;bottom:0;right:0;z-index:2147483647;font-family:monospace;";
 
-    const toggle = document.createElement("button");
-    toggle.textContent = "⚡ BractJS";
-    toggle.style.cssText =
-      "background:#1e1e1e;color:#61dafb;border:none;padding:4px 10px;cursor:pointer;font-size:12px;";
-    toggle.onclick = () => this.togglePanel();
-    this.appendChild(toggle);
+    if (!this.querySelector("button")) {
+      const toggle = document.createElement("button");
+      toggle.textContent = "⚡ BractJS";
+      toggle.style.cssText =
+        "background:#1e1e1e;color:#61dafb;border:none;padding:4px 10px;cursor:pointer;font-size:12px;";
+      toggle.onclick = () => this.togglePanel();
+      this.appendChild(toggle);
+    }
 
-    // Keyboard shortcut
-    document.addEventListener("keydown", (e) => {
-      if (e.ctrlKey && e.shiftKey && e.key === "B") {
-        e.preventDefault();
-        this.togglePanel();
-      }
-    });
+    document.addEventListener("keydown", this.handleKeydown);
+  }
+
+  disconnectedCallback() {
+    document.removeEventListener("keydown", this.handleKeydown);
+    this.stopRefresh();
   }
 
   private togglePanel() {
-    if (this.panel) {
-      this.panel.remove();
-      this.panel = null;
+    if (this.open) {
       this.open = false;
-    } else {
-      this.open = true;
-      this.renderPanel();
+      this.stopRefresh();
+      if (this.panel) {
+        this.panel.remove();
+        this.panel = null;
+      }
+      return;
     }
+
+    this.open = true;
+    this.ensurePanel();
+    this.renderPanel();
+    this.startRefresh();
   }
 
-  private renderPanel() {
-    const state = window.__BRACTJS_DEVTOOLS__ ?? {
-      route: null,
-      loaderData: {},
-      navState: "idle",
-      cacheEntries: [],
-      beforeLoadTrace: [],
-    };
+  private ensurePanel() {
+    if (this.panel) return;
 
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
     panel.style.cssText =
       "background:#1e1e1e;color:#ccc;width:480px;max-height:60vh;overflow:auto;" +
       "border-top:2px solid #61dafb;border-left:2px solid #61dafb;padding:12px;font-size:11px;";
+
+    this.panel = panel;
+    this.appendChild(panel);
+  }
+
+  private startRefresh() {
+    this.stopRefresh();
+    this.refreshTimer = setInterval(() => {
+      if (!this.open || !this.panel) return;
+      this.renderPanel();
+    }, REFRESH_MS);
+  }
+
+  private stopRefresh() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  }
+
+  private renderPanel() {
+    if (!this.panel) return;
+    const state = readState();
+    const panel = this.panel;
+    panel.replaceChildren();
 
     const header = document.createElement("div");
     header.style.cssText = "color:#61dafb;font-weight:bold;margin-bottom:8px;font-size:13px;";
@@ -94,17 +138,6 @@ class BractJSDevtools extends HTMLElement {
     if (state.beforeLoadTrace.length > 0) {
       this.section(panel, "beforeLoad trace", state.beforeLoadTrace.join("\n"));
     }
-
-    this.panel = panel;
-    this.appendChild(panel);
-
-    // Auto-refresh every second while open.
-    const timer = setInterval(() => {
-      if (!this.open) { clearInterval(timer); return; }
-      panel.remove();
-      this.panel = null;
-      this.renderPanel();
-    }, 1000);
   }
 
   private section(parent: HTMLElement, title: string, content: string) {

@@ -12,11 +12,14 @@ import {
 import type { ServerManifest } from "../server/render.ts";
 import { matchPatternForPath } from "./nav-utils.ts";
 import { loaderCache, cacheKey } from "./cache.ts";
+import { MetaTags } from "../shared/meta-tags.tsx";
+import type { MetaDescriptor } from "../shared/route-types.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface BractJSInitialData extends RouteState {
   manifest: ServerManifest;
+  meta?: MetaDescriptor[];
 }
 
 interface ClientRouterProps {
@@ -34,6 +37,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
   const [pathname, setPathname] = useState(initialData.pathname);
   const [navState, setNavState] = useState<NavigationState>("idle");
   const [currentModule, setCurrentModule] = useState<RouteModuleClient | null>(initialModule);
+  const [meta, setMeta] = useState<MetaDescriptor[]>(initialData.meta ?? []);
 
   const manifest = initialData.manifest;
 
@@ -176,11 +180,11 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
         setPathname(to);
         setCurrentModule(routeModule);
       });
-      const metaList = data.meta as Array<Record<string, unknown>> | undefined;
-      const titleEntry = metaList?.find((m) => "title" in m);
-      if (titleEntry && typeof titleEntry.title === "string") {
-        document.title = titleEntry.title;
-      }
+      // Re-render the document head from the new route's merged meta. React 19
+      // hoists the <title>/<meta> elements rendered by <MetaTags> into <head>,
+      // so description/OG tags update on soft navigation, not just the title.
+      const nextMeta = (data.meta as MetaDescriptor[] | undefined) ?? [];
+      startTransition(() => setMeta(nextMeta));
     } catch (err) {
       console.error("[bractjs] loadRoute error:", err);
     } finally {
@@ -229,6 +233,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
   return (
     <RouterContext.Provider value={{ loaderData, actionData, params, pathname, manifest, currentModule, setRoute }}>
       <NavigationContext.Provider value={{ state: navState, navigate, submit }}>
+        <MetaTags meta={meta} />
         {children}
       </NavigationContext.Provider>
     </RouterContext.Provider>

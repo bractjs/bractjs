@@ -96,10 +96,16 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
     loader: mod.loader,
     action: mod.action,
     meta: mod.meta,
+    // SECURITY(high): beforeLoad is the auth/redirect gate and `context` is the
+    // per-route context factory. Both MUST be projected here — dropping them
+    // turns every beforeLoad() export into a silent no-op, bypassing auth on
+    // full-page GET, POST actions, and the /_data soft-nav endpoint alike.
+    beforeLoad: mod.beforeLoad,
+    context: mod.context,
     handle: mod.handle,
     ErrorBoundary: mod.ErrorBoundary,
     default: mod.default,
-  };
+  } as RouteModule;
 }
 
 /**
@@ -114,10 +120,14 @@ function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined)
     loader: m.loader as RouteModule["loader"],
     action: m.action as RouteModule["action"],
     meta: m.meta as RouteModule["meta"],
+    // SECURITY(high): keep beforeLoad + context in the projection — see the
+    // note in importRouteModule. The compiled-binary path goes through here.
+    beforeLoad: m.beforeLoad as RouteModule["beforeLoad"],
+    context: m.context as unknown,
     handle: m.handle as RouteModule["handle"],
     ErrorBoundary: m.ErrorBoundary as RouteModule["ErrorBoundary"],
     default: m.default as RouteModule["default"],
-  };
+  } as RouteModule;
 }
 
 // ── resolveRouteChain ──────────────────────────────────────────────────────

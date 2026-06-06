@@ -6,8 +6,8 @@
  * bun:test to exit before printing results — a known pre-existing issue.
  * Behavioral coverage (HTTP response, HMR) lives in integration.test.ts.
  */
-import { test, expect } from "bun:test";
-import { loadUserConfig } from "../config/load.ts";
+import { test, expect, describe } from "bun:test";
+import { loadUserConfig, validateUserConfig } from "../config/load.ts";
 import { runBuild } from "../build/bundler.ts";
 import { createDevServer } from "../dev/server.ts";
 import type { BuildConfig } from "../build/bundler.ts";
@@ -24,6 +24,45 @@ test("loadUserConfig returns an object when no bractjs.config.ts exists", async 
   const cfg = await loadUserConfig();
   expect(typeof cfg).toBe("object");
   expect(cfg).not.toBeNull();
+});
+
+describe("validateUserConfig", () => {
+  test("accepts an empty object", () => {
+    expect(validateUserConfig({})).toEqual({});
+  });
+
+  test("accepts a well-formed config", () => {
+    const cfg = {
+      port: 4000,
+      appDir: "./app",
+      minify: false,
+      sourcemap: "inline" as const,
+      clientEnv: ["PUBLIC_API_URL"],
+    };
+    expect(validateUserConfig(cfg)).toBe(cfg);
+  });
+
+  test("rejects a non-object export", () => {
+    expect(() => validateUserConfig("nope")).toThrow(/must be a config object/);
+    expect(() => validateUserConfig([])).toThrow(/must be a config object/);
+    expect(() => validateUserConfig(null)).toThrow(/must be a config object/);
+  });
+
+  test("rejects a string port", () => {
+    expect(() => validateUserConfig({ port: "3000" })).toThrow(/"port" must be a finite number/);
+  });
+
+  test("rejects a non-array clientEnv", () => {
+    expect(() => validateUserConfig({ clientEnv: "PUBLIC_API_URL" })).toThrow(/"clientEnv" must be an array/);
+  });
+
+  test("rejects an invalid sourcemap value", () => {
+    expect(() => validateUserConfig({ sourcemap: "yes" })).toThrow(/"sourcemap" must be/);
+  });
+
+  test("ignores unknown keys and undefined values", () => {
+    expect(() => validateUserConfig({ port: undefined, somethingCustom: 1 })).not.toThrow();
+  });
 });
 
 // ── runBuild ──────────────────────────────────────────────────────────────

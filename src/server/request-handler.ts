@@ -11,6 +11,7 @@ import { isExplicitDev } from "./env.ts";
 import { pipeline, type MiddlewareContext } from "./middleware.ts";
 import { BractJSProvider } from "../shared/context.ts";
 import { isAllowedMutation } from "./csrf.ts";
+import { getCspNonce } from "./csp.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
 export interface HandlerConfig {
@@ -208,5 +209,7 @@ async function route(
     manifest,
     meta,
     routeFile: match.routeFile.filePath,
+    // Set by the opt-in csp() middleware; undefined otherwise.
+    nonce: getCspNonce(context),
   });
 }
