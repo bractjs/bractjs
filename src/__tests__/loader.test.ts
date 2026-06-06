@@ -77,6 +77,29 @@ describe("runLoaders", () => {
     expect(results.root).toMatchObject({ __error: { message: expect.any(String) } });
     expect(results.route).toEqual({ ok: true });
   });
+
+  test("runs the route loader concurrently with layout loaders (not serialized after)", async () => {
+    // Each loader records when it started relative to the others. If the route
+    // loader were serialized after the layout wave (the old behavior), its
+    // start would be later than the layout loader's *finish*. With true
+    // parallelism, all three observe each other as already-started.
+    let started = 0;
+    let maxConcurrent = 0;
+    const enter = async () => {
+      started++;
+      maxConcurrent = Math.max(maxConcurrent, started);
+      await new Promise((r) => setTimeout(r, 20));
+      started--;
+    };
+    const chain: LayoutChain = {
+      root: { ...emptyModule, loader: async () => { await enter(); return { root: true }; } },
+      layouts: [{ ...emptyModule, loader: async () => { await enter(); return { layout: true }; } }],
+      route: { ...emptyModule, loader: async () => { await enter(); return { route: true }; } },
+    };
+    await runLoaders(chain, stubArgs);
+    // All three loaders must be in flight at the same time.
+    expect(maxConcurrent).toBe(3);
+  });
 });
 
 describe("buildLoaderArgs", () => {

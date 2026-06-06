@@ -5,9 +5,13 @@ export function loader() {
   return { message: "hello from bractjs" };
 }
 
-// Meta returns a title descriptor
+// Meta returns a title + description descriptor
 export function meta() {
-  return [{ title: "BractJS Test Home" }];
+  return [
+    { title: "BractJS Test Home" },
+    { name: "description", content: "Bract test description" },
+    { property: "og:title", content: "Bract OG Title" },
+  ];
 }
 
 // Action echoes the submitted form field

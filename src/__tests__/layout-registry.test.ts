@@ -15,11 +15,21 @@ const blogLayoutModule = { default: () => "blog-layout" } as const;
 const blogPostModule = { default: () => "blog-post" } as const;
 const indexModule = { default: () => "index" } as const;
 
+// Module exporting the security-sensitive gate (beforeLoad) + context factory.
+const guardBeforeLoad = () => new Response("Forbidden", { status: 403 });
+const guardContextFactory = { _factory: () => ({ user: null }) };
+const guardedModule = {
+  default: () => "guarded",
+  beforeLoad: guardBeforeLoad,
+  context: guardContextFactory,
+} as const;
+
 const registry: ModuleRegistry = {
   "root.tsx": rootModule,
   "routes/blog/layout.tsx": blogLayoutModule,
   "routes/blog/[slug].tsx": blogPostModule,
   "routes/_index.tsx": indexModule,
+  "routes/guarded.tsx": guardedModule,
 };
 
 beforeAll(async () => {
@@ -91,5 +101,18 @@ describe("resolveRouteChain — registry mode", () => {
       registry,
     );
     expect(chain.route.default).toBe(blogPostModule.default);
+  });
+
+  // SECURITY(high) regression guard: beforeLoad (the auth gate) and the context
+  // factory must survive module projection. Dropping them silently disables
+  // every beforeLoad() — see importRouteModule/pickRouteModule in layout.ts.
+  test("projects beforeLoad and context factory through registry mode", async () => {
+    const chain = await resolveRouteChain(
+      { filePath: "routes/guarded.tsx", urlPattern: "guarded", segments: ["guarded"] },
+      "/nonexistent",
+      registry,
+    );
+    expect(chain.route.beforeLoad).toBe(guardBeforeLoad);
+    expect((chain.route as { context?: unknown }).context).toBe(guardContextFactory);
   });
 });

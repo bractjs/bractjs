@@ -11,6 +11,7 @@ import { createCookieSession } from "../server/session.ts";
 import { MiddlewarePipeline, type MiddlewareContext } from "../server/middleware.ts";
 import { serveStatic } from "../server/static.ts";
 import { handleImageRequest } from "../image/handler.ts";
+import { isAllowedMutation } from "../server/csrf.ts";
 
 const ACTION_TMP = resolve(import.meta.dir, ".tmp-security-action");
 let registeredActionId = "";
@@ -164,6 +165,40 @@ describe("CSRF — cross-origin mutation", () => {
       headers: { Origin: "https://evil.example" },
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("CSRF — Sec-Fetch-Site (isAllowedMutation)", () => {
+  function req(headers: Record<string, string>): Request {
+    return new Request("http://localhost/_action?id=abc", { method: "POST", headers });
+  }
+
+  test("Sec-Fetch-Site: cross-site is rejected even with a forged X-BractJS-Action header", () => {
+    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "cross-site", "X-BractJS-Action": "1" }))).toBe(false);
+  });
+
+  test("Sec-Fetch-Site: same-site is rejected even with a forged X-BractJS-Action header", () => {
+    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "same-site", "X-BractJS-Action": "1" }))).toBe(false);
+  });
+
+  test("Sec-Fetch-Site: cross-site is rejected even with a matching Origin", () => {
+    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "cross-site", Origin: "http://localhost" }))).toBe(false);
+  });
+
+  test("Sec-Fetch-Site: same-origin with custom header is allowed", () => {
+    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "same-origin", "X-BractJS-Action": "1" }))).toBe(true);
+  });
+
+  test("Sec-Fetch-Site: none (direct navigation) with same-origin Origin is allowed", () => {
+    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "none", Origin: "http://localhost" }))).toBe(true);
+  });
+
+  test("no headers at all is rejected (non-browser client must opt in)", () => {
+    expect(isAllowedMutation(req({}))).toBe(false);
+  });
+
+  test("same-origin Sec-Fetch-Site with no Origin and no custom header is allowed", () => {
+    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "same-origin" }))).toBe(true);
   });
 });
 

@@ -376,6 +376,7 @@ pipeline
 | `requestLogger()` | Logs method, path, status, duration |
 | `cors(options)` | Sets CORS headers, handles `OPTIONS` preflight |
 | `authGuard(options)` | Reads session, attaches `context.user`, returns 401 if unauthenticated |
+| `csp(options?)` | Opt-in nonce-based Content-Security-Policy. Generates a per-request nonce, applies it to the scripts BractJS injects, and sets the CSP header. `csp({ directives, reportOnly })` |
 
 **Custom middleware:**
 
@@ -389,6 +390,36 @@ const trace: MiddlewareFn = async (ctx, next) => {
 ```
 
 `ctx.context` is threaded into every `loader` and `action` as the `context` argument.
+
+---
+
+## Authentication & `beforeLoad`
+
+> **Security contract: gate access in `beforeLoad` or middleware — never in a component.**
+
+A route module can export `beforeLoad` to guard the route before any loader runs. It receives `{ params, context, location }` and may return a `Response` (e.g. a `redirect()` or a `403`) to short-circuit.
+
+```tsx
+import { redirect } from "@bractjs/bractjs";
+
+export function beforeLoad({ context, location }: {
+  context: Record<string, unknown>;
+  location: { pathname: string; search: string };
+}) {
+  if (!context.user) {
+    return redirect(`/login?next=${encodeURIComponent(location.pathname)}`);
+  }
+}
+
+export async function loader({ context }) {
+  // Only runs when beforeLoad did NOT short-circuit.
+  return { profile: await db.profile.forUser(context.user.id) };
+}
+```
+
+`beforeLoad` runs for **both** a full-page `GET` and the `/_data` soft-navigation JSON endpoint that `<Link>` uses, so a gated route cannot leak its loader data either way. (`context` is populated by middleware such as `authGuard`, and/or a per-route `defineContext` factory.)
+
+**Why not gate in the component?** A page component that renders `null` when `!user` still *ran its loader* — and `/_data?path=/protected` returns that loader's JSON regardless of what the component renders. Component-level checks protect the UI, not the data. Put the real gate in `beforeLoad` (per route) or middleware (cross-cutting).
 
 ---
 

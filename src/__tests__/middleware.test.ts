@@ -213,4 +213,26 @@ describe("requestLogger()", () => {
     expect(logs[0]).toContain("/hello");
     expect(logs[0]).toContain("200");
   });
+
+  // SECURITY(medium) regression guard: the query string can carry tokens
+  // (password-reset links, OAuth codes). requestLogger must log only the
+  // pathname, never the search params.
+  test("never logs the query string (token leak guard)", async () => {
+    const logs: string[] = [];
+    const original = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.join(" "));
+    const mw = requestLogger();
+    const ctx = makeCtx({
+      request: new Request("http://localhost/reset?token=SUPER_SECRET_TOKEN&code=abc123"),
+    });
+    const pipeline = new MiddlewarePipeline();
+    pipeline.use(mw);
+    await pipeline.run(ctx, ok200);
+    console.log = original;
+    const line = logs.join("\n");
+    expect(line).toContain("/reset");
+    expect(line).not.toContain("SUPER_SECRET_TOKEN");
+    expect(line).not.toContain("token=");
+    expect(line).not.toContain("abc123");
+  });
 });

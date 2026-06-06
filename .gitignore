@@ -1,14 +1,27 @@
 # Dependencies
 node_modules/
+jspm_packages/
+
+# Lockfiles from other package managers (bun.lock is the source of truth)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Build outputs
 build/
 dist/
+out/
+lib/
 *.tsbuildinfo
+
+# Packaging artifacts
+*.tgz
+*.tar.gz
 
 # Environment & secrets
 .env
 .env.*
+*.local
 !.env.example
 
 # Generated files
@@ -18,30 +31,50 @@ app/_generated/
 
 # Test temp fixtures (leak when tests fail mid-run)
 src/__tests__/.tmp-*
+tmp/
+.tmp/
+
+# Example projects
+examples/
 
 # Cache
 .bract-image-cache/
 .cache/
 .bun/
+.parcel-cache/
+.eslintcache
+.stylelintcache
 
 # Logs
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # OS
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # Editors
-bract-*.md
-ROADMAP.md
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# Internal docs not meant for the repo
+bract-*.md
+ROADMAP.md
 
 # Test coverage
 coverage/
+*.lcov
+.nyc_output/
 
 # Private tooling
 .claude/
