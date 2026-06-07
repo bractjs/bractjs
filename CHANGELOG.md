@@ -4,6 +4,28 @@ All notable changes to Bract are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`serverModuleStubPlugin`** (client bundle) — replaces every export of a `*.server.ts` module with an inert, throwing stub instead of hard-failing the build.
+  - BractJS ships the *entire* route module (loader + action included) to the client, so a route that does `import { db } from "./db.server.ts"` inside its loader pulls the server module into the client graph. The previous `serverOnlyPlugin` hard-failed that import, which made the documented "import a server module in a loader" pattern (README §17) impossible.
+  - Stubbing keeps named/default imports resolvable so the route module compiles, guarantees **zero** server source (DB drivers, secrets, `bun:sqlite`) reaches the browser, and throws a clear error if a stub is ever actually invoked on the client.
+  - Now used by the production build (`src/build/bundler.ts`), the dev rebuilder (`src/dev/rebuilder.ts`), and the dev HMR per-module handler (`src/dev/hmr-module-handler.ts`).
+  - Exported from the public API; `extractExports` is now exported from `src/build/directives.ts` for reuse.
+  - The stricter `serverOnlyPlugin` remains exported for opt-in use when you want a `*.server.ts` import to be a build error.
+
+### Fixed
+
+- **SECURITY: dev client builds now apply the same guard plugins as production.** `src/dev/rebuilder.ts` was missing `serverOnlyPlugin`/`clientEnvPlugin` entirely — a route importing a `*.server.ts` module (without a Bun builtin to trip the bundler) would have had that server source compiled and served to the browser over `/build/client` in dev, and `clientEnv` allow-listing was not applied. The rebuilder now runs `serverModuleStubPlugin`, `createUseServerProxyPlugin`, `clientEnvPlugin`, and `cssModulesPlugin`, matching `src/build/bundler.ts`.
+- A `*.server.ts` import that pulled in a Bun builtin (e.g. `bun:sqlite`) previously surfaced a confusing raw `Browser build cannot import Bun builtin` error in dev instead of the intended server-only guard. It now stubs cleanly.
+
+### Tests
+
+- `src/__tests__/server-module-stub.test.ts` — proves a route importing a `bun:sqlite`-backed `*.server.ts` builds, that no server source/secret/SQL reaches the client output, that named + default exports stay resolvable, that the stub throws when invoked, and that the legacy `serverOnlyPlugin` still hard-fails the same import.
+
+---
+
 ## [0.1.23] — 2026-05-20
 
 ### Added
