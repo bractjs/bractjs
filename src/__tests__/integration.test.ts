@@ -42,6 +42,31 @@ test("POST / runs action and returns 200 HTML", async () => {
   expect(res.headers.get("content-type")).toContain("text/html");
 });
 
+// Regression: an action that *returns* (not throws) a redirect must produce a
+// real 3xx with the Location header — previously it was wrapped into a 200 JSON
+// body, so `<Form>`/the browser never followed it.
+test("POST action that RETURNS redirect() yields a 302 with Location (X-BractJS-Action)", async () => {
+  const res = await fetch(`${BASE}/redirect-action`, {
+    method: "POST",
+    body: new FormData(),
+    headers: { Origin: BASE, "X-BractJS-Action": "1" },
+    redirect: "manual",
+  });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("Location")).toBe("/");
+});
+
+test("full-page POST action that RETURNS redirect() also yields a 302", async () => {
+  const res = await fetch(`${BASE}/redirect-action`, {
+    method: "POST",
+    body: new FormData(),
+    headers: { Origin: BASE },
+    redirect: "manual",
+  });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("Location")).toBe("/");
+});
+
 test("GET /nonexistent returns 404", async () => {
   const res = await fetch(`${BASE}/nonexistent`);
   expect(res.status).toBe(404);

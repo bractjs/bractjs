@@ -19,10 +19,13 @@ All notable changes to Bract are documented here.
 
 - **SECURITY: dev client builds now apply the same guard plugins as production.** `src/dev/rebuilder.ts` was missing `serverOnlyPlugin`/`clientEnvPlugin` entirely — a route importing a `*.server.ts` module (without a Bun builtin to trip the bundler) would have had that server source compiled and served to the browser over `/build/client` in dev, and `clientEnv` allow-listing was not applied. The rebuilder now runs `serverModuleStubPlugin`, `createUseServerProxyPlugin`, `clientEnvPlugin`, and `cssModulesPlugin`, matching `src/build/bundler.ts`.
 - A `*.server.ts` import that pulled in a Bun builtin (e.g. `bun:sqlite`) previously surfaced a confusing raw `Browser build cannot import Bun builtin` error in dev instead of the intended server-only guard. It now stubs cleanly.
+- **An action that *returns* a redirect now produces a real 3xx.** Previously only a *thrown* `redirect()` was honored; `return redirect("/")` (the documented pattern in README §5/§6/§15) was captured as `actionData` and wrapped into a `200` JSON body. The route handler (`src/server/request-handler.ts`) now propagates any `Response` an action returns — so the browser and `<Form>` see the 302 and follow it. Surfaced by manual (Playwright) testing of the todo example's "delete → redirect to board" flow.
+- **`<Form>` now normalizes the post-redirect URL to a path before soft-navigating.** After following a redirect, `fetch().url` is absolute (e.g. `http://localhost:3000/`); the client router matches route patterns against a pathname, so the absolute URL produced a `/_data?path=http%3A%2F%2F…` 404 and the navigation silently failed. `src/client/components/Form.tsx` now converts a same-origin absolute redirect URL to `pathname + search + hash`.
 
 ### Tests
 
 - `src/__tests__/server-module-stub.test.ts` — proves a route importing a `bun:sqlite`-backed `*.server.ts` builds, that no server source/secret/SQL reaches the client output, that named + default exports stay resolvable, that the stub throws when invoked, and that the legacy `serverOnlyPlugin` still hard-fails the same import.
+- `src/__tests__/integration.test.ts` — added regression tests asserting that a route action which *returns* `redirect()` yields a `302` + `Location` for both the `X-BractJS-Action` (`<Form>`) and full-page POST paths (fixture: `routes/redirect-action.tsx`).
 
 ---
 
