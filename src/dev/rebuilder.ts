@@ -1,5 +1,7 @@
 import type { BractJSConfig } from "../server/serve.ts";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
+import { serverModuleStubPlugin, clientEnvPlugin } from "../build/env-plugin.ts";
+import { cssModulesPlugin } from "../build/plugins/css-modules.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import { generateManifest, writeManifest } from "../build/manifest.ts";
 import { mkdir, rename, rm } from "node:fs/promises";
@@ -48,7 +50,18 @@ export async function rebuildClient(
       // structure. publicPath + ../ traversals produce wrong absolute URLs.
       minify: false,
       sourcemap: "inline",
-      plugins: [createUseServerProxyPlugin(appDir), ...(config?.plugins ?? [])],
+      // SECURITY: mirror the production client-bundle guard plugins
+      // (src/build/bundler.ts). Without `serverModuleStubPlugin` a route that
+      // imports a `*.server.ts` module would have that server source compiled
+      // and served to the browser over /build/client in dev; without
+      // `clientEnvPlugin` server env vars would leak the same way.
+      plugins: [
+        serverModuleStubPlugin,
+        createUseServerProxyPlugin(appDir),
+        clientEnvPlugin(config?.clientEnv ?? [], Bun.env as Record<string, string>),
+        cssModulesPlugin,
+        ...(config?.plugins ?? []),
+      ],
     });
   } finally {
     await rm(shimPath, { force: true });

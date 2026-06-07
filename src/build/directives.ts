@@ -17,7 +17,7 @@ function hasServerDirective(src: string): boolean {
   return SERVER_RE.test(normalizeForDirectiveCheck(src));
 }
 
-function extractExports(src: string): string[] {
+export function extractExports(src: string): string[] {
   const names: string[] = [];
   for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s+(\w+)/gm)) names.push(m[1]);
   for (const m of src.matchAll(/^export\s+(?:let|const|var)\s+(\w+)\s*=/gm)) names.push(m[1]);

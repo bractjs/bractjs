@@ -1,6 +1,6 @@
 import { resolve, join, sep } from "node:path";
 import { realpath } from "node:fs/promises";
-import { serverOnlyPlugin } from "../build/env-plugin.ts";
+import { serverModuleStubPlugin } from "../build/env-plugin.ts";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
 
 /**
@@ -48,14 +48,16 @@ export async function handleHmrModuleRequest(
   // build uses. Without these, a route module that imports `*.server.ts` or
   // contains "use server" exports would have that server source compiled and
   // shipped to the browser as JavaScript over /_hmr/module — leaking
-  // credentials, DB code, etc. The serverOnlyPlugin hard-fails such imports
-  // and useServerProxyPlugin rewrites "use server" exports to fetch stubs.
+  // credentials, DB code, etc. The serverModuleStubPlugin replaces every
+  // `*.server.ts` export with an inert stub (zero server source reaches the
+  // client) and useServerProxyPlugin rewrites "use server" exports to fetch
+  // stubs.
   const result = await Bun.build({
     entrypoints: [fullPath],
     target: "browser",
     minify: false,
     sourcemap: "inline",
-    plugins: [serverOnlyPlugin, createUseServerProxyPlugin(rootDir)],
+    plugins: [serverModuleStubPlugin, createUseServerProxyPlugin(rootDir)],
   });
 
   if (!result.success || result.outputs.length === 0) {

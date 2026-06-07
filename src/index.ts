@@ -25,14 +25,22 @@ export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloud
 // - `createUseServerProxyPlugin(appDir)` (client bundle): replaces
 //   "use server" exports with fetch proxies. Without it, server-action
 //   bodies — including DB queries and secrets — ship inside the browser JS.
-// - `serverOnlyPlugin` (client bundle): hard-fails imports of `*.server.ts`
-//   files so server-only code can never be tree-walked into the client bundle.
+// - `serverModuleStubPlugin` (client bundle): replaces every export of a
+//   `*.server.ts` module with an inert stub. Because BractJS ships the whole
+//   route module (loader + action included) to the client, a route that imports
+//   a server module inside its loader pulls that module into the client graph;
+//   stubbing keeps the import resolvable while guaranteeing zero server source
+//   (DB drivers, secrets) reaches the browser. The stubs throw if ever used on
+//   the client. This is the plugin the dev and production client builds use.
+// - `serverOnlyPlugin` (client bundle, legacy): the stricter predecessor that
+//   *hard-fails* any `*.server.ts` import. Kept for back-compat / opt-in use
+//   when you want server-module imports to be a build error rather than a stub.
 // - `clientEnvPlugin(allowedKeys, env)` (client bundle): allowlists which
 //   `process.env.*` references survive into the browser bundle.
 // - `cssModulesPlugin` (client bundle): handles `*.module.css` imports.
 export { cssModulesPlugin, transformCssModule } from "./build/plugins/css-modules.ts";
 export { useClientStubPlugin, createUseServerProxyPlugin, useServerProxyPlugin } from "./build/directives.ts";
-export { serverOnlyPlugin, clientEnvPlugin } from "./build/env-plugin.ts";
+export { serverModuleStubPlugin, serverOnlyPlugin, clientEnvPlugin } from "./build/env-plugin.ts";
 
 // Module-registry codegen (drives `bun build --compile` workflow)
 export {
