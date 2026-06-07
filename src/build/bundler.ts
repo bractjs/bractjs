@@ -4,7 +4,7 @@ import type { BunPlugin } from "bun";
 import { scanRoutes } from "../server/scanner.ts";
 import { contentHash } from "./hash.ts";
 import { generateManifest, writeManifest } from "./manifest.ts";
-import { serverOnlyPlugin, clientEnvPlugin } from "./env-plugin.ts";
+import { serverModuleStubPlugin, clientEnvPlugin } from "./env-plugin.ts";
 import { buildDefines } from "./defines.ts";
 import { writeRouteTypes } from "../codegen/route-codegen.ts";
 import { useClientStubPlugin, createUseServerProxyPlugin } from "./directives.ts";
@@ -64,7 +64,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     minify: config.minify ?? true,
     sourcemap: config.sourcemap ?? "external",
     define: buildDefines(config),
-    plugins: [serverOnlyPlugin, createUseServerProxyPlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
+    plugins: [serverModuleStubPlugin, createUseServerProxyPlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
   });
   if (!clientResult.success) throw new AggregateError(clientResult.logs, "Client build failed");
 

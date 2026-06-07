@@ -697,14 +697,26 @@ export default defineLifecycle({
 
 | Convention | Behavior |
 |---|---|
-| `*.server.ts` / `*.server.tsx` | Importing in client code is a **hard build error** (server-only). |
+| `*.server.ts` / `*.server.tsx` | **Stubbed out of the client bundle.** Import it freely from a route's `loader`/`action`; every export is replaced by an inert stub in the browser build, so the real source (DB drivers, secrets, `bun:sqlite`) never ships. The stub throws if you accidentally call it on the client. |
 | Keys listed in `clientEnv` | Replaced with string literals in the client bundle. |
 | Any other `process.env.*` | Becomes the literal `"undefined"` in the client bundle. |
 
 ```ts
 // db.server.ts — never reaches the browser
+import { Database } from "bun:sqlite";
 export const db = new Database(Bun.env.DATABASE_URL!);
 ```
+
+```ts
+// app/routes/posts.tsx — import the server module inside the loader
+import { db } from "../db.server.ts"; // stubbed in the client bundle
+
+export async function loader() {
+  return { posts: db.query("SELECT * FROM posts").all() };
+}
+```
+
+> BractJS ships the whole route module — `loader` and `action` included — to the client, so a server import is reachable from the client graph. The `serverModuleStubPlugin` (applied automatically by `bractjs dev`/`build`) replaces every `*.server.ts` export with a throwing stub: the import resolves, the loader/action are dead code on the client, and **zero** server source is emitted. The stricter, hard-failing `serverOnlyPlugin` is still exported if you'd rather a server import be a build error.
 
 ```ts
 // bractjs.config.ts
@@ -982,14 +994,14 @@ If you write your own `Bun.build()` (instead of `bractjs build`), you **must** a
 |---|---|---|
 | Server | `useClientStubPlugin` | Server crashes calling browser-only hooks from `"use client"` modules. |
 | Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB code, secrets) ship in the browser JS. |
-| Client | `serverOnlyPlugin` | `*.server.ts` imports leak into the client bundle. |
+| Client | `serverModuleStubPlugin` | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle. |
 | Client | `clientEnvPlugin(allowedKeys, env)` | Server env vars leak into the browser bundle. |
 | Client | `cssModulesPlugin` | `*.module.css` imports don't resolve. |
 
 ```ts
 import {
   useClientStubPlugin, createUseServerProxyPlugin,
-  serverOnlyPlugin, clientEnvPlugin, cssModulesPlugin,
+  serverModuleStubPlugin, clientEnvPlugin, cssModulesPlugin,
 } from "@bractjs/bractjs";
 
 // Server bundle (target: "bun"):
@@ -997,14 +1009,14 @@ plugins: [useClientStubPlugin];
 
 // Client bundle (target: "browser"):
 plugins: [
-  serverOnlyPlugin,
+  serverModuleStubPlugin,
   createUseServerProxyPlugin("./app"),               // same appDir as createServer!
   clientEnvPlugin(["PUBLIC_API_URL"], Bun.env as Record<string, string>),
   cssModulesPlugin,
 ];
 ```
 
-> Always pass the **same `appDir`** to `createUseServerProxyPlugin` that you pass to `createServer` — action IDs hash the appDir-relative path, so a mismatch makes every `/_action` return 404. `transformCssModule(filePath)` is exported for custom CSS pipelines; `useServerProxyPlugin` is the legacy absolute-path variant.
+> Always pass the **same `appDir`** to `createUseServerProxyPlugin` that you pass to `createServer` — action IDs hash the appDir-relative path, so a mismatch makes every `/_action` return 404. `transformCssModule(filePath)` is exported for custom CSS pipelines; `useServerProxyPlugin` is the legacy absolute-path variant. `serverModuleStubPlugin` stubs `*.server.ts` exports so a route can import a server module inside its loader/action without leaking source; `serverOnlyPlugin` is the stricter predecessor that hard-fails such imports instead (still exported for opt-in use).
 
 ---
 
@@ -1059,7 +1071,7 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
 **Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`
 
-**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `cssModulesPlugin`, `transformCssModule`
+**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `serverModuleStubPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `cssModulesPlugin`, `transformCssModule`
 
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
 
