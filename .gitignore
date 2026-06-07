@@ -78,3 +78,6 @@ coverage/
 
 # Private tooling
 .claude/
+
+# Playwright MCP scratch output
+.playwright-mcp/

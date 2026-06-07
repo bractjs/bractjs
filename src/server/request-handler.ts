@@ -153,6 +153,12 @@ async function route(
       return error("Internal Server Error", 500);
     }
 
+    // An action may *return* (not just throw) a redirect or any Response —
+    // the documented pattern is `return redirect("/")`. Propagate it verbatim
+    // so the browser/`<Form>` sees a real 3xx (and follows it) instead of a
+    // 200 with the Response serialized into a JSON body.
+    if (actionData instanceof Response) return actionData;
+
     // Client-side Form submits with this header — return JSON, not HTML.
     if (request.headers.get("X-BractJS-Action")) {
       return json(actionData ?? null);

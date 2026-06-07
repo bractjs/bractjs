@@ -49,8 +49,17 @@ export function Form({ method = "post", action, children, ...rest }: FormProps) 
       headers: { "X-BractJS-Action": "1" },
     });
 
+    // The action returned (or threw) a redirect. The browser auto-follows the
+    // 3xx, so `response.url` is the *absolute* final URL — normalize it to a
+    // same-origin path before handing it to the client router, which matches a
+    // route pattern against the pathname (an absolute URL wouldn't match).
     if (response.redirected) {
-      await navigate(response.url);
+      let to = response.url;
+      try {
+        const u = new URL(response.url, window.location.href);
+        if (u.origin === window.location.origin) to = u.pathname + u.search + u.hash;
+      } catch { /* keep response.url as-is */ }
+      await navigate(to);
       return;
     }
 
