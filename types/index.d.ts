@@ -1,4 +1,4 @@
-import type { ReactNode, Context } from "react";
+import type { ReactNode, Context, CSSProperties } from "react";
 
 // ── Route types ───────────────────────────────────────────────────────────
 export type {
@@ -34,7 +34,8 @@ export interface LifecycleHooks {
 export declare function defineLifecycle(hooks: LifecycleHooks): LifecycleHooks;
 export declare function createServer(config?: Partial<BractJSConfig>): { stop(): void };
 export declare function renderRoute(options: RenderOptions): Promise<Response>;
-export declare function redirect(url: string, status?: number): Response;
+export interface RedirectOptions { allowExternal?: boolean; }
+export declare function redirect(url: string, status?: number, headers?: HeadersInit, options?: RedirectOptions): Response;
 export declare function json<T>(data: T, init?: ResponseInit): Response;
 export declare function error(message: string, status?: number): Response;
 
@@ -141,6 +142,23 @@ export declare function Form(props: FormProps): ReactNode;
 
 export interface AwaitProps<T> { resolve: Promise<T>; fallback: ReactNode; children: (data: T) => ReactNode; }
 export declare function Await<T>(props: AwaitProps<T>): ReactNode;
+
+export type ImageFormat = "webp" | "avif" | "jpeg" | "png";
+export type ImageFit = "cover" | "contain" | "fill";
+export interface ImageProps {
+  src: string;
+  alt: string;
+  width?: number;
+  height?: number;
+  quality?: number;
+  format?: ImageFormat;
+  fit?: ImageFit;
+  priority?: boolean;
+  sizes?: string;
+  className?: string;
+  style?: CSSProperties;
+}
+export declare function Image(props: ImageProps): ReactNode;
 
 // ── Client hooks ──────────────────────────────────────────────────────────
 export declare function useLoaderData<T = unknown>(): T;
