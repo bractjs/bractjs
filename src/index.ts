@@ -108,12 +108,29 @@ export { useLoaderData } from "./client/hooks/useLoaderData.ts";
 export { useActionData } from "./client/hooks/useActionData.ts";
 export { useParams } from "./client/hooks/useParams.ts";
 export { useNavigation } from "./client/hooks/useNavigation.ts";
+export { useNavigate } from "./client/hooks/useNavigate.ts";
+export type { NavigateFn, NavigateOptions } from "./client/hooks/useNavigate.ts";
 export { useFetcher } from "./client/hooks/useFetcher.ts";
 export { useSearchParams } from "./client/hooks/useSearchParams.ts";
 export type { SearchParamsResult } from "./client/hooks/useSearchParams.ts";
 export { useBlocker } from "./client/hooks/useBlocker.ts";
 export { useLocale } from "./client/hooks/useLocale.ts";
 export { useLocalizedLink } from "./client/hooks/useLocalizedLink.ts";
+
+// Typed-routing registration seam. Augment `Register` (done by `bractjs codegen`
+// in app/route-types.gen.ts) to make <Link>, useNavigate, useParams, and
+// useSearchParams type-safe. Augment RouteSearchParamsMap / RouteContextMap to
+// type a route's search params / context.
+export type {
+  Register,
+  RouteRegistry,
+  RegisteredRoutes,
+  ParamsFor,
+  SearchFor,
+  RouteSearchParamsMap,
+  RouteContextMap,
+} from "./client/registry.ts";
+export { buildPath } from "./client/build-path.ts";
 
 // i18n utilities (server-side)
 export { wrapRoutesWithLocale, stripLocale, localizedDataPath } from "./server/i18n.ts";
