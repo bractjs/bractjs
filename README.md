@@ -1,7 +1,15 @@
 # BractJS
 
+[![npm version](https://img.shields.io/npm/v/@bractjs/bractjs)](https://www.npmjs.com/package/@bractjs/bractjs)
+[![license](https://img.shields.io/npm/l/@bractjs/bractjs)](LICENSE)
+
 > Production-grade SSR framework for **Bun + React 19**.
 > File-based routing · Parallel loaders · Streaming SSR · Built-in HMR · Server Actions · Typed routes · Single-binary deploy.
+
+## Requirements
+
+- [Bun](https://bun.sh) ≥ 1.1 — no Node.js support
+- React 19 (peer dependency)
 
 This README is a **step-by-step guide to every function and feature** BractJS exports. Each section is self-contained and ordered from "first app" to "advanced". Every symbol shown here is a real export from `@bractjs/bractjs` (see [src/index.ts](src/index.ts)).
 
@@ -50,8 +58,6 @@ cd my-app
 # Start the dev server (HMR on http://localhost:3000)
 bun run dev
 ```
-
-> **From source (pre-publish):** `bun run bin/cli.ts new my-app`.
 
 `bractjs new <name>` copies the scaffold template, runs `bun install`, and seeds `app/_generated/` so the single-binary entry typechecks before your first build.
 
@@ -1076,6 +1082,12 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
 
 **Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
