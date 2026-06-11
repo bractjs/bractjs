@@ -34,6 +34,9 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
   const userConfig = options?.skipUserConfig ? {} : await loadUserConfig();
   const merged: Partial<BractJSConfig> = { ...userConfig, ...options?.config };
+  // Note: the `"use client"` SSR stub is installed by buildFetchHandler (it runs
+  // for any source-import path, dev or `bractjs start`), so no separate dev hook
+  // is needed here.
 
   const hmrPort = options?.hmrPort ?? 3001;
   const appPort = options?.port ?? merged.port ?? 3000;

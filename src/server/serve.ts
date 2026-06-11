@@ -12,6 +12,7 @@ import { BunAdapter, type BractAdapter } from "./adapter.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { resolve, join } from "node:path";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
+import { installUseClientServerStub } from "./use-client-runtime.ts";
 
 export interface I18nConfig {
   locales: string[];
@@ -106,6 +107,15 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
         ),
       }))
     : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);
+
+  // When routes are imported from SOURCE at runtime (dev server AND
+  // `bractjs start`, which fall back to scanRoutes + dynamic import rather than
+  // a pre-stubbed compiled bundle), a `"use client"` route component would
+  // execute during SSR and crash on browser-only hooks. Install the runtime
+  // stub that null-renders such modules on the server — parity with the
+  // compiled bundle's useClientStubPlugin. Skipped on the compiled path, which
+  // supplies a pre-built moduleRegistry.
+  if (!config.moduleRegistry) installUseClientServerStub(appDir);
 
   // Codegen / compiled-binary path: when the caller supplies pre-scanned
   // routes, skip the runtime `Bun.Glob` scan that `bun build --compile`

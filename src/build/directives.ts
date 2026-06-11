@@ -10,7 +10,7 @@ const SERVER_RE = /^["']use server["']/m;
 function normalizeForDirectiveCheck(src: string): string {
   return src.replace(/^﻿/, "").replace(/^\s+/, "");
 }
-function hasClientDirective(src: string): boolean {
+export function hasClientDirective(src: string): boolean {
   return CLIENT_RE.test(normalizeForDirectiveCheck(src));
 }
 function hasServerDirective(src: string): boolean {
