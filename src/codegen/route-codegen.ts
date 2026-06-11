@@ -78,29 +78,32 @@ const HEADER =
   "\n" +
   "/* eslint-disable */\n";
 
+// `RouteSearchParamsMap` / `RouteContextMap` are owned by the package
+// (`@bractjs/bractjs`) so users have a single stable module to augment. We do
+// NOT seed per-route keys here: seeding `"/posts": Record<string,string>` would
+// conflict with a user augmentation declaring `"/posts": { page: string }`
+// (duplicate-property error). Instead `SearchParams<T>` / `Context<T>` fall back
+// to the permissive default for any route the user hasn't augmented.
 function searchParamsTypeLines(routes: Array<{ pattern: string }>): string {
-  // Route files may declare `export type SearchParams = { page: string }`.
-  // We emit a mapped type that falls back to Record<string,string> per route.
-  // Users augment via module augmentation or via their route file's export.
   if (routes.length === 0) {
     return "export type SearchParams<_T extends AppRoutes> = Record<string, string>;";
   }
   const branches = routes
     .map((r) => {
       assertSafePattern(r.pattern);
-      return "  T extends " + JSON.stringify(r.pattern) + " ? RouteSearchParamsMap[" + JSON.stringify(r.pattern) + "] :";
+      const key = JSON.stringify(r.pattern);
+      // Use `extends Record<K, infer V>` rather than `keyof` + index access:
+      // RouteSearchParamsMap may be `{}` (no user augmentation), and indexing an
+      // empty interface — even inside a `K extends keyof M` guard — trips
+      // TS2538 "cannot be used as an index type". The Record-infer form resolves
+      // V only when the route is augmented, and falls back otherwise.
+      return "  T extends " + key +
+        " ? (RouteSearchParamsMap extends Record<" + key + ", infer V> ? V : Record<string, string>) :";
     })
     .join("\n");
-  const mapEntries = routes
-    .map((r) => "  " + JSON.stringify(r.pattern) + ": Record<string, string>;")
-    .join("\n");
   return [
-    "// Augment RouteSearchParamsMap to type search params per route:",
-    "// declare module 'bractjs' { interface RouteSearchParamsMap { '/blog': { page: string } } }",
-    "export interface RouteSearchParamsMap {",
-    mapEntries,
-    "}",
-    "",
+    "// Augment RouteSearchParamsMap (on the package) to type a route's search params:",
+    "//   declare module \"@bractjs/bractjs\" { interface RouteSearchParamsMap { \"/blog\": { page: string } } }",
     "export type SearchParams<T extends AppRoutes> =",
     branches,
     "  Record<string, string>;",
@@ -114,22 +117,48 @@ function contextTypeLines(routes: Array<{ pattern: string }>): string {
   const branches = routes
     .map((r) => {
       assertSafePattern(r.pattern);
-      return "  T extends " + JSON.stringify(r.pattern) + " ? RouteContextMap[" + JSON.stringify(r.pattern) + "] :";
+      const key = JSON.stringify(r.pattern);
+      // See SearchParams above for why this uses `extends Record<K, infer V>`.
+      return "  T extends " + key +
+        " ? (RouteContextMap extends Record<" + key + ", infer V> ? V : Record<string, unknown>) :";
     })
     .join("\n");
-  const mapEntries = routes
-    .map((r) => "  " + JSON.stringify(r.pattern) + ": Record<string, unknown>;")
-    .join("\n");
   return [
-    "// Augment RouteContextMap to type context per route:",
-    "// declare module 'bractjs' { interface RouteContextMap { '/blog': { user: User } } }",
-    "export interface RouteContextMap {",
-    mapEntries,
-    "}",
-    "",
+    "// Augment RouteContextMap (on the package) to type a route's context:",
+    "//   declare module \"@bractjs/bractjs\" { interface RouteContextMap { \"/blog\": { user: User } } }",
     "export type Context<T extends AppRoutes> =",
     branches,
     "  Record<string, unknown>;",
+  ].join("\n");
+}
+
+// The `Register` augmentation: this is what wires the app's routes into the
+// package's runtime helpers (<Link>, useNavigate, useParams, useSearchParams).
+function registerAugmentationLines(routes: Array<{ pattern: string; params: string[] }>): string {
+  const paramEntries = routes
+    .map((r) => {
+      assertSafePattern(r.pattern);
+      r.params.forEach(assertSafeParam);
+      const shape = r.params.length === 0
+        ? "{}"
+        : "{ " + r.params.map((p) => p + ": string").join("; ") + " }";
+      return "      " + JSON.stringify(r.pattern) + ": " + shape + ";";
+    })
+    .join("\n");
+  return [
+    "// Registers this app's routes with BractJS. After this augmentation, <Link>,",
+    "// useNavigate, useParams, and useSearchParams are type-safe against AppRoutes.",
+    "declare module \"@bractjs/bractjs\" {",
+    "  interface Register {",
+    "    routes: {",
+    "      routes: AppRoutes;",
+    "      params: {",
+    paramEntries,
+    "      };",
+    "      search: RouteSearchParamsMap;",
+    "    };",
+    "  }",
+    "}",
   ].join("\n");
 }
 
@@ -149,8 +178,15 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
 
   const builderEntries = routes.map((r) => builderEntry(r.pattern, r.params)).join("\n");
 
+  // `RouteSearchParamsMap` / `RouteContextMap` are imported from the package so
+  // the local `SearchParams<T>` / `Context<T>` reference the same interfaces the
+  // user augments via `declare module "@bractjs/bractjs"`.
+  const IMPORTS = 'import type { RouteSearchParamsMap, RouteContextMap } from "@bractjs/bractjs";';
+
   return [
     HEADER,
+    IMPORTS,
+    "",
     "export type AppRoutes =",
     union + ";",
     "",
@@ -174,6 +210,9 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
     "export const routes = {",
     builderEntries,
     "} as const;",
+    "",
+    // No routes → AppRoutes is `never`; nothing to register.
+    routes.length > 0 ? registerAugmentationLines(routes) : "",
     "",
   ].join("\n");
 }

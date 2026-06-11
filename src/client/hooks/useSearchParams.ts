@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, startTransition } from "react";
 import { NavigationContext } from "../router.tsx";
 import { useContext } from "react";
+import type { SearchFor } from "../registry.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,13 +18,22 @@ export interface SearchParamsResult<T extends Record<string, string>> {
 // ── Hook ───────────────────────────────────────────────────────────────────
 
 /**
- * Reads and writes URL search params, typed per-route via generic T.
- * Triggers a loader re-run (soft-nav fetch) when params change.
+ * Reads and writes URL search params. Triggers a loader re-run (soft-nav fetch)
+ * when params change.
  *
- * T is the route's SearchParams shape (e.g. { page: string; sort: string }).
+ * Pass the route pattern as a generic to type the result against your codegen'd
+ * routes: `useSearchParams<"/posts">()`. Augment `RouteSearchParamsMap` to give a
+ * route a concrete shape (defaults to `Record<string, string>`). The pattern is
+ * supplied by the caller — the framework can't infer the active route at the type
+ * level. An object generic — `useSearchParams<{ page: string }>()` — also works.
+ *
  * This hook is SSR-safe: on the server window is absent, so it returns empty params.
  */
-export function useSearchParams<T extends Record<string, string> = Record<string, string>>(): SearchParamsResult<T> {
+// Overload 1: a route literal → search shape resolved from the registry.
+export function useSearchParams<TTo extends string>(): SearchParamsResult<SearchFor<TTo>>;
+// Overload 2: an explicit object shape (back-compat with the old generic form).
+export function useSearchParams<T extends Record<string, string> = Record<string, string>>(): SearchParamsResult<T>;
+export function useSearchParams(): SearchParamsResult<Record<string, string>> {
   const navCtx = useContext(NavigationContext);
 
   function readCurrent(): URLSearchParams {
@@ -66,8 +76,8 @@ export function useSearchParams<T extends Record<string, string> = Record<string
     }
   }, [navCtx]);
 
-  const getParam = useCallback(<K extends keyof T & string>(key: K): T[K] | null => {
-    return (searchParams.get(key) as T[K] | null);
+  const getParam = useCallback((key: string): string | null => {
+    return searchParams.get(key);
   }, [searchParams]);
 
   return { searchParams, getParam, setSearchParams };
