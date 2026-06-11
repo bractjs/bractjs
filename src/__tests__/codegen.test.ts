@@ -29,6 +29,42 @@ describe("route-codegen — output shape", () => {
     expect(out).toMatch(/\| "\/users\/:id"/);
   });
 
+  test("wires the Register augmentation for typed routing", async () => {
+    const regApp = join(tmpdir(), `bract-codegen-register-${Date.now()}`);
+    await mkdir(join(regApp, "routes", "users"), { recursive: true });
+    await writeFile(join(regApp, "routes", "about.tsx"), "export default () => null;");
+    await writeFile(join(regApp, "routes", "users", "[id].tsx"), "export default () => null;");
+
+    const out = await generateRouteTypes(regApp);
+
+    // Bug 1 regression: the augmentation must target the real package name.
+    expect(out).toContain('declare module "@bractjs/bractjs"');
+    expect(out).not.toMatch(/declare module ['"]bractjs['"]/);
+
+    // Bug 2 regression: the customization maps are AUGMENTED on the package, not
+    // re-declared as bare top-level interfaces in the app file.
+    expect(out).not.toMatch(/^export interface RouteSearchParamsMap/m);
+    expect(out).not.toMatch(/^export interface RouteContextMap/m);
+    expect(out).toContain('import type { RouteSearchParamsMap, RouteContextMap } from "@bractjs/bractjs"');
+
+    // The Register seam carries the route union and a per-route params map.
+    expect(out).toContain("interface Register {");
+    expect(out).toContain("routes: AppRoutes;");
+    expect(out).toMatch(/"\/users\/:id": \{ id: string \};/); // dynamic route → typed params
+    expect(out).toMatch(/"\/about": \{\};/);                   // static route → no params
+
+    await rm(regApp, { recursive: true, force: true });
+  });
+
+  test("emits no Register augmentation when there are no routes", async () => {
+    const emptyApp = join(tmpdir(), `bract-codegen-empty-${Date.now()}`);
+    await mkdir(join(emptyApp, "routes"), { recursive: true });
+    const out = await generateRouteTypes(emptyApp);
+    expect(out).toContain("export type AppRoutes =\n  never;");
+    expect(out).not.toContain("interface Register {");
+    await rm(emptyApp, { recursive: true, force: true });
+  });
+
   test("rejects hostile filenames at codegen time", async () => {
     const hostileApp = join(tmpdir(), `bract-codegen-hostile-${Date.now()}`);
     await mkdir(join(hostileApp, "routes"), { recursive: true });

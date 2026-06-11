@@ -129,13 +129,49 @@ export declare function validate<T>(
   input: FormData | Record<string, unknown>,
 ): Promise<T>;
 
+// ── Typed-routing registration seam ───────────────────────────────────────
+// Mirror of src/client/registry.ts. Augment `Register` (done by `bractjs codegen`
+// in app/route-types.gen.ts) to make <Link>/useNavigate/useParams/useSearchParams
+// type-safe. Un-augmented, everything falls back to loose `string` / Record so
+// apps that never run codegen keep compiling. Keep in sync with registry.ts.
+export interface Register {}
+export interface RouteRegistry {
+  routes: string;
+  params: Record<string, Record<string, string>>;
+  search: Record<string, Record<string, string>>;
+}
+export interface RouteSearchParamsMap {}
+export interface RouteContextMap {}
+// Infer each member directly (NOT `infer R extends RouteRegistry` — a constrained
+// infer fails to match the generated registry and falls back to loose). Keep in
+// sync with src/client/registry.ts.
+export type RegisteredRoutes =
+  Register extends { routes: { routes: infer R } } ? R : string;
+export type RegisteredParamsMap =
+  Register extends { routes: { params: infer P } } ? P : Record<string, Record<string, string>>;
+export type RegisteredSearchMap =
+  Register extends { routes: { search: infer S } } ? S : Record<string, Record<string, string>>;
+export type ParamsFor<TTo> =
+  TTo extends keyof RegisteredParamsMap ? RegisteredParamsMap[TTo] : Record<string, string>;
+export type SearchFor<TTo> =
+  TTo extends keyof RegisteredSearchMap ? RegisteredSearchMap[TTo] : Record<string, string>;
+export declare function buildPath(pattern: string, params: Record<string, string | number>): string;
+
 // ── Client components ─────────────────────────────────────────────────────
 export declare function Scripts(): null;
 export declare function LiveReload(): ReactNode;
 export declare function Outlet(): ReactNode;
 
-export interface LinkProps { to: string; prefetch?: "hover" | "none"; viewTransition?: boolean; children?: ReactNode; className?: string; [key: string]: unknown; }
-export declare function Link(props: LinkProps): ReactNode;
+export type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = {
+  to: TTo | (string & {});
+  params?: ParamsFor<TTo>;
+  prefetch?: "hover" | "none";
+  viewTransition?: boolean;
+  children?: ReactNode;
+  className?: string;
+  [key: string]: unknown;
+};
+export declare function Link<TTo extends RegisteredRoutes = RegisteredRoutes>(props: LinkProps<TTo>): ReactNode;
 
 export interface FormProps { method?: "post" | "put" | "delete"; action?: string; children?: ReactNode; [key: string]: unknown; }
 export declare function Form(props: FormProps): ReactNode;
@@ -163,9 +199,16 @@ export declare function Image(props: ImageProps): ReactNode;
 // ── Client hooks ──────────────────────────────────────────────────────────
 export declare function useLoaderData<T = unknown>(): T;
 export declare function useActionData<T = unknown>(): T | null;
-export declare function useParams(): Record<string, string>;
+export declare function useParams<TTo extends string>(): ParamsFor<TTo>;
+export declare function useParams<T extends Record<string, string> = Record<string, string>>(): T;
 export type NavigationState = "idle" | "loading" | "submitting";
 export declare function useNavigation(): { state: NavigationState };
+
+export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes> { params?: ParamsFor<TTo>; }
+export interface NavigateFn {
+  <TTo extends RegisteredRoutes>(to: TTo | (string & {}), options?: NavigateOptions<TTo>): Promise<void>;
+}
+export declare function useNavigate(): NavigateFn;
 export interface FetcherResult {
   data: unknown;
   state: NavigationState;
@@ -184,6 +227,7 @@ export interface SearchParamsResult<T extends Record<string, string> = Record<st
   getParam<K extends keyof T & string>(key: K): T[K] | null;
   setSearchParams(updater: Record<string, string> | ((prev: URLSearchParams) => URLSearchParams)): void;
 }
+export declare function useSearchParams<TTo extends string>(): SearchParamsResult<SearchFor<TTo>>;
 export declare function useSearchParams<T extends Record<string, string> = Record<string, string>>(): SearchParamsResult<T>;
 
 // ── Typed route context ───────────────────────────────────────────────────

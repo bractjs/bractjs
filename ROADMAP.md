@@ -156,13 +156,15 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 ## Future (Post v0.1.0)
 
 - [x] Module-level HMR (no full reload — fine-grained module swap)
-- [ ] Edge runtime support (Cloudflare Workers, Bun Deploy)
-- [ ] Built-in CSS modules
-- [x] Image optimization pipeline
-- [x] Typed routes (codegen)
-- [x] Typed routes (codegen — `params` typed per route)
+- [x] Edge runtime support — Cloudflare Workers adapter (`createCloudflareAdapter`, `src/adapters/cloudflare.ts`)
+- [ ] Edge runtime support — Deno / Node.js adapters (generalize the adapter contract)
+- [x] Built-in CSS modules (`cssModulesPlugin`, `src/build/plugins/css-modules.ts`)
+- [x] Image optimization pipeline (`<Image>`, `/_image` handler)
+- [x] Typed routes (codegen — `route-types.gen.ts`, `src/codegen/route-codegen.ts`)
+- [x] Typed routes (codegen — `params` typed per route via `RouteParams<T>`)
+- [ ] Typed routes (runtime-wired — `<Link>`/`useNavigate`/`useParams` consume the generated types; see Phase A)
 - [x] `"use server"` / `"use client"` directive system
-- [ ] Built-in i18n routing
+- [ ] Built-in i18n routing (helpers exist: `wrapRoutesWithLocale`, `stripLocale`, `useLocale`; not yet integrated end-to-end into core routing)
 - [ ] Streaming `useFetcher()` (SSE-backed)
 - [x] Programmatic API — `createDevServer`, `runBuild`, `loadUserConfig` importable without CLI
 - [x] Native `bun build --compile` support — single-binary deployment via module-registry codegen (`bractjs codegen:registry`, `bractjs codegen:manifest`, `bractjs compile`)
@@ -173,9 +175,11 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 > Highest leverage additions — no new runtime dependencies, closes the biggest DX gaps vs TanStack Router and React Router.
 
-- [ ] `useSearchParams()` hook — typed, schema-driven search params per route; codegen emits `SearchParams<T>` per route; triggers loader re-run on change
-- [ ] Typed route context — `defineContext()` factory runs before loaders, injects typed `context.*` into all loaders/actions (replaces `context: unknown`)
-- [ ] `beforeLoad()` on route definitions — client-side navigation guard; runs before loader, supports auth redirects and unsaved-form blocking (`useBlocker()` pattern)
+- [x] `useSearchParams()` hook — reads/writes URL search params, triggers loader re-run on change (`src/client/hooks/useSearchParams.ts`)
+- [~] `useSearchParams()` — **typed/registry-wired** per route (codegen emits `SearchParams<T>`, but the runtime hook isn't yet tied to it; in progress)
+- [x] Typed route context — codegen emits `Context<T>` + augmentable `RouteContextMap` (`route-types.gen.ts`); `defineContext()` factory exists (`src/server/context.ts`)
+- [x] `beforeLoad()` on route definitions — client-side navigation guard with safe redirect following (`src/client/ClientRouter.tsx:71-100`); unsaved-form blocking via `useBlocker()`
+- [ ] **Typed-routing runtime wiring** — `<Link>`/`useNavigate`/`useParams`/`useSearchParams` consume the generated types via a `Register` declaration-merging seam (the generated types exist but nothing reads them at runtime yet)
 
 ---
 
@@ -183,8 +187,8 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 > Makes navigating data-heavy apps feel instant. Critical for dashboards, admin panels, paginated lists.
 
-- [ ] Loader caching with `staleTime` / `gcTime` — serve cached loader data instantly on back-navigation, revalidate in background (SWR semantics)
-- [ ] `loaderDeps` — declare which search params / context values a loader depends on; drives cache invalidation (requires Phase A search params)
+- [x] Loader caching with `staleTime` / `gcTime` — SWR semantics: serve cached data instantly, revalidate in background (`src/client/ClientRouter.tsx:105-166`, `src/client/cache.ts`)
+- [x] `loaderDeps` — route modules export `loaderDeps({ searchParams })` to key the loader cache (`src/client/ClientRouter.tsx:113-118`)
 - [ ] Streaming `useFetcher()` via SSE — live data without WebSockets (chat, notifications, progress bars)
 
 ---
@@ -193,8 +197,8 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 > Closes the type-safety gap for API routes; reduces action boilerplate.
 
-- [ ] Type-safe API route client — `createClient<AppType>()` generates a fully-typed fetch client from route definitions (Hono `hc<T>()` equivalent); zero manual API contracts, status codes typed, URL helpers
-- [ ] Action validator helper — `validate(schema)` wrapper for Zod/Valibot in actions; auto-validates FormData/JSON and returns typed body; 400 on schema failure
+- [x] Type-safe API route client — `route()` + `createClient<AppApiRoutes>()` typed fetch client (`src/server/api-route.ts`, `src/client/rpc.ts`)
+- [x] Action validator helper — `validate(schema)` auto-validates FormData/JSON, returns typed body, throws 400 `Response` on failure (`src/server/validate.ts`)
 
 ---
 
@@ -202,9 +206,10 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 > Unlocks adoption beyond Bun-only deployments.
 
-- [ ] Adapter interface — abstract `Bun.serve` behind a `serve(adapter)` API so the same app runs on Cloudflare Workers, Deno, and Node.js with a one-line swap
-- [ ] Cloudflare Workers adapter — first non-Bun target; validates the adapter contract
-- [ ] CSS modules — scoped styles with zero runtime; build-time class name hashing
+- [x] Adapter interface — `BractAdapter` / `BunAdapter` abstract the serve layer (`src/server/adapter.ts`)
+- [x] Cloudflare Workers adapter — first non-Bun target (`createCloudflareAdapter`, `src/adapters/cloudflare.ts`)
+- [ ] Deno / Node.js adapters — second/third targets to fully validate the adapter contract
+- [x] CSS modules — scoped styles, build-time class-name hashing (`cssModulesPlugin`, `src/build/plugins/css-modules.ts`)
 
 ---
 
@@ -212,6 +217,6 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 > Low-effort, high-visibility improvements.
 
-- [ ] View Transitions API — `viewTransition` prop on `<Link>` opts into browser-native animated page transitions; CSS-driven, zero framework complexity
-- [ ] Built-in i18n routing — locale prefix routing (`/en/`, `/fr/`) with typed route helpers
-- [ ] DevTools panel — in-browser overlay showing matched route, loader data, navigation state, cache entries (TanStack Router devtools equivalent)
+- [x] View Transitions API — `viewTransition` prop on `<Link>`, feature-detected (`src/client/components/Link.tsx:18-38`)
+- [~] Built-in i18n routing — locale-prefix helpers shipped (`wrapRoutesWithLocale`, `stripLocale`, `useLocale`, `useLocalizedLink`); not yet wired into core routing as a one-line opt-in
+- [x] DevTools panel — in-browser overlay (Ctrl+Shift+B) showing matched route, loader data, nav state, cache entries (`src/dev/devtools.ts`)

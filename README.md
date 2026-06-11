@@ -34,7 +34,7 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 15. [Sessions: `createCookieSession`](#15-sessions)
 16. [Lifecycle hooks: `defineLifecycle`](#16-lifecycle-hooks)
 17. [Environment variables & `*.server.ts`](#17-environment-variables)
-18. [Typed routes codegen](#18-typed-routes-codegen)
+18. [Typed routes](#18-typed-routes)
 19. [Internationalization (i18n) utilities](#19-internationalization-utilities)
 20. [Image optimization (`<Image>` + `/_image`)](#20-image-optimization)
 21. [Build & run: CLI + programmatic API (`createDevServer`, `runBuild`, `loadUserConfig`)](#21-build--run)
@@ -353,10 +353,12 @@ const result = useActionData<{ error?: string }>();
 ```
 
 ### `useParams<T>()` → `T`
-URL dynamic params. Pass a generic for typed params.
+URL dynamic params. Pass the **route pattern** as a generic to type the result against your codegen'd routes (see §18); an object shape also works.
 ```ts
-const { id } = useParams<{ id: string }>();
+const { id } = useParams<"/blog/:id">();        // { id: string } — typed from routes
+const { id } = useParams<{ id: string }>();     // or a hand-written shape
 ```
+> The pattern is supplied by the caller because the framework can't infer the active route at the type level (React Router's `useParams` works the same way).
 
 ### `useNavigation()` → `{ state }`
 `"idle" | "loading" | "submitting"`.
@@ -365,12 +367,21 @@ const { state } = useNavigation();
 if (state === "loading") return <Spinner />;
 ```
 
-### `useSearchParams<T>()` → `{ searchParams, getParam, setSearchParams }`
-Read/write URL query params; writing triggers a soft-nav loader re-run.
+### `useNavigate()` → `(to, { params? }) => Promise<void>`
+Imperative soft navigation — the counterpart to `<Link>`. `to` autocompletes your routes (after codegen, §18) and `params` is typed per route; any string is still accepted.
 ```ts
-const { searchParams, getParam, setSearchParams } = useSearchParams<{ q: string }>();
-const q = getParam("q");                       // string | null
-setSearchParams({ q: "bun" });                 // replace all params
+const navigate = useNavigate();
+await navigate("/blog/:id", { params: { id: "42" } });   // typed
+await navigate("/about");                                  // static
+await navigate(`/blog/${id}`);                             // built string (also fine)
+```
+
+### `useSearchParams<T>()` → `{ searchParams, getParam, setSearchParams }`
+Read/write URL query params; writing triggers a soft-nav loader re-run. Pass the route pattern as a generic to type the result against `RouteSearchParamsMap` (augment it per route, §18); an object shape also works.
+```ts
+const { searchParams, getParam, setSearchParams } = useSearchParams<"/blog/:id">();
+const q = getParam("q");                        // string | null
+setSearchParams({ q: "bun" });                  // replace all params
 setSearchParams((prev) => { prev.set("page", "2"); return prev; }); // update
 ```
 
@@ -415,12 +426,13 @@ export default function BlogLayout() {
 }
 ```
 
-### `<Link to prefetch? viewTransition?>`
-Soft-navigates without a full reload.
+### `<Link to params? prefetch? viewTransition?>`
+Soft-navigates without a full reload. After codegen (§18), `to` autocompletes your routes; for a dynamic route pass typed `params`. Building the URL yourself still works, so existing links need no changes.
 ```tsx
-<Link to="/blog/42">Read</Link>
-<Link to="/about" prefetch="hover">About</Link>   {/* preload chunk + loader on hover */}
-<Link to="/gallery" viewTransition>Gallery</Link> {/* use View Transitions API */}
+<Link to="/blog/:id" params={{ id: "42" }}>Read</Link>  {/* typed route + params */}
+<Link to={`/blog/${id}`}>Read</Link>                    {/* built string — also fine */}
+<Link to="/about" prefetch="hover">About</Link>         {/* preload chunk + loader on hover */}
+<Link to="/gallery" viewTransition>Gallery</Link>       {/* use View Transitions API */}
 ```
 Modifier-clicks (ctrl/cmd/shift/alt) fall back to native browser navigation.
 
@@ -738,47 +750,54 @@ On the server, read env via `Bun.env.*` directly.
 
 ---
 
-## 18. Typed routes codegen
+## 18. Typed routes
 
-Generate per-route param types and a type-safe URL builder from your route files.
+Generate type-safe routing from your route files — one command wires `<Link>`, `useNavigate`, `useParams`, and `useSearchParams` to your actual routes.
 
 ```sh
 bractjs codegen                       # ./app → ./app/route-types.gen.ts
 bractjs codegen ./app ./app/types.ts  # explicit paths
 ```
 
-Runs automatically during `bractjs build`. The generated file provides:
+Runs automatically during `bractjs build`. Make sure the generated file is part of your TypeScript program (it is, if your `tsconfig.json` `include`s `app/`). It augments BractJS's `Register` interface, after which the runtime components and hooks become type-safe — **no per-route imports needed**:
 
-```ts
-export type AppRoutes = "/" | "/blog/:id" | "/org/:orgId/repo/:repoId";
+```tsx
+<Link to="/blog/:id" params={{ id }} />     // ✅ "/blog/:id" autocompletes; params typed
+<Link to="/blgo/:id" params={{ id }} />     // ❌ typo'd route — compile error
+<Link to="/blog/:id" params={{ x: id }} />  // ❌ wrong param key — compile error
 
-export type RouteParams<T extends AppRoutes> =
-  T extends "/blog/:id" ? { id: string } : Record<never, never>;
+const navigate = useNavigate();
+navigate("/blog/:id", { params: { id } });  // ✅ same typing as <Link>
 
-export type TypedLoaderArgs<T extends AppRoutes> = { request: Request; params: RouteParams<T>; context: Record<string, unknown> };
-export type TypedActionArgs<T extends AppRoutes> = TypedLoaderArgs<T> & { formData: FormData };
-
-export const routes = {
-  "/": () => "/",
-  "/blog/:id": (p: { id: string }) => `/blog/${p.id}`,
-} as const;
+const { id } = useParams<"/blog/:id">();     // id: string
 ```
 
-Use them for typed loaders and safe navigation:
+Building the URL yourself (`<Link to={`/blog/${id}`}>`) still type-checks, so adopting codegen never breaks existing links.
+
+The generated file also exports types/helpers for typed loaders and explicit URL building:
 
 ```ts
-import type { TypedLoaderArgs, RouteParams } from "../route-types.gen.ts";
+import type { TypedLoaderArgs } from "../route-types.gen.ts";
 import { routes } from "../route-types.gen.ts";
 
 export async function loader({ params }: TypedLoaderArgs<"/blog/:id">) {
-  return db.post.findById(params.id); // params.id: string
+  return db.post.findById(params.id);          // params.id: string
 }
+routes["/blog/:id"]({ id: "123" });            // → "/blog/123"  (typo'd routes won't compile)
+```
 
-const { id } = useParams<RouteParams<"/blog/:id">>();
-routes["/blog/:id"]({ id: "123" }); // → "/blog/123"  (typo'd routes won't compile)
+**Type a route's search params or context** by augmenting the package interfaces — `SearchParams<T>` / `Context<T>` and `useSearchParams<T>()` pick it up:
+
+```ts
+declare module "@bractjs/bractjs" {
+  interface RouteSearchParamsMap { "/blog": { page: string; sort: string } }
+  interface RouteContextMap { "/admin": { user: { id: string; role: "admin" } } }
+}
 ```
 
 You can also call `writeRouteTypes(appDir, outPath?)` / `generateRouteTypes(appDir)` programmatically.
+
+> **Heads up:** earlier versions documented `useParams<RouteParams<"/blog/:id">>()` and untyped `<Link to={string}>`. The route-literal form (`useParams<"/blog/:id">()`) and typed `<Link>`/`useNavigate` are the current API; the old forms still compile.
 
 ---
 
@@ -1098,7 +1117,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 - **Streaming SSR** — `renderToReadableStream()` with `defer()` and `<Await>`.
 - **File-based routing** — drop a file in `app/routes/`.
 - **Full-stack** — loaders, actions, sessions, server actions, typed API routes, middleware.
-- **Typed routes** — codegen produces per-route params and a type-safe URL builder.
+- **Typed routes** — codegen wires `<Link>`, `useNavigate`, and `useParams` to your routes (autocompleted paths, typed params), plus a type-safe URL builder.
 - **Single-binary** — `bun build --compile` to one executable.
 
 ## License
