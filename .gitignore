@@ -7,11 +7,13 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-# Build outputs
-build/
-dist/
-out/
-lib/
+# Build outputs (anchored to repo root so they don't match source dirs like
+# src/build/ — an unanchored `build/` ignores that dir at ANY depth).
+/build/
+/dist/
+/out/
+/lib/
+examples/*/build/
 *.tsbuildinfo
 
 # Packaging artifacts

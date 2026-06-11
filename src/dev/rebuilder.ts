@@ -2,6 +2,7 @@ import type { BractJSConfig } from "../server/serve.ts";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
 import { serverModuleStubPlugin, clientEnvPlugin } from "../build/env-plugin.ts";
 import { cssModulesPlugin } from "../build/plugins/css-modules.ts";
+import { reactDedupePlugin } from "../build/react-dedupe.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import { generateManifest, writeManifest } from "../build/manifest.ts";
 import { mkdir, rename, rm } from "node:fs/promises";
@@ -56,6 +57,7 @@ export async function rebuildClient(
       // and served to the browser over /build/client in dev; without
       // `clientEnvPlugin` server env vars would leak the same way.
       plugins: [
+        reactDedupePlugin(process.cwd()),
         serverModuleStubPlugin,
         createUseServerProxyPlugin(appDir),
         clientEnvPlugin(config?.clientEnv ?? [], Bun.env as Record<string, string>),

@@ -21,15 +21,44 @@ function patternMatches(pathname: string, pattern: string): boolean {
   return p === pathSegs.length;
 }
 
+/**
+ * Specificity score for a matching pattern, used to pick the best match the
+ * same way the server's trie does: static > dynamic > catch-all. Higher wins.
+ * Object key order is not reliable for priority, so we must score, not
+ * first-match (otherwise `[...slug]` can shadow `_index` / static routes).
+ */
+function patternScore(pattern: string): number {
+  if (pattern === "") return 1_000_000; // index route — most specific for "/"
+  let score = 0;
+  for (const seg of pattern.split("/")) {
+    score *= 10;
+    if (seg.startsWith("[...") && seg.endsWith("]")) score += 1; // catch-all
+    else if (seg.startsWith("[") && seg.endsWith("]")) score += 2; // dynamic
+    else score += 3; // static
+  }
+  return score;
+}
+
 // ── Export ─────────────────────────────────────────────────────────────────
 
-/** Returns the manifest pattern key that matches pathname, or null. */
+/** Returns the highest-priority manifest pattern that matches pathname, or null. */
 export function matchPatternForPath(
   pathname: string,
   manifest: ServerManifest,
 ): string | null {
+  // Exact static match wins outright (most specific) — also a fast path.
+  const normalized = pathname.replace(/^\//, "");
+  if (normalized in manifest.routes) return normalized;
+
+  let best: string | null = null;
+  let bestScore = -1;
   for (const pattern of Object.keys(manifest.routes)) {
-    if (patternMatches(pathname, pattern)) return pattern;
+    if (!patternMatches(pathname, pattern)) continue;
+    const score = patternScore(pattern);
+    if (score > bestScore) {
+      best = pattern;
+      bestScore = score;
+    }
   }
-  return null;
+  return best;
 }

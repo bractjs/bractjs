@@ -9,6 +9,7 @@ import { buildDefines } from "./defines.ts";
 import { writeRouteTypes } from "../codegen/route-codegen.ts";
 import { useClientStubPlugin, createUseServerProxyPlugin } from "./directives.ts";
 import { cssModulesPlugin } from "./plugins/css-modules.ts";
+import { reactDedupePlugin } from "./react-dedupe.ts";
 
 /** Subset of config fields relevant to the build pipeline. */
 export interface BuildConfig {
@@ -54,18 +55,35 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   if (!serverResult.success) throw new AggregateError(serverResult.logs, "Server build failed");
 
   // ── 3. Client bundle (code-split) ───────────────────────────────────────
-  const clientResult = await Bun.build({
-    entrypoints: [join(pkgRoot, "src/client/entry.tsx"), rootFilePath, ...routeFilePaths],
-    target: "browser",
-    splitting: true,
-    outdir: "build/client",
-    // No publicPath: relative chunk refs work correctly when files are served
-    // at URLs matching their outdir structure (e.g. /build/client/chunk-xxx.js).
-    minify: config.minify ?? true,
-    sourcemap: config.sourcemap ?? "external",
-    define: buildDefines(config),
-    plugins: [serverModuleStubPlugin, createUseServerProxyPlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
-  });
+  // The framework's entry.tsx lives OUTSIDE the user's cwd (in pkgRoot). When
+  // Bun sees an entrypoint outside cwd it roots outputs at a common ancestor,
+  // emitting the entry at a nested path (build/client/src/client/entry.js) and
+  // baking ../ traversals into chunk refs — which makes `clientEntry` resolve to
+  // a URL that doesn't exist (e.g. /src/client/entry.<hash>.js). A shim file
+  // inside cwd keeps every entrypoint under one root so the entry output is flat
+  // and chunk refs stay correct. (Same technique as the dev rebuilder.)
+  const SHIM = ".bractjs-entry.tsx";
+  const shimPath = resolve(process.cwd(), SHIM);
+  await Bun.write(shimPath, `import "${join(pkgRoot, "src/client/entry.tsx")}";\nexport {};\n`);
+  const shimBase = basename(SHIM, extname(SHIM)); // ".bractjs-entry"
+
+  let clientResult: Awaited<ReturnType<typeof Bun.build>>;
+  try {
+    clientResult = await Bun.build({
+      entrypoints: [shimPath, rootFilePath, ...routeFilePaths],
+      target: "browser",
+      splitting: true,
+      outdir: "build/client",
+      // No publicPath: relative chunk refs work correctly when files are served
+      // at URLs matching their outdir structure (e.g. /build/client/chunk-xxx.js).
+      minify: config.minify ?? true,
+      sourcemap: config.sourcemap ?? "external",
+      define: buildDefines(config),
+      plugins: [reactDedupePlugin(process.cwd()), serverModuleStubPlugin, createUseServerProxyPlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
+    });
+  } finally {
+    await rm(shimPath, { force: true });
+  }
   if (!clientResult.success) throw new AggregateError(clientResult.logs, "Client build failed");
 
   // ── 4. Hash + rename output files ──────────────────────────────────────
@@ -74,7 +92,6 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   let rootChunk: string | undefined;
   const outdirAbs = resolve("build/client");
   const appDirClean = appDir.replace(/^\.\//, "");
-  const entryBase = basename("src/client/entry.tsx", extname("src/client/entry.tsx")); // "entry"
   const rootBase = basename(rootFilePath, extname(rootFilePath)); // "root"
 
   for (const artifact of clientResult.outputs) {
@@ -83,8 +100,22 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     // would break sibling import refs, which Bun bakes in at bundle time and
     // does NOT rewrite after rename.
     if (artifact.kind !== "entry-point") continue;
+    // Compute the source-relative path BEFORE renaming, to classify the output.
+    const absPath = resolve(artifact.path);
+    const rel = absPath.startsWith(outdirAbs + "/") ? absPath.slice(outdirAbs.length + 1) : basename(artifact.path);
+    const outBase = basename(artifact.path, extname(artifact.path));
     const hash = await contentHash(artifact.path);
     const ext = artifact.path.slice(artifact.path.lastIndexOf("."));
+
+    // The shim is the real client entry — rename it to a flat client.<hash>.js
+    // at the outdir root so its URL is /build/client/client.<hash>.js.
+    if (outBase === shimBase) {
+      const hashedPath = join(outdirAbs, `client.${hash}${ext}`);
+      await rename(artifact.path, hashedPath);
+      clientEntry = "/build/client/" + basename(hashedPath);
+      continue;
+    }
+
     const base = artifact.path.slice(0, artifact.path.lastIndexOf("."));
     const hashedPath = `${base}.${hash}${ext}`;
     await rename(artifact.path, hashedPath);
@@ -94,13 +125,8 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     const publicPath = hashedAbs.startsWith(cwdAbs + "/")
       ? "/" + hashedAbs.slice(cwdAbs.length + 1).replace(/\\/g, "/")
       : "/" + hashedPath.replace(/^build\//, "build/");
-    const absPath = resolve(artifact.path);
-    const rel = absPath.startsWith(outdirAbs + "/") ? absPath.slice(outdirAbs.length + 1) : basename(artifact.path);
-    const outBase = basename(artifact.path, extname(artifact.path));
 
-    if (outBase === entryBase) {
-      clientEntry = publicPath;
-    } else if (outBase === rootBase) {
+    if (outBase === rootBase) {
       rootChunk = publicPath;
     } else {
       const matched = routes.find((r) => {

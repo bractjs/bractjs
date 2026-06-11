@@ -1,8 +1,18 @@
 import { join, resolve, sep } from "node:path";
 import { realpath } from "node:fs/promises";
+import { isDevRuntime } from "./env.ts";
 
 const IMMUTABLE = "public, max-age=31536000, immutable";
 const NO_CACHE = "no-cache";
+
+// Hashed client chunks are safe to cache forever in production (a content change
+// yields a new filename). In DEV, however, the dev rebuilder can reuse a chunk
+// filename across rebuilds while its contents change, so marking them immutable
+// makes the browser pin stale JS (e.g. an old route matcher) for a year. Serve
+// them no-cache in dev so each rebuild is picked up.
+function clientAssetCacheControl(): string {
+  return isDevRuntime() ? NO_CACHE : IMMUTABLE;
+}
 
 /**
  * Resolve to a canonical path that follows symlinks, with a fallback for
@@ -66,7 +76,7 @@ export async function serveStatic(
     if (!full) return null;
     const file = Bun.file(full);
     if (!(await file.exists())) return null;
-    return new Response(file, { headers: { "Cache-Control": IMMUTABLE } });
+    return new Response(file, { headers: { "Cache-Control": clientAssetCacheControl() } });
   }
 
   if (pathname.startsWith("/public/")) {
