@@ -10,7 +10,7 @@ import {
   type RouteModuleClient,
 } from "./router.tsx";
 import type { ServerManifest } from "../server/render.ts";
-import { matchPatternForPath } from "./nav-utils.ts";
+import { matchPatternForPath, toSamePath } from "./nav-utils.ts";
 import { loaderCache, cacheKey } from "./cache.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
 import type { MetaDescriptor } from "../shared/route-types.ts";
@@ -54,6 +54,15 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
   /** Load route data + module without touching history. */
   const loadRoute = useCallback(async (to: string) => {
     setNavState("loading");
+    // Follow a redirect Location from client-side beforeLoad. Same-origin
+    // targets stay in the SPA; an off-origin/protocol-relative Location is NOT
+    // fed to the router — we do a full-page navigation so the browser's own
+    // cross-origin handling applies and we never open-redirect via pushState.
+    const followRedirect = (loc: string) => {
+      const safe = toSamePath(loc);
+      if (safe) { void navigateRef.current(safe); return; }
+      window.location.href = loc;
+    };
     try {
       const toPathname = to.split("?")[0];
       const pattern = matchPatternForPath(toPathname, manifest);
@@ -79,12 +88,12 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
           });
           if (result instanceof Response) {
             const loc = result.headers.get("Location");
-            if (loc) { void navigateRef.current(loc); return; }
+            if (loc) { followRedirect(loc); return; }
           }
         } catch (err) {
           if (err instanceof Response) {
             const loc = (err as Response).headers.get("Location");
-            if (loc) { void navigateRef.current(loc); return; }
+            if (loc) { followRedirect(loc); return; }
           }
           throw err;
         }
