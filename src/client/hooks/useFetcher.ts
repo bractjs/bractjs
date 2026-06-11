@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toSamePath } from "../nav-utils.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,22 @@ export function useFetcher<T>(opts?: { stream?: boolean }): FetcherResult | Stre
         submitOpts.body instanceof FormData
           ? submitOpts.body
           : new URLSearchParams(submitOpts.body as Record<string, string>);
-      const res = await fetch(path, { method: submitOpts.method, body });
+      // Send the custom header so the server's CSRF gate accepts this
+      // same-origin mutation (browsers block it cross-origin without a CORS
+      // preflight). Without it every fetcher submit 403s.
+      const res = await fetch(path, {
+        method: submitOpts.method,
+        body,
+        headers: { "X-BractJS-Action": "1" },
+      });
+      // If the action redirected, do a real navigation rather than parsing the
+      // redirect target as JSON. Off-origin targets get a full-page nav so we
+      // never follow an attacker-controlled Location inside the SPA.
+      if (res.redirected) {
+        const to = toSamePath(res.url);
+        window.location.assign(to ?? res.url);
+        return;
+      }
       setData(await res.json());
     } finally {
       setState("idle");

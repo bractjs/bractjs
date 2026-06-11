@@ -1,5 +1,27 @@
 import type { ServerManifest } from "../server/render.ts";
 
+// ── Redirect normalization ─────────────────────────────────────────────────
+
+/**
+ * Normalize a Location/redirect target to a same-origin path the client router
+ * can match. Returns an internal "/path?query#hash" for same-origin targets, or
+ * `null` for off-origin, protocol-relative, or malformed values — the caller
+ * MUST NOT feed a null result to the SPA router (an off-origin Location should
+ * trigger a full-page navigation instead, so the browser applies its own
+ * cross-origin protections). This is the client-side complement to the server's
+ * `sanitizeRedirect()`: it stops a soft-nav from silently following an
+ * attacker-controlled `Location` header.
+ */
+export function toSamePath(loc: string): string | null {
+  try {
+    const u = new URL(loc, window.location.href);
+    if (u.origin !== window.location.origin) return null;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return null;
+  }
+}
+
 // ── Pattern Matching ───────────────────────────────────────────────────────
 
 /**

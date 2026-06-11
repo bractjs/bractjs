@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { redirect, json, error } from "../server/response.ts";
+import { redirect, json, error, sanitizeRedirect } from "../server/response.ts";
 
 describe("redirect", () => {
   test("returns 302 by default with Location header", () => {
@@ -33,6 +33,19 @@ describe("redirect", () => {
       expect(() => redirect("/\\evil.com")).toThrow();
     });
 
+    test("rejects percent-encoded authority escapes (%2f, %5c)", () => {
+      expect(() => redirect("/%2f%2fevil.com")).toThrow();
+      expect(() => redirect("/%2F/evil.com")).toThrow();
+      expect(() => redirect("/%5cevil.com")).toThrow();
+    });
+
+    test("rejects control/whitespace-prefixed escapes browsers normalize", () => {
+      expect(() => redirect("/\t//evil.com")).toThrow();
+      expect(() => redirect("/\n/evil.com")).toThrow();
+      expect(() => redirect("/ /evil.com")).toThrow();
+      expect(() => redirect("\t//evil.com")).toThrow();
+    });
+
     test("rejects javascript: and data: schemes", () => {
       expect(() => redirect("javascript:alert(1)")).toThrow();
       expect(() => redirect("data:text/html,x")).toThrow();
@@ -47,6 +60,46 @@ describe("redirect", () => {
       const res = redirect("https://allowed.example/path", 302, undefined, { allowExternal: true });
       expect(res.headers.get("Location")).toBe("https://allowed.example/path");
     });
+  });
+});
+
+describe("sanitizeRedirect", () => {
+  const reqUrl = "https://app.example/page";
+
+  test("passes non-redirect responses through untouched", () => {
+    const res = json({ ok: true }, { status: 200 });
+    expect(sanitizeRedirect(res, reqUrl)).toBe(res);
+  });
+
+  test("passes same-origin relative Location through", () => {
+    const res = new Response(null, { status: 302, headers: { Location: "/dashboard" } });
+    const out = sanitizeRedirect(res, reqUrl);
+    expect(out.status).toBe(302);
+    expect(out.headers.get("Location")).toBe("/dashboard");
+  });
+
+  test("passes same-origin absolute Location through", () => {
+    const res = new Response(null, { status: 302, headers: { Location: "https://app.example/x" } });
+    expect(sanitizeRedirect(res, reqUrl).headers.get("Location")).toBe("https://app.example/x");
+  });
+
+  test("blocks raw off-origin Location → 500, no Location", () => {
+    const res = new Response(null, { status: 302, headers: { Location: "https://evil.com" } });
+    const out = sanitizeRedirect(res, reqUrl);
+    expect(out.status).toBe(500);
+    expect(out.headers.get("Location")).toBeNull();
+  });
+
+  test("blocks raw protocol-relative Location", () => {
+    const res = new Response(null, { status: 302, headers: { Location: "//evil.com/x" } });
+    expect(sanitizeRedirect(res, reqUrl).status).toBe(500);
+  });
+
+  test("respects allowExternal opt-in branding from redirect()", () => {
+    const res = redirect("https://allowed.example/cb", 302, undefined, { allowExternal: true });
+    const out = sanitizeRedirect(res, reqUrl);
+    expect(out.status).toBe(302);
+    expect(out.headers.get("Location")).toBe("https://allowed.example/cb");
   });
 });
 
