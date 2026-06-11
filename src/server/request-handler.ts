@@ -5,7 +5,7 @@ import { resolveRouteChain, type ModuleRegistry } from "./layout.ts";
 import { runLoaders, runAction, buildLoaderArgs, runRouteContext, runBeforeLoad } from "./loader.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
 import { resolveMeta } from "./meta.ts";
-import { json, error } from "./response.ts";
+import { json, error, sanitizeRedirect } from "./response.ts";
 import { isRedirect, isHttpError } from "../shared/errors.ts";
 import { isExplicitDev } from "./env.ts";
 import { pipeline, type MiddlewareContext } from "./middleware.ts";
@@ -102,7 +102,7 @@ async function route(
       const results = await runLoaders(chain, args, onError);
       return json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params });
     } catch (err) {
-      if (isRedirect(err)) return err as Response;
+      if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
       if (isHttpError(err)) return json({ error: err.message }, { status: err.status });
       console.error("[bractjs] /_data error:", err);
       await fireOnError(onError, err, request);
@@ -146,7 +146,7 @@ async function route(
       const formData = isFormLike ? await request.formData() : new FormData();
       actionData = await runAction(chain.route, { ...args, formData });
     } catch (err) {
-      if (isRedirect(err)) return err as Response;
+      if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
       if (isHttpError(err)) return error(err.message, err.status);
       await fireOnError(onError, err, request);
       if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
@@ -156,8 +156,10 @@ async function route(
     // An action may *return* (not just throw) a redirect or any Response —
     // the documented pattern is `return redirect("/")`. Propagate it verbatim
     // so the browser/`<Form>` sees a real 3xx (and follows it) instead of a
-    // 200 with the Response serialized into a JSON body.
-    if (actionData instanceof Response) return actionData;
+    // 200 with the Response serialized into a JSON body. sanitizeRedirect()
+    // neutralizes an off-origin Location that didn't go through redirect()'s
+    // allowExternal opt-in (e.g. a raw `new Response(…,{Location:"//evil"})`).
+    if (actionData instanceof Response) return sanitizeRedirect(actionData, request.url);
 
     // Client-side Form submits with this header — return JSON, not HTML.
     if (request.headers.get("X-BractJS-Action")) {
@@ -170,7 +172,7 @@ async function route(
   try {
     loaderResults = await runLoaders(chain, args, onError);
   } catch (err) {
-    if (isRedirect(err)) return err as Response;
+    if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
     if (isHttpError(err)) return error(err.message, err.status);
     await fireOnError(onError, err, request);
     if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);

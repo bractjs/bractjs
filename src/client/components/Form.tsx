@@ -1,6 +1,7 @@
 import { useContext, type FormEvent, type ReactNode, type FormHTMLAttributes } from "react";
 import { RouterContext, NavigationContext } from "../router.tsx";
 import { reloadLoaders } from "../form-utils.ts";
+import { toSamePath } from "../nav-utils.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -52,14 +53,13 @@ export function Form({ method = "post", action, children, ...rest }: FormProps) 
     // The action returned (or threw) a redirect. The browser auto-follows the
     // 3xx, so `response.url` is the *absolute* final URL — normalize it to a
     // same-origin path before handing it to the client router, which matches a
-    // route pattern against the pathname (an absolute URL wouldn't match).
+    // route pattern against the pathname (an absolute URL wouldn't match). An
+    // off-origin final URL is NOT handed to the SPA router: fall back to a
+    // full-page navigation so we don't open-redirect through it.
     if (response.redirected) {
-      let to = response.url;
-      try {
-        const u = new URL(response.url, window.location.href);
-        if (u.origin === window.location.origin) to = u.pathname + u.search + u.hash;
-      } catch { /* keep response.url as-is */ }
-      await navigate(to);
+      const to = toSamePath(response.url);
+      if (to) { await navigate(to); return; }
+      window.location.href = response.url;
       return;
     }
 
