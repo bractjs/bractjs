@@ -14,7 +14,7 @@ interface SchemaWithSafeParse<T> {
   safeParse(input: unknown): SafeParseResult<T> | Promise<SafeParseResult<T>>;
 }
 
-type Schema<T> = SchemaWithParse<T> | SchemaWithSafeParse<T>;
+export type Schema<T> = SchemaWithParse<T> | SchemaWithSafeParse<T>;
 
 // ── Field error shape ─────────────────────────────────────────────────────
 
@@ -48,21 +48,15 @@ function toPlainObject(input: FormData | Record<string, unknown>): Record<string
 }
 
 /**
- * Validate `input` against a Zod-compatible or Valibot-compatible schema.
- *
- * - If the schema has `.safeParse()`: uses it to collect field errors and throws
- *   a typed `ValidationError` on failure (which the framework converts to a 400).
- * - If the schema only has `.parse()`: wraps it and re-throws the error as a
- *   `ValidationError` with a single `_` field containing the error message.
- *
- * Returns the parsed (coerced) data on success.
+ * Run a plain object through a Zod/Valibot-compatible schema. The shared core
+ * of `validate()` (action/form bodies) and `validateSearch()` (URL search
+ * params). Throws a 400 `Response` with `{ errors }` field errors on failure;
+ * returns the parsed (coerced) data on success.
  */
-export async function validate<T>(
+export async function runSchema<T>(
   schema: Schema<T>,
-  input: FormData | Record<string, unknown>,
+  plain: Record<string, unknown>,
 ): Promise<T> {
-  const plain = toPlainObject(input);
-
   if ("safeParse" in schema && typeof schema.safeParse === "function") {
     const result = await schema.safeParse(plain);
     if ((result as SafeParseResult<T>).success) {
@@ -86,4 +80,21 @@ export async function validate<T>(
     const fieldErrors: FieldErrors = { _: [message] };
     throw Response.json({ errors: fieldErrors }, { status: 400, statusText: "Validation failed" });
   }
+}
+
+/**
+ * Validate `input` against a Zod-compatible or Valibot-compatible schema.
+ *
+ * - If the schema has `.safeParse()`: uses it to collect field errors and throws
+ *   a typed `ValidationError` on failure (which the framework converts to a 400).
+ * - If the schema only has `.parse()`: wraps it and re-throws the error as a
+ *   `ValidationError` with a single `_` field containing the error message.
+ *
+ * Returns the parsed (coerced) data on success.
+ */
+export async function validate<T>(
+  schema: Schema<T>,
+  input: FormData | Record<string, unknown>,
+): Promise<T> {
+  return runSchema(schema, toPlainObject(input));
 }

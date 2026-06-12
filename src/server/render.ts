@@ -18,6 +18,8 @@ export interface RenderOptions {
   actionData: unknown;
   params: Record<string, string>;
   pathname: string;
+  /** Validated search params — hydrates `useSearch()` so the client never re-validates. */
+  search?: Record<string, unknown>;
   manifest: ServerManifest;
   meta: MetaDescriptor[];
   status?: number;
@@ -25,6 +27,13 @@ export interface RenderOptions {
   routeFile?: string;
   /** Per-request CSP nonce (set by the opt-in `csp()` middleware). Applied to the inline bootstrap script + client entry module tags. */
   nonce?: string;
+  /**
+   * Set when the document did NOT SSR the route component: the client renders
+   * the Fallback during hydration, then swaps in the real component
+   * ("data-only": data already present; "client-only": after a /_data fetch;
+   * "spa": static shell, everything resolved client-side).
+   */
+  ssrMode?: "client-only" | "data-only" | "spa";
 }
 
 export async function renderRoute(options: RenderOptions): Promise<Response> {
@@ -44,7 +53,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   // The merged descriptor array is what the client reads to keep the document
   // head in sync on soft navigation — keep it shaped, not stringified HTML.
   const bootstrapScriptContent =
-    devOverlay + `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, manifest, routeFile: options.routeFile, meta: mergedMeta })};`;
+    devOverlay + `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, ssrMode: options.ssrMode })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers

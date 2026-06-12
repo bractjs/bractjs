@@ -8,11 +8,15 @@ export interface BractJSClientData {
   actionData: unknown;
   params: Record<string, string>;
   pathname: string;
+  /** Validated search params for the initial request (route `searchSchema` output). */
+  search?: Record<string, unknown>;
   manifest: ServerManifest;
   /** Path of the matched route file, used to pre-import the module before hydration. */
   routeFile?: string;
   /** Merged meta descriptors for the current route — keeps <head> in sync. */
   meta?: MetaDescriptor[];
+  /** Present when the document did not SSR the route component (selective SSR / SPA shell). */
+  ssrMode?: "client-only" | "data-only" | "spa";
 }
 
 // ── Window augmentation ────────────────────────────────────────────────────

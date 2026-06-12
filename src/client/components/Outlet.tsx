@@ -41,8 +41,14 @@ export function Outlet(): ReactElement | null {
   // Server-side (SSR): fall back to BractJSContext which carries RouteComponent
   const bractCtx = useContext(BractJSContext);
 
-  const RouteComponent: ComponentType | undefined =
-    routerCtx?.currentModule?.default ?? bractCtx?.RouteComponent;
+  // While selective-SSR hydration is pending, render exactly what the server
+  // sent: the route's Fallback ("client-only"/"data-only" documents) or
+  // nothing (the "spa" shell knows no route at build time). Rendering the real
+  // component here would mismatch the server HTML.
+  const pending = routerCtx?.hydrationPending;
+  const RouteComponent: ComponentType | undefined = pending
+    ? (pending === "spa" ? undefined : routerCtx?.currentModule?.Fallback)
+    : routerCtx?.currentModule?.default ?? bractCtx?.RouteComponent;
   const ErrorFallback: ComponentType<{ error: Error }> =
     routerCtx?.currentModule?.ErrorBoundary ?? DefaultErrorFallback;
 

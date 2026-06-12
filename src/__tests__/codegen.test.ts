@@ -45,13 +45,19 @@ describe("route-codegen — output shape", () => {
     // re-declared as bare top-level interfaces in the app file.
     expect(out).not.toMatch(/^export interface RouteSearchParamsMap/m);
     expect(out).not.toMatch(/^export interface RouteContextMap/m);
-    expect(out).toContain('import type { RouteSearchParamsMap, RouteContextMap } from "@bractjs/bractjs"');
+    expect(out).toContain('import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs"');
 
     // The Register seam carries the route union and a per-route params map.
     expect(out).toContain("interface Register {");
     expect(out).toContain("routes: AppRoutes;");
     expect(out).toMatch(/"\/users\/:id": \{ id: string \};/); // dynamic route → typed params
     expect(out).toMatch(/"\/about": \{\};/);                   // static route → no params
+
+    // Schema-inferred search shapes: a per-route map derived from each route
+    // module's `searchSchema` export, registered under `searchOutput`.
+    expect(out).toContain("export type GeneratedSearchOutput = {");
+    expect(out).toContain('typeof import("./routes/about.tsx") extends { searchSchema: infer S }');
+    expect(out).toContain("searchOutput: GeneratedSearchOutput;");
 
     await rm(regApp, { recursive: true, force: true });
   });

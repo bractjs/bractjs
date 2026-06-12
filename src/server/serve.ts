@@ -1,6 +1,7 @@
 import { scanRoutes, type RouteFile } from "./scanner.ts";
-import { buildTrie } from "./matcher.ts";
+import { buildTrie, matchRoute } from "./matcher.ts";
 import { handleRequest, type HandlerConfig } from "./request-handler.ts";
+import { renderSpaShell } from "./spa.ts";
 import { type ServerManifest } from "./render.ts";
 import { isDevRuntime, isExplicitDev } from "./env.ts";
 import { loadManifest } from "../build/manifest.ts";
@@ -28,6 +29,18 @@ export interface BractJSConfig {
   adapter?: BractAdapter;
   /** i18n locale prefix routing (E2). */
   i18n?: I18nConfig;
+  /**
+   * SPA mode: `false` serves one static shell for every document GET instead
+   * of SSR. The server keeps running — /_data, actions, /_image, API routes
+   * and static assets behave exactly as in SSR mode ("no document SSR", not
+   * "no server"). Default `true`.
+   */
+  ssr?: boolean;
+  /**
+   * Paths to prerender at build time (SSG). Served from disk before dynamic
+   * SSR in production; requests with a query string stay dynamic.
+   */
+  prerender?: string[] | (() => string[] | Promise<string[]>);
   // Build options (used by src/build/bundler.ts)
   sourcemap?: "none" | "linked" | "inline" | "external";
   minify?: boolean;
@@ -129,6 +142,30 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     : loadServerActions(appDir);
   const moduleRegistry = config.moduleRegistry;
   const onError = config.onError;
+  const ssrEnabled = config.ssr !== false;
+
+  // SPA shell: production prefers the file `bractjs build` wrote; dev (or a
+  // missing file) renders it on demand so root.tsx edits show up. Cached per
+  // manifest in prod-without-file; never cached in dev.
+  let spaShellCache: { key: string; html: string } | null = null;
+  async function getSpaShell(manifest: ServerManifest): Promise<string> {
+    if (!isDevRuntime()) {
+      const file = Bun.file(join(buildDir, "client", "__spa.html"));
+      if (await file.exists()) return file.text();
+      const key = manifest.clientEntry;
+      if (spaShellCache?.key === key) return spaShellCache.html;
+      const html = await renderSpaShell(appDir, manifest, moduleRegistry);
+      spaShellCache = { key, html };
+      return html;
+    }
+    return renderSpaShell(appDir, manifest, moduleRegistry);
+  }
+
+  /** Prerendered file for a clean (query-free, dot-free) document path, or null. */
+  function prerenderFile(relHtmlOrJson: string): ReturnType<typeof Bun.file> | null {
+    if (relHtmlOrJson.split("/").some((s) => s === ".." || s === ".")) return null;
+    return Bun.file(join(buildDir, "client", "_prerender", relHtmlOrJson));
+  }
 
   return async function fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -196,6 +233,54 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     if (staticRes) return staticRes;
 
     const trie = await trieReady;
+    const isDocGet = request.method === "GET" || request.method === "HEAD";
+
+    // SPA mode: every document GET that matches a route gets the static
+    // shell. /_data (no trie match) and mutations fall through to the normal
+    // handler, so loaders/actions/CSRF behave exactly as in SSR mode.
+    if (!ssrEnabled && isDocGet && matchRoute(pathname, trie)) {
+      const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
+      return new Response(await getSpaShell(manifest), {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    // Prerendered output (production): serve the build-time HTML / _data
+    // payload for clean URLs. A query string opts the request back into
+    // dynamic SSR — the static file was rendered without one.
+    if (!isDevRuntime() && isDocGet) {
+      if (pathname === "/_data") {
+        const target = url.searchParams.get("path") ?? "/";
+        const [targetPathname, targetSearch] = target.split("?");
+        if (!targetSearch) {
+          const rel = targetPathname === "/" ? "_data.json" : targetPathname.slice(1) + "/_data.json";
+          const f = prerenderFile(rel);
+          if (f && (await f.exists())) {
+            return new Response(f, {
+              headers: {
+                "Content-Type": "application/json",
+                "Cache-Control": "public, max-age=0, must-revalidate",
+              },
+            });
+          }
+        }
+      } else if (!url.search) {
+        const rel = pathname === "/" ? "index.html" : pathname.slice(1) + "/index.html";
+        const f = prerenderFile(rel);
+        if (f && (await f.exists())) {
+          return new Response(f, {
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "public, max-age=0, must-revalidate",
+            },
+          });
+        }
+      }
+    }
+
     const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
     const handlerConfig: HandlerConfig = { appDir, publicDir, manifest, onError, moduleRegistry };
     return handleRequest(request, trie, handlerConfig);

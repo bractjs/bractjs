@@ -7,6 +7,7 @@ export { route } from "./server/api-route.ts";
 export type { ApiRouteDefinition, AppApiRoutes } from "./server/api-route.ts";
 export { validate } from "./server/validate.ts";
 export type { FieldErrors, ValidationError } from "./server/validate.ts";
+export { validateSearch, searchParamsToObject } from "./server/search.ts";
 export type { BractAdapter } from "./server/adapter.ts";
 export { BunAdapter } from "./server/adapter.ts";
 
@@ -70,6 +71,9 @@ export type {
   MetaFunction,
   RouteModule,
   RouteDefinition,
+  RouterLocation,
+  ShouldRevalidateArgs,
+  ShouldRevalidateFunction,
 } from "./shared/route-types.ts";
 export type { RouteFile, Segment } from "./server/scanner.ts";
 
@@ -102,17 +106,28 @@ export { Form } from "./client/components/Form.tsx";
 export { Await } from "./client/components/Await.tsx";
 export { Image } from "./client/components/Image.tsx";
 export type { ImageProps, ImageFormat, ImageFit } from "./client/components/Image.tsx";
+export { ScrollRestoration } from "./client/components/ScrollRestoration.tsx";
+export type { ScrollRestorationProps } from "./client/components/ScrollRestoration.tsx";
 
 // Client hooks
 export { useLoaderData } from "./client/hooks/useLoaderData.ts";
 export { useActionData } from "./client/hooks/useActionData.ts";
+export { useLocation } from "./client/hooks/useLocation.ts";
 export { useParams } from "./client/hooks/useParams.ts";
 export { useNavigation } from "./client/hooks/useNavigation.ts";
 export { useNavigate } from "./client/hooks/useNavigate.ts";
 export type { NavigateFn, NavigateOptions } from "./client/hooks/useNavigate.ts";
 export { useFetcher } from "./client/hooks/useFetcher.ts";
+export type { FetcherResult, FetcherFormProps, UseFetcherOptions } from "./client/hooks/useFetcher.ts";
+export { useFetchers } from "./client/hooks/useFetchers.ts";
+export type { FetcherEntry, FetcherState } from "./client/fetcher-store.ts";
+export { useRevalidator } from "./client/hooks/useRevalidator.ts";
+export type { Revalidator } from "./client/hooks/useRevalidator.ts";
 export { useSearchParams } from "./client/hooks/useSearchParams.ts";
 export type { SearchParamsResult } from "./client/hooks/useSearchParams.ts";
+export { useSearch, useSetSearch } from "./client/hooks/useSearch.ts";
+export type { SetSearchFn, SetSearchOptions } from "./client/hooks/useSearch.ts";
+export { serializeSearch } from "./client/search-serializer.ts";
 export { useBlocker } from "./client/hooks/useBlocker.ts";
 export { useLocale } from "./client/hooks/useLocale.ts";
 export { useLocalizedLink } from "./client/hooks/useLocalizedLink.ts";
@@ -127,6 +142,8 @@ export type {
   RegisteredRoutes,
   ParamsFor,
   SearchFor,
+  SearchOutputFor,
+  InferSchemaOutput,
   RouteSearchParamsMap,
   RouteContextMap,
 } from "./client/registry.ts";
@@ -142,3 +159,6 @@ export type { DevServerOptions, DevServer } from "./dev/server.ts";
 export { runBuild } from "./build/bundler.ts";
 export type { BuildConfig } from "./build/bundler.ts";
 export { loadUserConfig } from "./config/load.ts";
+export { runPrerender } from "./build/prerender.ts";
+export type { PrerenderOptions, PrerenderResult } from "./build/prerender.ts";
+export { renderSpaShell } from "./server/spa.ts";

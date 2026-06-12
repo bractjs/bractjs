@@ -162,10 +162,10 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] Image optimization pipeline (`<Image>`, `/_image` handler)
 - [x] Typed routes (codegen — `route-types.gen.ts`, `src/codegen/route-codegen.ts`)
 - [x] Typed routes (codegen — `params` typed per route via `RouteParams<T>`)
-- [ ] Typed routes (runtime-wired — `<Link>`/`useNavigate`/`useParams` consume the generated types; see Phase A)
+- [x] Typed routes (runtime-wired — `<Link>`/`useNavigate`/`useParams` consume the generated types via the `Register` seam; v0.1.27)
 - [x] `"use server"` / `"use client"` directive system
 - [ ] Built-in i18n routing (helpers exist: `wrapRoutesWithLocale`, `stripLocale`, `useLocale`; not yet integrated end-to-end into core routing)
-- [ ] Streaming `useFetcher()` (SSE-backed)
+- [x] Streaming `useFetcher()` (SSE-backed — `useFetcher({ stream: true })`, `/_stream`, `src/server/stream-handler.ts`)
 - [x] Programmatic API — `createDevServer`, `runBuild`, `loadUserConfig` importable without CLI
 - [x] Native `bun build --compile` support — single-binary deployment via module-registry codegen (`bractjs codegen:registry`, `bractjs codegen:manifest`, `bractjs compile`)
 
@@ -176,10 +176,10 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 > Highest leverage additions — no new runtime dependencies, closes the biggest DX gaps vs TanStack Router and React Router.
 
 - [x] `useSearchParams()` hook — reads/writes URL search params, triggers loader re-run on change (`src/client/hooks/useSearchParams.ts`)
-- [~] `useSearchParams()` — **typed/registry-wired** per route (codegen emits `SearchParams<T>`, but the runtime hook isn't yet tied to it; in progress)
+- [x] `useSearchParams()` — typed/registry-wired per route (`SearchFor<T>` via the `Register` seam); superseded for most uses by the validated `useSearch()` (Phase F)
 - [x] Typed route context — codegen emits `Context<T>` + augmentable `RouteContextMap` (`route-types.gen.ts`); `defineContext()` factory exists (`src/server/context.ts`)
-- [x] `beforeLoad()` on route definitions — client-side navigation guard with safe redirect following (`src/client/ClientRouter.tsx:71-100`); unsaved-form blocking via `useBlocker()`
-- [ ] **Typed-routing runtime wiring** — `<Link>`/`useNavigate`/`useParams`/`useSearchParams` consume the generated types via a `Register` declaration-merging seam (the generated types exist but nothing reads them at runtime yet)
+- [x] `beforeLoad()` on route definitions — client-side navigation guard with safe redirect following (`src/client/ClientRouter.tsx`); unsaved-form blocking via `useBlocker()`
+- [x] **Typed-routing runtime wiring** — `<Link>`/`useNavigate`/`useParams`/`useSearchParams` consume the generated types via the `Register` declaration-merging seam (v0.1.27)
 
 ---
 
@@ -187,9 +187,9 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 > Makes navigating data-heavy apps feel instant. Critical for dashboards, admin panels, paginated lists.
 
-- [x] Loader caching with `staleTime` / `gcTime` — SWR semantics: serve cached data instantly, revalidate in background (`src/client/ClientRouter.tsx:105-166`, `src/client/cache.ts`)
-- [x] `loaderDeps` — route modules export `loaderDeps({ searchParams })` to key the loader cache (`src/client/ClientRouter.tsx:113-118`)
-- [ ] Streaming `useFetcher()` via SSE — live data without WebSockets (chat, notifications, progress bars)
+- [x] Loader caching with `staleTime` / `gcTime` — SWR semantics: serve cached data instantly, revalidate in background (`src/client/ClientRouter.tsx`, `src/client/cache.ts`)
+- [x] `loaderDeps` — route modules export `loaderDeps({ searchParams })` to key the loader cache
+- [x] Streaming `useFetcher()` via SSE — live data without WebSockets (`useFetcher({ stream: true })` + `/_stream`)
 
 ---
 
@@ -217,6 +217,30 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 
 > Low-effort, high-visibility improvements.
 
-- [x] View Transitions API — `viewTransition` prop on `<Link>`, feature-detected (`src/client/components/Link.tsx:18-38`)
+- [x] View Transitions API — `viewTransition` prop on `<Link>`, feature-detected (`src/client/components/Link.tsx`)
 - [~] Built-in i18n routing — locale-prefix helpers shipped (`wrapRoutesWithLocale`, `stripLocale`, `useLocale`, `useLocalizedLink`); not yet wired into core routing as a one-line opt-in
 - [x] DevTools panel — in-browser overlay (Ctrl+Shift+B) showing matched route, loader data, nav state, cache entries (`src/dev/devtools.ts`)
+
+---
+
+## Phase F — Navigation & Data UX (parity with React Router v7 / TanStack Router)
+
+> Closes the gap analysis against React Router v7 framework mode and TanStack Router/Start.
+
+- [x] `RouterLocation` + `useLocation()` — reactive location with history-entry `key` + `state`; SSR-safe (`src/client/hooks/useLocation.ts`)
+- [x] History keys + `navigate(to, { replace, state })` — entries stamped via `history.state.__bractKey` (`src/client/ClientRouter.tsx`, `src/client/nav-utils.ts`)
+- [x] `<ScrollRestoration />` — back/forward + reload scroll restore, hash anchors, sessionStorage persistence (`src/client/components/ScrollRestoration.tsx`, `src/client/scroll-restoration.ts`)
+- [x] Link prefetch modes — `intent` / `viewport` (shared IntersectionObserver) / `render`; prefetch now warms the loader cache with dedupe + concurrency cap (`src/client/prefetch.ts`)
+- [x] Typed validated search params — `searchSchema` route export validated server-side before loaders (`src/server/search.ts`); `args.search` in loaders; `useSearch()` / `useSetSearch()` typed via codegen schema inference (`Register.routes.searchOutput`); `<Link search>` / `navigate({ search })` (`src/client/hooks/useSearch.ts`, `src/codegen/route-codegen.ts`)
+- [x] `useRevalidator()` — manual revalidation with separate `revalidationState` (`src/client/hooks/useRevalidator.ts`)
+- [x] `shouldRevalidate` route export — gates SWR background refetch + post-mutation revalidation (`src/shared/route-types.ts`, `src/client/ClientRouter.tsx`)
+- [x] Real `submit()` / `useNavigation()==="submitting"` — `<Form>` drives submitting → loading → idle through the router (`src/client/ClientRouter.tsx`, `src/client/components/Form.tsx`)
+- [x] Fetcher store + optimistic UI — `useFetcher({ key })`, `fetcher.formData`/`formMethod`, `<fetcher.Form>`, `useFetchers()`, auto-revalidation + cache invalidation after mutations (`src/client/fetcher-store.ts`, `src/client/hooks/useFetcher.ts`, `src/client/hooks/useFetchers.ts`)
+- [x] Soft-nav meta fix — `/_data` carries merged `meta` so the document head survives navigation (`src/server/request-handler.ts`)
+
+## Phase G — Rendering Modes
+
+- [x] Per-route selective SSR — `export const ssr = false | "data-only"` + `Fallback` (HydrateFallback equivalent); hydrate-then-swap on the client; `beforeLoad` always server-enforced (`src/server/request-handler.ts`, `src/client/components/Outlet.tsx`)
+- [x] SPA mode — config `ssr: false` serves a static shell for all document GETs; build emits `build/client/__spa.html`; loaders/actions/CSRF unaffected (`src/server/spa.ts`, `src/server/serve.ts`, `src/build/bundler.ts`)
+- [x] Prerendering / SSG — config `prerender`; build-time HTML + `/_data` payloads under `build/client/_prerender/`; production serves clean URLs from disk, query strings stay dynamic (`src/build/prerender.ts`)
+- [ ] Prerender assets embedded INSIDE the compiled binary (today: ship `build/client/` alongside it, or via `--asset`)

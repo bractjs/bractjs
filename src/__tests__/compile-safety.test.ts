@@ -51,6 +51,10 @@ const ALLOWED: Record<string, string[]> = {
   // calls it when no `registry` is provided; registry mode uses pickRouteModule
   // (a plain Record lookup, no import).
   "layout.ts": ["await import(filePath)"],
+  // renderSpaShell(): source-mode root.tsx load for the SPA shell. Compiled
+  // binaries always pass a moduleRegistry, which takes the registry branch
+  // (plain Record lookup) before this import is reached.
+  "spa.ts": ["await import(rootPath)"],
 };
 
 async function serverFiles(): Promise<string[]> {

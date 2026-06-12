@@ -3,8 +3,9 @@ import type { TrieNode } from "./matcher.ts";
 import { matchRoute } from "./matcher.ts";
 import { resolveRouteChain, type ModuleRegistry } from "./layout.ts";
 import { runLoaders, runAction, buildLoaderArgs, runRouteContext, runBeforeLoad } from "./loader.ts";
+import { validateSearch } from "./search.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
-import { resolveMeta } from "./meta.ts";
+import { resolveMeta, mergeMeta } from "./meta.ts";
 import { json, error, sanitizeRedirect } from "./response.ts";
 import { isRedirect, isHttpError } from "../shared/errors.ts";
 import { isExplicitDev } from "./env.ts";
@@ -87,6 +88,10 @@ async function route(
         headers: request.headers,
         method: "GET",
       });
+      // Validate search params before any route work runs — loaders must
+      // never see unvalidated input, and a 400 here is cheaper than a wasted
+      // context-factory/loader run. The thrown 400 Response propagates below.
+      const search = await validateSearch(chain.route.searchSchema, targetUrl);
       // SECURITY(high): /_data must run the same auth/redirect gates as a full
       // page request — otherwise a SPA-style soft navigation to a protected
       // route would bypass beforeLoad() / defineContext() and leak loader data.
@@ -96,13 +101,20 @@ async function route(
         match.params,
         context,
       );
-      const args = buildLoaderArgs(loaderRequest, match.params, routeContext);
+      const args = buildLoaderArgs(loaderRequest, match.params, routeContext, search);
       const beforeLoadResponse = await runBeforeLoad(chain.route, args);
       if (beforeLoadResponse) return beforeLoadResponse;
       const results = await runLoaders(chain, args, onError);
-      return json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params });
+      // Merged meta must ride along: ClientRouter re-renders the document head
+      // from this payload on soft navigation, and the initial __BRACTJS_DATA__
+      // already carries the merged shape.
+      const meta = mergeMeta(resolveMeta(chain, results, match.params));
+      return json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params, meta, search });
     } catch (err) {
       if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
+      // A non-redirect Response (e.g. the 400 thrown by search validation)
+      // is the intended reply — pass it through verbatim.
+      if (err instanceof Response) return err;
       if (isHttpError(err)) return json({ error: err.message }, { status: err.status });
       console.error("[bractjs] /_data error:", err);
       await fireOnError(onError, err, request);
@@ -115,6 +127,17 @@ async function route(
   if (!match) return error("Not Found", 404);
 
   const chain = await resolveRouteChain(match.routeFile, appDir, moduleRegistry);
+
+  // Validate search params before any route work (context factory, beforeLoad,
+  // action, loaders) — they all receive the validated object.
+  let search: Record<string, unknown>;
+  try {
+    search = await validateSearch(chain.route.searchSchema, url);
+  } catch (err) {
+    if (err instanceof Response) return err;
+    throw err;
+  }
+
   // Run per-route context factory (defineContext export) before loaders.
   const routeContext = await runRouteContext(
     chain.route as Parameters<typeof runRouteContext>[0],
@@ -122,7 +145,7 @@ async function route(
     match.params,
     context,
   );
-  const args = buildLoaderArgs(request, match.params, routeContext);
+  const args = buildLoaderArgs(request, match.params, routeContext, search);
 
   // ── beforeLoad ────────────────────────────────────────────────────────
   const beforeLoadResponse = await runBeforeLoad(chain.route, args);
@@ -167,10 +190,20 @@ async function route(
     }
   }
 
+  // ── Selective SSR ─────────────────────────────────────────────────────
+  // `ssr: false` skips the ROUTE loader during document SSR (root/layout
+  // loaders still run — they render the shell). beforeLoad already ran above:
+  // it is the auth gate and must hold for every mode. The client completes
+  // the render via /_data after hydration, where the loader DOES run.
+  const routeSsr = chain.route.ssr ?? true;
+  const loaderChain = routeSsr === false
+    ? { ...chain, route: { ...chain.route, loader: undefined } }
+    : chain;
+
   // ── Loaders ───────────────────────────────────────────────────────────
   let loaderResults;
   try {
-    loaderResults = await runLoaders(chain, args, onError);
+    loaderResults = await runLoaders(loaderChain, args, onError);
   } catch (err) {
     if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
     if (isHttpError(err)) return error(err.message, err.status);
@@ -187,7 +220,10 @@ async function route(
 
   // ── SSR render ────────────────────────────────────────────────────────
   const RootComponent = chain.root.default ?? (() => null);
-  const RouteComponent = chain.route.default;
+  // Non-default SSR modes render the Fallback (or nothing) in the component's
+  // place; the client swaps in the real component after hydration.
+  const RouteComponent = routeSsr === true ? chain.route.default : chain.route.Fallback;
+  const ssrMode = routeSsr === true ? undefined : routeSsr === false ? "client-only" as const : "data-only" as const;
 
   // Wrap root in BractJSProvider so <Outlet> can render the route component
   // server-side without needing a ClientRouter.
@@ -201,6 +237,8 @@ async function route(
         pathname,
         manifest: manifest as unknown as import("../shared/context.ts").RouteManifest,
         RouteComponent,
+        location: { pathname, search: url.search, hash: "", state: null, key: "default" },
+        search,
       },
       children: createElement(RootComponent),
     },
@@ -214,10 +252,12 @@ async function route(
     actionData,
     params: match.params,
     pathname,
+    search,
     manifest,
     meta,
     routeFile: match.routeFile.filePath,
     // Set by the opt-in csp() middleware; undefined otherwise.
     nonce: getCspNonce(context),
+    ssrMode,
   });
 }

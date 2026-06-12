@@ -22,6 +22,32 @@ export function toSamePath(loc: string): string | null {
   }
 }
 
+// ── Navigation target parsing ──────────────────────────────────────────────
+
+/**
+ * Split an internal navigation target ("/path", "/path?q", "/path#h",
+ * "/path?q#h") into its parts. Callers must normalize absolute URLs through
+ * `toSamePath()` first — this is a pure string split, not a URL parser.
+ */
+export function parseTo(to: string): { pathname: string; search: string; hash: string } {
+  const hashIdx = to.indexOf("#");
+  const hash = hashIdx === -1 ? "" : to.slice(hashIdx);
+  const beforeHash = hashIdx === -1 ? to : to.slice(0, hashIdx);
+  const searchIdx = beforeHash.indexOf("?");
+  const search = searchIdx === -1 ? "" : beforeHash.slice(searchIdx);
+  const pathname = searchIdx === -1 ? beforeHash : beforeHash.slice(0, searchIdx);
+  return { pathname: pathname || "/", search, hash };
+}
+
+/** Random short key identifying a history entry (scroll restoration identity). */
+export function createLocationKey(): string {
+  try {
+    return crypto.randomUUID().slice(0, 8);
+  } catch {
+    return Math.random().toString(36).slice(2, 10);
+  }
+}
+
 // ── Pattern Matching ───────────────────────────────────────────────────────
 
 /**

@@ -1,4 +1,5 @@
 import { createContext, useContext, createElement, type ComponentType, type ReactNode } from "react";
+import type { RouterLocation } from "./route-types.ts";
 
 export interface RouteManifest {
   [routeId: string]: {
@@ -15,6 +16,10 @@ export interface BractJSContextValue {
   manifest: RouteManifest;
   /** SSR-only: the matched route's default export so <Outlet> can render it without ClientRouter */
   RouteComponent?: ComponentType;
+  /** The request's location, so `useLocation()` works during SSR (hash is always ""). */
+  location?: RouterLocation;
+  /** Validated search params (route `searchSchema` output), so `useSearch()` works during SSR. */
+  search?: Record<string, unknown>;
 }
 
 export const BractJSContext = createContext<BractJSContextValue>(null!);

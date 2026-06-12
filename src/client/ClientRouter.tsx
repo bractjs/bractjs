@@ -7,19 +7,24 @@ import {
   NavigationContext,
   type RouteState,
   type NavigationState,
+  type NavigateOptions,
   type RouteModuleClient,
+  type HydrationPending,
 } from "./router.tsx";
 import type { ServerManifest } from "../server/render.ts";
-import { matchPatternForPath, toSamePath } from "./nav-utils.ts";
+import { matchPatternForPath, toSamePath, parseTo, createLocationKey } from "./nav-utils.ts";
 import { loaderCache, cacheKey } from "./cache.ts";
+import { registerRevalidator, type RevalidationInfo } from "./revalidation.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
-import type { MetaDescriptor } from "../shared/route-types.ts";
+import type { MetaDescriptor, RouterLocation, ShouldRevalidateFunction } from "../shared/route-types.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface BractJSInitialData extends RouteState {
   manifest: ServerManifest;
   meta?: MetaDescriptor[];
+  /** Present when the document did not SSR the route component (selective SSR / SPA shell). */
+  ssrMode?: "client-only" | "data-only" | "spa";
 }
 
 interface ClientRouterProps {
@@ -28,31 +33,52 @@ interface ClientRouterProps {
   initialModule?: RouteModuleClient | null;
 }
 
+/** History-entry init carried into loadRoute by navigate/popstate. */
+interface LocationInit {
+  key?: string;
+  state?: unknown;
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export function ClientRouter({ children, initialData, initialModule = null }: ClientRouterProps): ReactElement {
   const [loaderData, setLoaderData] = useState(initialData.loaderData);
   const [actionData, setActionData] = useState<unknown>(initialData.actionData);
   const [params, setParams] = useState(initialData.params);
-  const [pathname, setPathname] = useState(initialData.pathname);
+  const [location, setLocation] = useState<RouterLocation>(initialData.location);
+  const [search, setSearch] = useState<Record<string, unknown>>(initialData.search ?? {});
   const [navState, setNavState] = useState<NavigationState>("idle");
+  const [revalidationState, setRevalidationState] = useState<"idle" | "loading">("idle");
   const [currentModule, setCurrentModule] = useState<RouteModuleClient | null>(initialModule);
   const [meta, setMeta] = useState<MetaDescriptor[]>(initialData.meta ?? []);
+  const [hydrationPending, setHydrationPending] = useState<HydrationPending>(initialData.ssrMode ?? false);
 
   const manifest = initialData.manifest;
 
   // Stable ref to navigate so loadRoute can call it without a circular dep.
   const navigateRef = useRef<(to: string) => Promise<void>>(null!);
 
+  // Refs mirroring state that the stable revalidate/submit callbacks need.
+  const locationRef = useRef(location);
+  useEffect(() => { locationRef.current = location; }, [location]);
+  const currentModuleRef = useRef(currentModule);
+  useEffect(() => { currentModuleRef.current = currentModule; }, [currentModule]);
+
   const setRoute = useCallback((state: Partial<RouteState>) => {
     if (state.loaderData !== undefined) setLoaderData(state.loaderData);
     if (state.actionData !== undefined) setActionData(state.actionData);
     if (state.params !== undefined) setParams(state.params);
-    if (state.pathname !== undefined) setPathname(state.pathname);
+    if (state.search !== undefined) setSearch(state.search);
+    if (state.location !== undefined) setLocation(state.location);
+    else if (state.pathname !== undefined) {
+      // Legacy callers pass a (possibly query-carrying) pathname string.
+      const parsed = parseTo(state.pathname);
+      setLocation((prev) => ({ ...prev, ...parsed }));
+    }
   }, []);
 
   /** Load route data + module without touching history. */
-  const loadRoute = useCallback(async (to: string) => {
+  const loadRoute = useCallback(async (to: string, locInit?: LocationInit) => {
     setNavState("loading");
     // Follow a redirect Location from client-side beforeLoad. Same-origin
     // targets stay in the SPA; an off-origin/protocol-relative Location is NOT
@@ -64,7 +90,18 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
       window.location.href = loc;
     };
     try {
-      const toPathname = to.split("?")[0];
+      const { pathname: toPathname, search: toSearch, hash: toHash } = parseTo(to);
+      // The path handed to /_data: never includes the hash (the fragment is
+      // client-only) and never inherits the previous page's query string —
+      // what you navigate to is exactly what loads.
+      const dataPath = toPathname + toSearch;
+      const nextLocation: RouterLocation = {
+        pathname: toPathname,
+        search: toSearch,
+        hash: toHash,
+        state: locInit?.state ?? null,
+        key: locInit?.key ?? createLocationKey(),
+      };
       const pattern = matchPatternForPath(toPathname, manifest);
       const chunkUrl = pattern !== null ? manifest.routes[pattern]?.chunk : undefined;
 
@@ -99,8 +136,20 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
         }
       }
 
-      // Include search params in the /_data path param so loaders receive them.
-      const toWithSearch = to.includes("?") ? to : to + window.location.search;
+      // Commit a /_data payload + the new location in one transition.
+      const commit = (data: Record<string, unknown>, module: RouteModuleClient | null) => {
+        startTransition(() => {
+          setLoaderData(data);
+          setParams((data.params as Record<string, string>) ?? {});
+          setLocation(nextLocation);
+          setSearch((data.search as Record<string, unknown>) ?? {});
+          setCurrentModule(module);
+          // Re-render the document head from the new route's merged meta.
+          // React 19 hoists the <title>/<meta> elements rendered by <MetaTags>
+          // into <head>, so description/OG tags update on soft navigation.
+          setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
+        });
+      };
 
       // ── Cache lookup (B1 / B2) ──────────────────────────────────────────
       // Read config and loaderDeps from the route module if available.
@@ -113,33 +162,34 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
       const loaderDepsFn = (routeModule as Record<string, unknown> | null)?.loaderDeps as
         | ((args: { searchParams: URLSearchParams }) => unknown[])
         | undefined;
-      const searchParams = new URLSearchParams(toWithSearch.split("?")[1] ?? "");
-      const deps = loaderDepsFn ? loaderDepsFn({ searchParams }) : [toWithSearch];
+      const searchParams = new URLSearchParams(toSearch);
+      const deps = loaderDepsFn ? loaderDepsFn({ searchParams }) : [dataPath];
       const key = cacheKey(toPathname, deps);
 
       const cached = loaderCache.get(key);
       if (cached?.fresh) {
         // Serve from cache immediately; skip fetch.
-        startTransition(() => {
-          setLoaderData(cached.data);
-          setParams((cached.data.params as Record<string, string>) ?? {});
-          setPathname(to);
-          setCurrentModule(routeModule);
-        });
+        commit(cached.data, routeModule);
         setNavState("idle");
         return;
       }
       if (cached && !cached.fresh) {
         // Stale-while-revalidate: render stale data immediately, then refresh.
-        startTransition(() => {
-          setLoaderData(cached.data);
-          setParams((cached.data.params as Record<string, string>) ?? {});
-          setPathname(to);
-          setCurrentModule(routeModule);
-        });
+        commit(cached.data, routeModule);
         setNavState("idle");
+        // The route can veto the background refetch via shouldRevalidate.
+        const gate = (routeModule as Record<string, unknown> | null)
+          ?.shouldRevalidate as ShouldRevalidateFunction | undefined;
+        const allowRefetch = gate
+          ? gate({
+              currentUrl: new URL(window.location.href),
+              nextUrl: new URL(dataPath, window.location.origin),
+              defaultShouldRevalidate: true,
+            })
+          : true;
+        if (!allowRefetch) return;
         // Revalidate in background.
-        void fetch(`/_data?path=${encodeURIComponent(toWithSearch)}`)
+        void fetch(`/_data?path=${encodeURIComponent(dataPath)}`)
           .then((r) => r.ok ? r.json() : null)
           .then((fresh) => {
             if (!fresh) return;
@@ -147,13 +197,15 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
             startTransition(() => {
               setLoaderData(fresh as Record<string, unknown>);
               setParams(((fresh as Record<string, unknown>).params as Record<string, string>) ?? {});
+              setSearch(((fresh as Record<string, unknown>).search as Record<string, unknown>) ?? {});
+              setMeta(((fresh as Record<string, unknown>).meta as MetaDescriptor[] | undefined) ?? []);
             });
           });
         return;
       }
 
       // Cache miss — fetch from server.
-      const res = await fetch(`/_data?path=${encodeURIComponent(toWithSearch)}`);
+      const res = await fetch(`/_data?path=${encodeURIComponent(dataPath)}`);
       // Guard: always parse JSON, but only when the server signals success.
       // Without res.ok check, a Bun 500 plain-text response causes
       // SyntaxError: JSON.parse: unexpected character — an unhandled rejection.
@@ -183,17 +235,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
           });
         }).catch(() => {/* devtools not available in prod */});
       }
-      startTransition(() => {
-        setLoaderData(data);
-        setParams((data.params as Record<string, string>) ?? {});
-        setPathname(to);
-        setCurrentModule(routeModule);
-      });
-      // Re-render the document head from the new route's merged meta. React 19
-      // hoists the <title>/<meta> elements rendered by <MetaTags> into <head>,
-      // so description/OG tags update on soft navigation, not just the title.
-      const nextMeta = (data.meta as MetaDescriptor[] | undefined) ?? [];
-      startTransition(() => setMeta(nextMeta));
+      commit(data, routeModule);
     } catch (err) {
       console.error("[bractjs] loadRoute error:", err);
     } finally {
@@ -201,17 +243,130 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
     }
   }, [manifest]);
 
-  const navigate = useCallback(async (to: string) => {
-    await loadRoute(to);
-    history.pushState({}, "", to);
+  const navigate = useCallback(async (to: string, options?: NavigateOptions) => {
+    const key = createLocationKey();
+    await loadRoute(to, { key, state: options?.state ?? null });
+    const entry = { __bractKey: key, __bractState: options?.state ?? null };
+    if (options?.replace) history.replaceState(entry, "", to);
+    else history.pushState(entry, "", to);
   }, [loadRoute]);
 
   // Keep navigateRef current so loadRoute can redirect via navigate.
   useEffect(() => { navigateRef.current = navigate; }, [navigate]);
 
-  // Handle browser back / forward
+  /**
+   * Re-run the active route's loaders and commit fresh data without touching
+   * history or the location. Gated by the route's shouldRevalidate export;
+   * mutation-triggered runs (info.formMethod set) first drop the whole loader
+   * cache — any cached entry may reflect pre-mutation state.
+   */
+  const revalidate = useCallback(async (info?: RevalidationInfo) => {
+    const loc = locationRef.current;
+    const path = loc.pathname + loc.search;
+    const gate = (currentModuleRef.current as Record<string, unknown> | null)
+      ?.shouldRevalidate as ShouldRevalidateFunction | undefined;
+    const url = new URL(path, window.location.origin);
+    const allow = gate
+      ? gate({
+          currentUrl: url,
+          nextUrl: url,
+          formMethod: info?.formMethod,
+          actionStatus: info?.actionStatus,
+          defaultShouldRevalidate: true,
+        })
+      : true;
+    if (!allow) return;
+    if (info?.formMethod) loaderCache.clear();
+    setRevalidationState("loading");
+    try {
+      const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+      if (!res.ok) {
+        console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
+        return;
+      }
+      const data = (await res.json()) as Record<string, unknown>;
+      startTransition(() => {
+        setLoaderData(data);
+        setParams((data.params as Record<string, string>) ?? {});
+        setSearch((data.search as Record<string, unknown>) ?? {});
+        setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
+      });
+    } catch (err) {
+      console.error("[bractjs] revalidate error:", err);
+    } finally {
+      setRevalidationState("idle");
+    }
+  }, []);
+
+  // Let fetchers trigger revalidation without importing this component.
   useEffect(() => {
-    const onPopState = () => { void loadRoute(location.pathname + location.search); };
+    registerRevalidator(revalidate);
+    return () => registerRevalidator(null);
+  }, [revalidate]);
+
+  // Selective-SSR / SPA hydration completion. The first client render matched
+  // the server (Fallback or empty shell); after mount, put loader data in
+  // place and swap in the real component via a transition.
+  useEffect(() => {
+    if (!hydrationPending) return;
+    if (hydrationPending === "data-only") {
+      // Loaders already ran on the server — the data arrived in the bootstrap.
+      startTransition(() => setHydrationPending(false));
+      return;
+    }
+    // "client-only" / "spa": the route loader never ran for this document.
+    void (async () => {
+      const path = window.location.pathname + window.location.search;
+      try {
+        const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+        // A redirect here is a beforeLoad gate (SPA shells skip server-side
+        // gating on the document). Do a real navigation — never render a
+        // protected route around redirected data.
+        if (res.redirected) {
+          const safe = toSamePath(res.url);
+          window.location.assign(safe ?? res.url);
+          return;
+        }
+        if (res.ok) {
+          const data = (await res.json()) as Record<string, unknown>;
+          startTransition(() => {
+            setLoaderData(data);
+            setParams((data.params as Record<string, string>) ?? {});
+            setSearch((data.search as Record<string, unknown>) ?? {});
+            setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
+            setHydrationPending(false);
+          });
+          return;
+        }
+        console.error(`[bractjs] hydration /_data ${res.status} for ${path}`);
+      } catch (err) {
+        console.error("[bractjs] hydration fetch error:", err);
+      }
+      startTransition(() => setHydrationPending(false));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Stamp the initial history entry with our key so back/forward to it can
+  // restore scroll position. Merge into any pre-existing state, don't replace.
+  useEffect(() => {
+    const st = history.state as Record<string, unknown> | null;
+    if (!st || typeof st.__bractKey !== "string") {
+      history.replaceState({ ...(st ?? {}), __bractKey: initialData.location.key }, "", window.location.href);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle browser back / forward. `window.location` must stay explicit here —
+  // the component has a `location` state variable that would shadow the global.
+  useEffect(() => {
+    const onPopState = (e: PopStateEvent) => {
+      const st = e.state as { __bractKey?: string; __bractState?: unknown } | null;
+      void loadRoute(
+        window.location.pathname + window.location.search + window.location.hash,
+        { key: st?.__bractKey ?? "default", state: st?.__bractState ?? null },
+      );
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [loadRoute]);
@@ -225,22 +380,59 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
     const w = window as unknown as { __BRACT_DEV__?: boolean; __BRACTJS_HMR_ACCEPT__?: unknown };
     if (w.__BRACT_DEV__ !== true) return;
     w.__BRACTJS_HMR_ACCEPT__ = (pattern: string, mod: RouteModuleClient) => {
-      const current = matchPatternForPath(pathname, manifest);
+      const current = matchPatternForPath(location.pathname, manifest);
       if (current === pattern) startTransition(() => setCurrentModule(mod));
     };
     return () => { delete w.__BRACTJS_HMR_ACCEPT__; };
-  }, [pathname, manifest]);
+  }, [location.pathname, manifest]);
 
+  /**
+   * Submit a mutation: navState walks "submitting" → "loading" (revalidation)
+   * → "idle", which is what `useNavigation()` renders pending UI from. The
+   * fetch mirrors `<Form>`'s contract: the CSRF header marks it a same-origin
+   * mutation, and a redirected response becomes a real navigation — via
+   * toSamePath so an attacker-controlled Location can never soft-nav the SPA.
+   */
   const submit = useCallback(async (
-    _to: string,
-    _opts: { method: string; body: FormData | Record<string, string> },
+    to: string,
+    opts: { method: string; body: FormData | Record<string, string> },
   ) => {
     setNavState("submitting");
-    setNavState("idle");
-  }, []);
+    try {
+      const body = opts.body instanceof FormData
+        ? opts.body
+        : new URLSearchParams(opts.body);
+      const res = await fetch(to, {
+        method: opts.method.toUpperCase(),
+        body,
+        headers: { "X-BractJS-Action": "1" },
+      });
+      if (res.redirected) {
+        const safe = toSamePath(res.url);
+        if (safe) {
+          // navigate() loads fresh data for the target — no extra revalidation.
+          await navigateRef.current(safe);
+          return;
+        }
+        window.location.assign(res.url);
+        return;
+      }
+      const data = (await res.json()) as unknown;
+      setActionData(data);
+      setNavState("loading");
+      await revalidate({ formMethod: opts.method, actionStatus: res.status });
+    } finally {
+      setNavState("idle");
+    }
+  }, [revalidate]);
 
   return (
-    <RouterContext.Provider value={{ loaderData, actionData, params, pathname, manifest, currentModule, setRoute }}>
+    <RouterContext.Provider
+      value={{
+        loaderData, actionData, params, pathname: location.pathname, location, search,
+        manifest, currentModule, setRoute, revalidate, revalidationState, hydrationPending,
+      }}
+    >
       <NavigationContext.Provider value={{ state: navState, navigate, submit }}>
         <MetaTags meta={meta} />
         {children}

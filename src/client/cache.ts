@@ -31,6 +31,14 @@ class LoaderCache {
     this.store.delete(key);
   }
 
+  /**
+   * Drop every entry. Called after a successful mutation — any cached loader
+   * data may now be stale, and serving it would show pre-mutation state.
+   */
+  clear(): void {
+    this.store.clear();
+  }
+
   entries(): Array<{ key: string; age: number; staleTime: number; gcTime: number }> {
     const now = Date.now();
     return Array.from(this.store.entries()).map(([key, entry]) => ({

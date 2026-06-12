@@ -34,6 +34,16 @@ test("GET /_data?path=/ returns JSON with route key", async () => {
   expect(data).toHaveProperty("params");
 });
 
+// Regression: soft navigation reads `meta` from the /_data payload to update
+// the document head — when the payload omitted it, every soft-nav wiped the
+// title/description back to nothing.
+test("GET /_data?path=/ includes the route's merged meta", async () => {
+  const res = await fetch(`${BASE}/_data?path=/`);
+  const data = (await res.json()) as { meta?: Array<Record<string, string>> };
+  expect(Array.isArray(data.meta)).toBe(true);
+  expect(data.meta).toContainEqual({ title: "BractJS Test Home" });
+});
+
 test("POST / runs action and returns 200 HTML", async () => {
   const form = new FormData();
   form.set("name", "bract");

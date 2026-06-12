@@ -102,6 +102,14 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
     // full-page GET, POST actions, and the /_data soft-nav endpoint alike.
     beforeLoad: mod.beforeLoad,
     context: mod.context,
+    // searchSchema gates loader input — dropping it silently skips search
+    // validation, so loaders would see raw strings where they expect coerced data.
+    searchSchema: mod.searchSchema,
+    // Selective-SSR surface: dropping `ssr` would silently restore full SSR
+    // (running loaders the route opted out of); dropping `Fallback` would
+    // SSR an empty outlet and guarantee a hydration mismatch.
+    ssr: mod.ssr,
+    Fallback: mod.Fallback,
     handle: mod.handle,
     ErrorBoundary: mod.ErrorBoundary,
     default: mod.default,
@@ -124,6 +132,11 @@ function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined)
     // note in importRouteModule. The compiled-binary path goes through here.
     beforeLoad: m.beforeLoad as RouteModule["beforeLoad"],
     context: m.context as unknown,
+    // Keep searchSchema too — see importRouteModule. Missing it here would
+    // skip search validation only in compiled binaries, the worst kind of skew.
+    searchSchema: m.searchSchema,
+    ssr: m.ssr as RouteModule["ssr"],
+    Fallback: m.Fallback as RouteModule["Fallback"],
     handle: m.handle as RouteModule["handle"],
     ErrorBoundary: m.ErrorBoundary as RouteModule["ErrorBoundary"],
     default: m.default as RouteModule["default"],
