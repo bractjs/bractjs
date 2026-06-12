@@ -101,6 +101,16 @@ switch (command) {
     const { loadUserConfig } = await import("../src/config/load.ts");
     const userCfg = await loadUserConfig();
     await runBuild({ appDir: "./app", buildDir: "./build", ...userCfg });
+    if (userCfg.prerender) {
+      const { runPrerender } = await import("../src/build/prerender.ts");
+      const { written } = await runPrerender({
+        prerender: userCfg.prerender,
+        appDir: userCfg.appDir ?? "./app",
+        publicDir: userCfg.publicDir,
+        buildDir: userCfg.buildDir ?? "./build",
+      });
+      console.log(`[bract] prerender → ${written.length} files`);
+    }
     break;
   }
 
@@ -109,7 +119,10 @@ switch (command) {
     // output. Users can still override with `NODE_ENV=staging bractjs start`.
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
     const { createServer } = await import("../src/server/serve.ts");
-    createServer({ port: 3000, buildDir: "./build" });
+    const { loadUserConfig } = await import("../src/config/load.ts");
+    // The config carries runtime-relevant fields too (ssr, port, dirs).
+    const userCfg = await loadUserConfig();
+    createServer({ port: 3000, buildDir: "./build", ...userCfg });
     break;
   }
 

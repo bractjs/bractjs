@@ -60,7 +60,7 @@ export async function runBeforeLoad(
   args: LoaderArgs,
 ): Promise<Response | null> {
   const fn = routeModule.beforeLoad as
-    | ((a: { params: Record<string,string>; context: Record<string,unknown>; location: { pathname: string; search: string } }) => unknown)
+    | ((a: { params: Record<string,string>; context: Record<string,unknown>; location: { pathname: string; search: string }; search?: Record<string, unknown> }) => unknown)
     | undefined;
   if (!fn) return null;
   const url = new URL(args.request.url);
@@ -68,6 +68,7 @@ export async function runBeforeLoad(
     params: args.params,
     context: args.context,
     location: { pathname: url.pathname, search: url.search },
+    search: args.search,
   });
   if (result instanceof Response) return result;
   return null;
@@ -118,9 +119,10 @@ export async function runAction(
 export function buildLoaderArgs(
   request: Request,
   params: Record<string, string>,
-  context: Record<string, unknown>
+  context: Record<string, unknown>,
+  search: Record<string, unknown> = {},
 ): LoaderArgs {
-  return { request, params, context };
+  return { request, params, context, search };
 }
 
 // ── runRouteContext ────────────────────────────────────────────────────────

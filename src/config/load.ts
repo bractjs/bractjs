@@ -45,6 +45,13 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
   check("onStart", typeof c.onStart === "function", "a function");
   check("onShutdown", typeof c.onShutdown === "function", "a function");
   check("onError", typeof c.onError === "function", "a function");
+  check("ssr", typeof c.ssr === "boolean", "a boolean");
+  check(
+    "prerender",
+    typeof c.prerender === "function" ||
+      (Array.isArray(c.prerender) && c.prerender.every((p) => typeof p === "string")),
+    "an array of paths or a function returning one",
+  );
 
   return c as Partial<BractJSConfig>;
 }

@@ -1,7 +1,5 @@
 import { useContext, type FormEvent, type ReactNode, type FormHTMLAttributes } from "react";
 import { RouterContext, NavigationContext } from "../router.tsx";
-import { reloadLoaders } from "../form-utils.ts";
-import { toSamePath } from "../nav-utils.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -28,44 +26,22 @@ export function Form({ method = "post", action, children, ...rest }: FormProps) 
     );
   }
 
-  const { pathname, setRoute } = routerCtx;
-  const { navigate } = navCtx;
-
-  // setLoaderData shim — updates just the loaderData slice via setRoute
-  function setLoaderData(data: Record<string, unknown>) {
-    setRoute({ loaderData: data });
-  }
+  const { location, setRoute } = routerCtx;
+  const { submit } = navCtx;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setRoute({ actionData: null }); // clear stale action data
 
     const target = e.currentTarget;
-    const url = action ?? pathname;
-    const formData = new FormData(target);
+    // Default to the full current URL (pathname + search) so actions can read
+    // the same search params their page was rendered with.
+    const url = action ?? location.pathname + location.search;
 
-    const response = await fetch(url, {
-      method: method.toUpperCase(),
-      body: formData,
-      headers: { "X-BractJS-Action": "1" },
-    });
-
-    // The action returned (or threw) a redirect. The browser auto-follows the
-    // 3xx, so `response.url` is the *absolute* final URL — normalize it to a
-    // same-origin path before handing it to the client router, which matches a
-    // route pattern against the pathname (an absolute URL wouldn't match). An
-    // off-origin final URL is NOT handed to the SPA router: fall back to a
-    // full-page navigation so we don't open-redirect through it.
-    if (response.redirected) {
-      const to = toSamePath(response.url);
-      if (to) { await navigate(to); return; }
-      window.location.href = response.url;
-      return;
-    }
-
-    const actionData = (await response.json()) as unknown;
-    setRoute({ actionData });
-    await reloadLoaders(pathname, setLoaderData);
+    // The router's submit drives useNavigation() through "submitting" →
+    // "loading" → "idle", commits the action data, follows redirects safely
+    // (CSRF header + same-origin guard), and revalidates loaders.
+    await submit(url, { method, body: new FormData(target) });
   }
 
   return (

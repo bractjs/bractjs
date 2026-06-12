@@ -28,9 +28,13 @@ function FallbackApp(): ReactElement {
     if (rootMod.default) RootComponent = rootMod.default;
   }
 
+  // The SPA shell is built once for "/" and served for every document path —
+  // the browser URL, not the payload, says where we actually are.
+  const initialPathname = data.ssrMode === "spa" ? window.location.pathname : data.pathname;
+
   // 2. Pre-load the current route module so <Outlet> sees it during hydration.
   let initialModule: RouteModuleClient | null = null;
-  const pattern = matchPatternForPath(data.pathname, data.manifest);
+  const pattern = matchPatternForPath(initialPathname, data.manifest);
   const chunkUrl = pattern !== null ? data.manifest.routes[pattern]?.chunk : undefined;
 
   if (chunkUrl) {
@@ -40,9 +44,23 @@ function FallbackApp(): ReactElement {
     initialModule = (await import(url)) as RouteModuleClient;
   }
 
+  // Initial location: pathname comes from the server payload; search is
+  // identical to the request's by construction. The hash never reaches the
+  // server, so it is only known here.
+  const initialLocation = {
+    pathname: initialPathname,
+    search: window.location.search,
+    hash: window.location.hash,
+    state: null,
+    key: "default",
+  };
+
   hydrateRoot(
     document,
-    <ClientRouter initialData={data} initialModule={initialModule}>
+    <ClientRouter
+      initialData={{ ...data, location: initialLocation, search: data.search ?? {} }}
+      initialModule={initialModule}
+    >
       <RootComponent />
     </ClientRouter>,
   );

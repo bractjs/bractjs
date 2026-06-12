@@ -50,12 +50,20 @@ const LS = String.fromCharCode(0x2028);
 const PS = String.fromCharCode(0x2029);
 
 export function safeStringify(data: unknown): string {
-  const seen = new WeakSet();
-  const json = JSON.stringify(data, (_key, value) => {
-    if (typeof value === "object" && value !== null) {
-      if (seen.has(value)) return "[Circular]";
-      seen.add(value);
+  // Cycle detection must track ANCESTORS, not every visited node — a WeakSet
+  // of all seen objects flags legitimate shared references as "[Circular]"
+  // (e.g. a loader echoing `args.search` while the payload also carries
+  // `search` at the top level). MDN's replacer pattern: `this` is the holder
+  // object, so popping the stack until the top is the holder leaves exactly
+  // the current ancestor chain.
+  const ancestors: object[] = [];
+  const json = JSON.stringify(data, function (_key, value: unknown) {
+    if (typeof value !== "object" || value === null) return value;
+    while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+      ancestors.pop();
     }
+    if (ancestors.includes(value)) return "[Circular]";
+    ancestors.push(value);
     return value;
   });
   // Escape HTML-sensitive chars + JS LineTerminators (U+2028 / U+2029) so this

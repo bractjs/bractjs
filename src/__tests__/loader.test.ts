@@ -9,6 +9,7 @@ const stubArgs: LoaderArgs = {
   request: new Request("http://localhost/"),
   params: {},
   context: {},
+  search: {},
 };
 
 const emptyModule: RouteModule = {};

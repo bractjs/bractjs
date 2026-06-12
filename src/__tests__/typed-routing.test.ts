@@ -112,6 +112,17 @@ describe("typed routing (type-level)", () => {
     await mkdir(join(app, "routes", "blog"), { recursive: true });
     await writeFile(join(app, "routes", "_index.tsx"), "export default () => null;\n");
     await writeFile(join(app, "routes", "blog", "[id].tsx"), "export default () => null;\n");
+    // A route with a typed searchSchema: its safeParse return type is what
+    // `InferSchemaOutput` (and therefore useSearch<"/posts">) must pick up.
+    await writeFile(
+      join(app, "routes", "posts.tsx"),
+      `export const searchSchema = {\n` +
+        `  safeParse(_input: unknown): { success: boolean; data?: { page: number; q?: string } } {\n` +
+        `    return { success: true, data: { page: 1 } };\n` +
+        `  },\n` +
+        `};\n` +
+        `export default () => null;\n`,
+    );
 
     // Generate the registration file (augments Register on the package).
     await writeFile(join(app, "route-types.gen.ts"), await generateRouteTypes(app));
@@ -119,29 +130,44 @@ describe("typed routing (type-level)", () => {
 
     await writeFile(
       join(app, "usage.tsx"),
-      `import { Link, useNavigate, useParams, useSearchParams } from "@bractjs/bractjs";\n` +
+      `import { Link, useNavigate, useParams, useSearchParams, useSearch, useSetSearch } from "@bractjs/bractjs";\n` +
         `import "./route-types.gen.ts";\n` +
         `export function Ok() {\n` +
         `  const navigate = useNavigate();\n` +
         `  const p = useParams<"/blog/:id">();\n` +
         `  const id: string = p.id;\n` +
         `  useSearchParams<"/blog/:id">();\n` +
+        `  const s = useSearch<"/posts">();\n` +
+        `  const page: number = s.page;\n` +
+        `  const setSearch = useSetSearch<"/posts">();\n` +
+        `  void setSearch({ page: page + 1 });\n` +
+        `  void setSearch((prev) => ({ page: prev.page + 1 }), { replace: true });\n` +
         `  return (<>\n` +
         `    <Link to="/blog/:id" params={{ id }}>typed</Link>\n` +
         `    <Link to="/">static literal</Link>\n` +
+        `    <Link to="/posts" search={{ page: 2 }}>typed search</Link>\n` +
         `    <Link to={\`/\${id}\`}>built string (BC)</Link>\n` +
         `    <button onClick={() => { void navigate("/blog/:id", { params: { id } }); }}>go</button>\n` +
+        `    <button onClick={() => { void navigate("/posts", { search: { page: 3 } }); }}>paged</button>\n` +
         `    <button onClick={() => { void navigate("/"); }}>home</button>\n` +
         `  </>);\n` +
         `}\n` +
         `export function Bad() {\n` +
         `  const navigate = useNavigate();\n` +
         `  const p = useParams<"/blog/:id">();\n` +
+        `  const s = useSearch<"/posts">();\n` +
+        `  const setSearch = useSetSearch<"/posts">();\n` +
+        `  // @ts-expect-error page is a number, not a string\n` +
+        `  void setSearch({ page: "2" });\n` +
+        `  // @ts-expect-error the schema declares no \`bogus\` key\n` +
+        `  void (s.bogus);\n` +
         `  return (<>\n` +
         `    {/* @ts-expect-error wrong param key */}\n` +
         `    <Link to="/blog/:id" params={{ wrong: "1" }}>x</Link>\n` +
         `    {/* @ts-expect-error missing required param */}\n` +
         `    <Link to="/blog/:id" params={{}}>x</Link>\n` +
+        `    {/* @ts-expect-error search value has the wrong type */}\n` +
+        `    <Link to="/posts" search={{ page: "2" }}>x</Link>\n` +
         `    <button onClick={() => {\n` +
         `      // @ts-expect-error wrong param key in navigate\n` +
         `      void navigate("/blog/:id", { params: { wrong: "1" } });\n` +

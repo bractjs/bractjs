@@ -34,6 +34,8 @@ function substituteParams(pattern: string, params: string[]): string {
 // backtick, ${ }, or quote into the generated TS source.
 const SAFE_PATTERN_RE = /^\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*)(?:\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*))*$|^\/$/;
 const SAFE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// Same guard the module-registry codegen applies before emitting import paths.
+const SAFE_FILEPATH_RE = /^[A-Za-z0-9._\/\-\[\]]+$/;
 
 function assertSafePattern(pattern: string): void {
   if (!SAFE_PATTERN_RE.test(pattern)) {
@@ -43,6 +45,11 @@ function assertSafePattern(pattern: string): void {
 function assertSafeParam(name: string): void {
   if (!SAFE_IDENT_RE.test(name)) {
     throw new Error(`[bractjs] codegen: refusing to emit unsafe param name: ${JSON.stringify(name)}`);
+  }
+}
+function assertSafeFilePath(filePath: string): void {
+  if (!SAFE_FILEPATH_RE.test(filePath) || filePath.split("/").includes("..")) {
+    throw new Error(`[bractjs] codegen: refusing to emit unsafe file path: ${JSON.stringify(filePath)}`);
   }
 }
 
@@ -110,6 +117,38 @@ function searchParamsTypeLines(routes: Array<{ pattern: string }>): string {
   ].join("\n");
 }
 
+// Per-route VALIDATED search shapes, inferred from each route's `searchSchema`
+// export via type-only `typeof import(...)`. Routes without a schema fall back
+// to the user's RouteSearchParamsMap augmentation, then a permissive record.
+// This map feeds `Register.routes.searchOutput` → `useSearch`/`useSetSearch`/
+// `<Link search>`; the legacy string-valued `search` member is untouched.
+function searchOutputTypeLines(routes: Array<{ pattern: string; filePath: string }>): string {
+  if (routes.length === 0) {
+    return "export type GeneratedSearchOutput = Record<never, never>;";
+  }
+  const entries = routes
+    .map((r) => {
+      assertSafePattern(r.pattern);
+      assertSafeFilePath(r.filePath);
+      const key = JSON.stringify(r.pattern);
+      const spec = JSON.stringify("./" + r.filePath.split("\\").join("/"));
+      return "  " + key + ": typeof import(" + spec + ") extends { searchSchema: infer S }\n" +
+        "    ? InferSchemaOutput<S>\n" +
+        "    : (RouteSearchParamsMap extends Record<" + key + ", infer V> ? V : Record<string, unknown>);";
+    })
+    .join("\n");
+  return [
+    "// Validated search shape per route, inferred from `searchSchema` exports.",
+    "export type GeneratedSearchOutput = {",
+    entries,
+    "};",
+    "",
+    "/** Validated search object for a route — what `useSearch<T>()` returns. */",
+    "export type SearchOutput<T extends AppRoutes> =",
+    "  T extends keyof GeneratedSearchOutput ? GeneratedSearchOutput[T] : Record<string, unknown>;",
+  ].join("\n");
+}
+
 function contextTypeLines(routes: Array<{ pattern: string }>): string {
   if (routes.length === 0) {
     return "export type Context<_T extends AppRoutes> = Record<string, unknown>;";
@@ -156,6 +195,7 @@ function registerAugmentationLines(routes: Array<{ pattern: string; params: stri
     paramEntries,
     "      };",
     "      search: RouteSearchParamsMap;",
+    "      searchOutput: GeneratedSearchOutput;",
     "    };",
     "  }",
     "}",
@@ -167,6 +207,7 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
   const routes = routeFiles.map((r) => ({
     pattern: patternToColon(r.urlPattern),
     params: paramsFromSegments(r.segments),
+    filePath: r.filePath,
   }));
 
   const union = routes.length > 0
@@ -180,8 +221,9 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
 
   // `RouteSearchParamsMap` / `RouteContextMap` are imported from the package so
   // the local `SearchParams<T>` / `Context<T>` reference the same interfaces the
-  // user augments via `declare module "@bractjs/bractjs"`.
-  const IMPORTS = 'import type { RouteSearchParamsMap, RouteContextMap } from "@bractjs/bractjs";';
+  // user augments via `declare module "@bractjs/bractjs"`. `InferSchemaOutput`
+  // derives each route's validated search shape from its `searchSchema` export.
+  const IMPORTS = 'import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs";';
 
   return [
     HEADER,
@@ -194,12 +236,15 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
     "",
     searchParamsTypeLines(routes),
     "",
+    searchOutputTypeLines(routes),
+    "",
     contextTypeLines(routes),
     "",
     "export type TypedLoaderArgs<T extends AppRoutes> = {",
     "  request: Request;",
     "  params: RouteParams<T>;",
     "  context: Context<T>;",
+    "  search: T extends keyof GeneratedSearchOutput ? GeneratedSearchOutput[T] : Record<string, unknown>;",
     "};",
     "export type TypedActionArgs<T extends AppRoutes> =",
     "  TypedLoaderArgs<T> & { formData: FormData };",
