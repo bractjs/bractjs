@@ -1,10 +1,27 @@
-import { useContext, type AnchorHTMLAttributes, type ReactNode } from "react";
+import {
+  useContext, useEffect, useRef, useCallback,
+  type AnchorHTMLAttributes, type ReactNode,
+} from "react";
 import { NavigationContext, RouterContext } from "../router.tsx";
-import { prefetchRoute } from "../prefetch.ts";
+import { prefetchRoute, observeOnce } from "../prefetch.ts";
 import { buildPath } from "../build-path.ts";
-import type { RegisteredRoutes, ParamsFor } from "../registry.ts";
+import { withSearch } from "../search-serializer.ts";
+import type { RegisteredRoutes, ParamsFor, SearchOutputFor } from "../registry.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+/**
+ * When to prefetch the target route's chunk + loader data:
+ * - `"none"` (default) — never.
+ * - `"intent"` — on hover/focus, after a short delay (canceled if the pointer
+ *   leaves). The best default for most links.
+ * - `"hover"` — immediately on mouseenter (legacy alias of intent without the
+ *   delay; kept for back-compat).
+ * - `"viewport"` — when the link scrolls into view (shared
+ *   IntersectionObserver). Good for lists.
+ * - `"render"` — as soon as the link mounts.
+ */
+type PrefetchMode = "none" | "intent" | "hover" | "viewport" | "render";
 
 // `to` accepts any registered route literal (autocomplete + typed `params`) but
 // also any string via `(string & {})`, so existing call sites that build the URL
@@ -18,9 +35,13 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<
   to: TTo | (string & {});
   /** Path params for a dynamic `to` (e.g. `params={{ id }}` for `/blog/:id`). */
   params?: ParamsFor<TTo>;
-  prefetch?: "hover" | "none";
+  /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
+  search?: Partial<SearchOutputFor<TTo>>;
+  prefetch?: PrefetchMode;
   /** Opt in to View Transitions API for this navigation (E1). */
   viewTransition?: boolean;
+  /** Replace the current history entry instead of pushing. */
+  replace?: boolean;
   children: ReactNode;
 };
 
@@ -31,11 +52,16 @@ const supportsViewTransitions =
   typeof document !== "undefined" &&
   typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === "function";
 
+/** Hover-intent delay before prefetching — cancels on a fly-by pointer. */
+const INTENT_DELAY_MS = 100;
+
 export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
   to,
   params,
+  search,
   prefetch = "none",
   viewTransition = false,
+  replace,
   children,
   ...rest
 }: LinkProps<TTo>) {
@@ -44,8 +70,32 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
   const isLoading = navCtx?.state === "loading";
 
   // Resolve the final href once: substitute params into a dynamic pattern, or
-  // pass an already-built string straight through.
-  const href = params ? buildPath(to as string, params as Record<string, string>) : (to as string);
+  // pass an already-built string straight through; then apply `search`.
+  const base = params ? buildPath(to as string, params as Record<string, string>) : (to as string);
+  const href = withSearch(base, search as Record<string, unknown> | undefined);
+
+  const anchorRef = useRef<HTMLAnchorElement>(null);
+  const intentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerPrefetch = useCallback(() => {
+    if (routerCtx) void prefetchRoute(href, routerCtx.manifest);
+  }, [href, routerCtx]);
+
+  // viewport / render modes register in an effect — SSR renders a plain <a>.
+  useEffect(() => {
+    if (prefetch === "render") {
+      triggerPrefetch();
+      return;
+    }
+    if (prefetch === "viewport" && anchorRef.current) {
+      return observeOnce(anchorRef.current, triggerPrefetch);
+    }
+  }, [prefetch, triggerPrefetch]);
+
+  // Cancel a pending intent timer on unmount.
+  useEffect(() => () => {
+    if (intentTimer.current) clearTimeout(intentTimer.current);
+  }, []);
 
   function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
     if (!navCtx) return; // SSR: let browser handle naturally
@@ -54,22 +104,43 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
 
     if (viewTransition && supportsViewTransitions) {
       (document as Document & { startViewTransition(cb: () => void): void }).startViewTransition(
-        () => { void navCtx.navigate(href); },
+        () => { void navCtx.navigate(href, { replace }); },
       );
     } else {
-      void navCtx.navigate(href);
+      void navCtx.navigate(href, { replace });
+    }
+  }
+
+  function startIntent() {
+    if (prefetch !== "intent" || intentTimer.current) return;
+    intentTimer.current = setTimeout(() => {
+      intentTimer.current = null;
+      triggerPrefetch();
+    }, INTENT_DELAY_MS);
+  }
+
+  function cancelIntent() {
+    if (intentTimer.current) {
+      clearTimeout(intentTimer.current);
+      intentTimer.current = null;
     }
   }
 
   function handleMouseEnter() {
-    if (prefetch === "hover" && routerCtx) prefetchRoute(href, routerCtx.manifest);
+    if (prefetch === "hover") triggerPrefetch();
+    else startIntent();
   }
 
   return (
     <a
       href={href}
+      ref={anchorRef}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
+      onMouseLeave={cancelIntent}
+      onFocus={startIntent}
+      onBlur={cancelIntent}
+      onTouchStart={prefetch === "intent" || prefetch === "hover" ? triggerPrefetch : undefined}
       aria-disabled={isLoading || undefined}
       {...rest}
     >

@@ -4,8 +4,10 @@ import type { ReactNode, Context, CSSProperties } from "react";
 export type {
   LoaderArgs, ActionArgs, MetaDescriptor, MetaArgs,
   LoaderFunction, ActionFunction, MetaFunction, RouteModule,
-  RouteFile, Segment,
+  RouteFile, Segment, RouterLocation,
+  ShouldRevalidateArgs, ShouldRevalidateFunction,
 } from "./route.d.ts";
+import type { RouterLocation } from "./route.d.ts";
 
 // ── Config + Server ───────────────────────────────────────────────────────
 export type { BractJSConfig, ServerManifest, BuildConfig } from "./config.d.ts";
@@ -18,9 +20,15 @@ export interface RenderOptions {
   actionData: unknown;
   params: Record<string, string>;
   pathname: string;
+  /** Validated search params — hydrates `useSearch()` on the client. */
+  search?: Record<string, unknown>;
   manifest: ServerManifest;
   meta: MetaDescriptor[];
   status?: number;
+  routeFile?: string;
+  nonce?: string;
+  /** Set when the document did not SSR the route component (selective SSR / SPA shell). */
+  ssrMode?: "client-only" | "data-only" | "spa";
 }
 
 export type OnErrorHook = (err: unknown, request?: Request) => Promise<void> | void;
@@ -64,6 +72,10 @@ export interface BractJSContextValue {
   params: Record<string, string>;
   pathname: string;
   manifest: RouteManifest;
+  /** The request's location, so `useLocation()` works during SSR (hash is always ""). */
+  location?: RouterLocation;
+  /** Validated search params, so `useSearch()` works during SSR. */
+  search?: Record<string, unknown>;
 }
 export declare const BractJSContext: Context<BractJSContextValue>;
 export declare function BractJSProvider(props: { value: BractJSContextValue; children: ReactNode }): ReactNode;
@@ -129,6 +141,17 @@ export declare function validate<T>(
   input: FormData | Record<string, unknown>,
 ): Promise<T>;
 
+// ── Search-param validation ───────────────────────────────────────────────
+/** URLSearchParams → plain object; repeated keys collapse into arrays. */
+export declare function searchParamsToObject(sp: URLSearchParams): Record<string, string | string[]>;
+/**
+ * Validate a URL's search params against a route's `searchSchema`. No schema →
+ * the raw string record; failure → throws a 400 Response with field errors.
+ */
+export declare function validateSearch(schema: unknown, url: URL): Promise<Record<string, unknown>>;
+/** Serialize a search object back into a query string (leading `?`, or ""). */
+export declare function serializeSearch(search: Record<string, unknown>): string;
+
 // ── Typed-routing registration seam ───────────────────────────────────────
 // Mirror of src/client/registry.ts. Augment `Register` (done by `bractjs codegen`
 // in app/route-types.gen.ts) to make <Link>/useNavigate/useParams/useSearchParams
@@ -151,10 +174,21 @@ export type RegisteredParamsMap =
   Register extends { routes: { params: infer P } } ? P : Record<string, Record<string, string>>;
 export type RegisteredSearchMap =
   Register extends { routes: { search: infer S } } ? S : Record<string, Record<string, string>>;
+export type RegisteredSearchOutputMap =
+  Register extends { routes: { searchOutput: infer S } } ? S : Record<string, Record<string, unknown>>;
 export type ParamsFor<TTo> =
   TTo extends keyof RegisteredParamsMap ? RegisteredParamsMap[TTo] : Record<string, string>;
 export type SearchFor<TTo> =
   TTo extends keyof RegisteredSearchMap ? RegisteredSearchMap[TTo] : Record<string, string>;
+/** Validated (schema-output) search object for a specific route literal. */
+export type SearchOutputFor<TTo> =
+  TTo extends keyof RegisteredSearchOutputMap ? RegisteredSearchOutputMap[TTo] : Record<string, unknown>;
+/** Infer the output type of a Zod/Valibot-compatible schema (duck-typed z.infer). */
+export type InferSchemaOutput<S> =
+  S extends { parse(input: unknown): infer T } ? T :
+  S extends { safeParse(input: unknown): infer R }
+    ? (Awaited<R> extends { data?: infer T } ? NonNullable<T> : Record<string, unknown>)
+    : Record<string, unknown>;
 export declare function buildPath(pattern: string, params: Record<string, string | number>): string;
 
 // ── Client components ─────────────────────────────────────────────────────
@@ -165,13 +199,26 @@ export declare function Outlet(): ReactNode;
 export type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = {
   to: TTo | (string & {});
   params?: ParamsFor<TTo>;
-  prefetch?: "hover" | "none";
+  /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
+  search?: Partial<SearchOutputFor<TTo>>;
+  /** When to prefetch the target's chunk + loader data. Default "none". */
+  prefetch?: "none" | "intent" | "hover" | "viewport" | "render";
   viewTransition?: boolean;
+  /** Replace the current history entry instead of pushing. */
+  replace?: boolean;
   children?: ReactNode;
   className?: string;
   [key: string]: unknown;
 };
 export declare function Link<TTo extends RegisteredRoutes = RegisteredRoutes>(props: LinkProps<TTo>): ReactNode;
+
+export interface ScrollRestorationProps {
+  /** Derive the storage key for a location. Default: `location.key`. */
+  getKey?: (location: RouterLocation) => string;
+  storageKey?: string;
+}
+/** Restores scroll on back/forward, scrolls to top (or `#hash`) on new navigations. Render once in root.tsx. */
+export declare function ScrollRestoration(props?: ScrollRestorationProps): null;
 
 export interface FormProps { method?: "post" | "put" | "delete"; action?: string; children?: ReactNode; [key: string]: unknown; }
 export declare function Form(props: FormProps): ReactNode;
@@ -199,28 +246,84 @@ export declare function Image(props: ImageProps): ReactNode;
 // ── Client hooks ──────────────────────────────────────────────────────────
 export declare function useLoaderData<T = unknown>(): T;
 export declare function useActionData<T = unknown>(): T | null;
+/** The current location — reactive on the client, request-derived during SSR. */
+export declare function useLocation(): RouterLocation;
 export declare function useParams<TTo extends string>(): ParamsFor<TTo>;
 export declare function useParams<T extends Record<string, string> = Record<string, string>>(): T;
 export type NavigationState = "idle" | "loading" | "submitting";
 export declare function useNavigation(): { state: NavigationState };
 
-export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes> { params?: ParamsFor<TTo>; }
+export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes> {
+  params?: ParamsFor<TTo>;
+  /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
+  search?: Partial<SearchOutputFor<TTo>>;
+  /** Replace the current history entry instead of pushing a new one. */
+  replace?: boolean;
+  /** Arbitrary history state, readable via `useLocation().state` after navigating. */
+  state?: unknown;
+}
 export interface NavigateFn {
   <TTo extends RegisteredRoutes>(to: TTo | (string & {}), options?: NavigateOptions<TTo>): Promise<void>;
 }
 export declare function useNavigate(): NavigateFn;
+
+// ── Fetchers ──────────────────────────────────────────────────────────────
+export type FetcherState = "idle" | "loading" | "submitting";
+export interface FetcherEntry {
+  key: string;
+  state: FetcherState;
+  data: unknown;
+  /** The submitted form data while a submission is in flight — the optimistic-UI source. */
+  formData?: FormData;
+  formMethod?: string;
+}
+export interface FetcherFormProps {
+  method?: "post" | "put" | "delete";
+  action?: string;
+  children?: ReactNode;
+  [key: string]: unknown;
+}
 export interface FetcherResult {
   data: unknown;
-  state: NavigationState;
+  state: FetcherState;
+  formData?: FormData;
+  formMethod?: string;
+  key: string;
   load(path: string): Promise<void>;
   submit(path: string, opts: { method: string; body: FormData | Record<string, string> }): Promise<void>;
+  /** A form that submits through this fetcher (no navigation, no history). */
+  Form: (props: FetcherFormProps) => ReactNode;
 }
 export interface StreamFetcherResult<T = unknown> {
   events: AsyncGenerator<T>;
   connect(actionId: string): AsyncGenerator<T>;
 }
-export declare function useFetcher(): FetcherResult;
+export interface UseFetcherOptions { key?: string; stream?: boolean }
+export declare function useFetcher(opts?: { key?: string }): FetcherResult;
 export declare function useFetcher<T>(opts: { stream: true }): StreamFetcherResult<T>;
+/** Every active fetcher — the cross-component view for optimistic UI. */
+export declare function useFetchers(): FetcherEntry[];
+
+// ── Revalidation ──────────────────────────────────────────────────────────
+export interface Revalidator {
+  revalidate(): Promise<void>;
+  state: "idle" | "loading";
+}
+/** Manually re-run the active route's loaders (respects `shouldRevalidate`). */
+export declare function useRevalidator(): Revalidator;
+
+// ── Typed search ──────────────────────────────────────────────────────────
+/** The current route's VALIDATED search params (its `searchSchema` output). */
+export declare function useSearch<TTo extends string>(): SearchOutputFor<TTo>;
+export declare function useSearch<T extends Record<string, unknown>>(): T;
+export interface SetSearchOptions { replace?: boolean }
+export type SetSearchFn<T extends Record<string, unknown>> = (
+  updater: Partial<T> | ((prev: T) => Partial<T>),
+  options?: SetSearchOptions,
+) => Promise<void>;
+/** Merge a patch into the current search params and soft-navigate (loaders re-run). */
+export declare function useSetSearch<TTo extends string>(): SetSearchFn<SearchOutputFor<TTo>>;
+export declare function useSetSearch<T extends Record<string, unknown>>(): SetSearchFn<T>;
 
 export interface SearchParamsResult<T extends Record<string, string> = Record<string, string>> {
   searchParams: URLSearchParams;
@@ -316,3 +419,21 @@ export interface DevServer {
 export declare function createDevServer(options?: DevServerOptions): Promise<DevServer>;
 
 export declare function loadUserConfig(): Promise<Partial<BractJSConfig>>;
+
+// ── Prerendering / SPA shell ──────────────────────────────────────────────
+export interface PrerenderOptions {
+  prerender: string[] | (() => string[] | Promise<string[]>);
+  appDir?: string;
+  publicDir?: string;
+  buildDir?: string;
+  manifest?: ServerManifest;
+}
+export interface PrerenderResult { written: string[] }
+/** Build-time prerendering (SSG): write HTML + /_data payloads under `<buildDir>/client/_prerender/`. */
+export declare function runPrerender(options: PrerenderOptions): Promise<PrerenderResult>;
+/** Render the SPA-mode document shell (config `ssr: false`). */
+export declare function renderSpaShell(
+  appDir: string,
+  manifest: ServerManifest,
+  registry?: ModuleRegistry,
+): Promise<string>;

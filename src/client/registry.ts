@@ -94,6 +94,15 @@ export type RegisteredParamsMap =
 export type RegisteredSearchMap =
   Register extends { routes: { search: infer S } } ? S : Record<string, Record<string, string>>;
 
+/**
+ * Pattern → VALIDATED search shape (the output of each route's `searchSchema`),
+ * registered by codegen under `Register.routes.searchOutput`. Distinct from
+ * `RegisteredSearchMap`, which stays string-valued for the legacy
+ * `useSearchParams` surface.
+ */
+export type RegisteredSearchOutputMap =
+  Register extends { routes: { searchOutput: infer S } } ? S : Record<string, Record<string, unknown>>;
+
 /** Params object for a specific route literal (`{}` for static routes). */
 export type ParamsFor<TTo> =
   TTo extends keyof RegisteredParamsMap ? RegisteredParamsMap[TTo] : Record<string, string>;
@@ -101,6 +110,21 @@ export type ParamsFor<TTo> =
 /** Search-params object for a specific route literal. */
 export type SearchFor<TTo> =
   TTo extends keyof RegisteredSearchMap ? RegisteredSearchMap[TTo] : Record<string, string>;
+
+/** Validated (schema-output) search object for a specific route literal. */
+export type SearchOutputFor<TTo> =
+  TTo extends keyof RegisteredSearchOutputMap ? RegisteredSearchOutputMap[TTo] : Record<string, unknown>;
+
+/**
+ * Infer the output type of a Zod/Valibot-compatible schema — the duck-typed
+ * counterpart of `z.infer`. Used by the generated route types to derive each
+ * route's search shape from its `searchSchema` export.
+ */
+export type InferSchemaOutput<S> =
+  S extends { parse(input: unknown): infer T } ? T :
+  S extends { safeParse(input: unknown): infer R }
+    ? (Awaited<R> extends { data?: infer T } ? NonNullable<T> : Record<string, unknown>)
+    : Record<string, unknown>;
 
 /** Whether a route literal carries any path params. Reserved for a future strict `<Link>` mode. */
 export type HasParams<TTo> =

@@ -41,6 +41,14 @@ export interface BractJSConfig {
    * proxy plugin hashed during the client build.
    */
   actionModules?: Array<{ relPath: string; mod: Record<string, unknown> }>;
+  /**
+   * SPA mode: `false` serves one static shell for every document GET instead
+   * of SSR ("no document SSR", not "no server" — /_data, actions, images and
+   * API routes keep working). Default `true`.
+   */
+  ssr?: boolean;
+  /** Paths to prerender at build time (SSG); served from disk before dynamic SSR. */
+  prerender?: string[] | (() => string[] | Promise<string[]>);
 }
 
 export interface ServerManifest {
@@ -60,4 +68,6 @@ export interface BuildConfig {
   minify?: boolean;
   clientEnv?: string[];
   plugins?: import("bun").BunPlugin[];
+  /** SPA mode: when `false`, the build also emits the static document shell. */
+  ssr?: boolean;
 }

@@ -19,6 +19,8 @@ export interface BuildConfig {
   minify?: boolean;
   clientEnv?: string[];
   plugins?: BunPlugin[];
+  /** SPA mode: when `false`, the build also emits the static document shell. */
+  ssr?: boolean;
 }
 
 export async function runBuild(config: BuildConfig): Promise<void> {
@@ -140,5 +142,26 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   // ── 5. Write manifest ──────────────────────────────────────────────────
   const manifest = generateManifest({ clientEntry, rootChunk, routeChunks, mode: "production" });
   await writeManifest(manifest, "build");
+
+  // ── 6. SPA shell (ssr: false) ───────────────────────────────────────────
+  // Emit the static document shell every document GET will serve in SPA mode.
+  if (config.ssr === false) {
+    const { renderSpaShell } = await import("../server/spa.ts");
+    const { installUseClientServerStub } = await import("../server/use-client-runtime.ts");
+    // root.tsx is imported from source here — "use client" components inside
+    // it must null-render exactly as they do on the running server.
+    installUseClientServerStub(appDir);
+    const serverManifest = {
+      clientEntry,
+      rootChunk,
+      routes: Object.fromEntries(
+        Object.entries(manifest.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk }]),
+      ),
+    };
+    const html = await renderSpaShell(appDir, serverManifest);
+    await Bun.write(join(buildDir, "client", "__spa.html"), html);
+    console.log("[bract] SPA shell → build/client/__spa.html");
+  }
+
   console.log("[bract] build complete →", Object.keys(manifest.routes).length, "routes");
 }

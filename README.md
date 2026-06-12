@@ -175,7 +175,9 @@ import type { LoaderArgs, ActionArgs, MetaArgs } from "@bractjs/bractjs";
 import { redirect, json, HttpError } from "@bractjs/bractjs";
 
 // 1) loader — runs on every GET. Return value → useLoaderData().
-export async function loader({ request, params, context }: LoaderArgs) {
+//    `search` is the validated output of searchSchema (below), or the raw
+//    string record when the route has no schema.
+export async function loader({ request, params, context, search }: LoaderArgs) {
   const post = await db.post.findById(params.id);
   if (!post) throw new HttpError(404, "Not found"); // → 404 page
   return { post };
@@ -210,7 +212,35 @@ export function ErrorBoundary({ error }: { error: unknown }) {
   return <p>Something broke: {error instanceof Error ? error.message : String(error)}</p>;
 }
 
-// 6) default — the page component (required for a renderable route).
+// 6) searchSchema — validate/coerce search params BEFORE loaders run (Zod,
+//    Valibot, or anything with parse/safeParse). Failure → 400; use
+//    .catch()/.default() per field for URLs that must tolerate junk.
+//    Loaders receive the OUTPUT via `search`; the client reads it with
+//    useSearch() — numbers stay numbers. (Typed end-to-end after codegen, §18.)
+export const searchSchema = z.object({
+  page: z.coerce.number().int().positive().catch(1),
+  q: z.string().optional(),
+});
+
+// 7) shouldRevalidate — veto automatic data refetches (the SWR background
+//    refetch, and the revalidation after <Form>/fetcher mutations).
+export function shouldRevalidate({ currentUrl, nextUrl, formMethod, defaultShouldRevalidate }) {
+  if (formMethod === "DELETE") return true;     // always refetch after deletes
+  return defaultShouldRevalidate;
+}
+
+// 8) ssr + Fallback — selective SSR (see also §21 for app-wide SPA mode):
+//    true (default)  full document SSR
+//    "data-only"     loaders run on the server; component renders client-only
+//    false           loader + component skipped during document SSR; the
+//                    client fetches /_data after hydration.
+//    beforeLoad ALWAYS runs on the server — ssr:false is not an auth bypass.
+export const ssr = "data-only";
+export function Fallback() {
+  return <p>Loading dashboard…</p>;             // SSR'd in the component's place
+}
+
+// 9) default — the page component (required for a renderable route).
 export default function BlogPost() {
   const { post } = useLoaderData<LoaderData>();
   return <article><h1>{post.title}</h1></article>;
@@ -220,7 +250,7 @@ export default function BlogPost() {
 **Execution order for a request:**
 
 ```
-beforeLoad → (action, if mutating method) → loaders (root + layouts + route, in parallel) → render
+searchSchema → beforeLoad → (action, if mutating method) → loaders (root + layouts + route, in parallel) → render
 ```
 
 - **Loaders run concurrently** (root, every layout, and the route loader all in one `Promise.all`).
@@ -360,24 +390,48 @@ const { id } = useParams<{ id: string }>();     // or a hand-written shape
 ```
 > The pattern is supplied by the caller because the framework can't infer the active route at the type level (React Router's `useParams` works the same way).
 
+### `useLocation()` → `{ pathname, search, hash, state, key }`
+The current location — reactive on the client, request-derived during SSR (`hash` is always `""` there). `key` is the history entry's identity (what scroll restoration uses); `state` is whatever you passed via `navigate(to, { state })`.
+```ts
+const location = useLocation();
+const isActive = location.pathname.startsWith("/blog");
+```
+
 ### `useNavigation()` → `{ state }`
-`"idle" | "loading" | "submitting"`.
+`"idle" | "loading" | "submitting"`. Form/`submit()` mutations walk `"submitting"` → `"loading"` (revalidation) → `"idle"`.
 ```ts
 const { state } = useNavigation();
 if (state === "loading") return <Spinner />;
 ```
 
-### `useNavigate()` → `(to, { params? }) => Promise<void>`
-Imperative soft navigation — the counterpart to `<Link>`. `to` autocompletes your routes (after codegen, §18) and `params` is typed per route; any string is still accepted.
+### `useNavigate()` → `(to, { params?, search?, replace?, state? }) => Promise<void>`
+Imperative soft navigation — the counterpart to `<Link>`. `to` autocompletes your routes (after codegen, §18); `params` and `search` are typed per route; any string is still accepted.
 ```ts
 const navigate = useNavigate();
-await navigate("/blog/:id", { params: { id: "42" } });   // typed
-await navigate("/about");                                  // static
-await navigate(`/blog/${id}`);                             // built string (also fine)
+await navigate("/blog/:id", { params: { id: "42" } });     // typed
+await navigate("/posts", { search: { page: 2 } });          // typed search → /posts?page=2
+await navigate("/login", { replace: true });                // replaceState, no history entry
+await navigate("/wizard/2", { state: { from: "step1" } });  // read via useLocation().state
+```
+
+### `useRevalidator()` → `{ revalidate, state }`
+Manually re-run the current route's loaders — for "Refresh" buttons, polling, or after out-of-band changes (e.g. a WebSocket event). Respects the route's `shouldRevalidate`. `state` is `"idle" | "loading"` and tracks only revalidation (navigations are `useNavigation()`).
+```ts
+const { revalidate, state } = useRevalidator();
+<button onClick={() => void revalidate()} disabled={state === "loading"}>Refresh</button>
+```
+
+### `useSearch()` / `useSetSearch()` — typed, validated search params
+`useSearch` returns the route's **validated** search object (the `searchSchema` output — numbers are numbers, defaults applied). Validation runs once on the server; the client never re-runs the schema. `useSetSearch` merges a patch, writes the URL, and soft-navigates so loaders re-run. Set a key to `undefined` to delete it.
+```ts
+const search = useSearch<"/posts">();              // { page: number; q?: string }
+const setSearch = useSetSearch<"/posts">();
+setSearch({ page: search.page + 1 });              // patch → /posts?page=2&q=…
+setSearch((prev) => ({ q: undefined }), { replace: true });  // delete + replaceState
 ```
 
 ### `useSearchParams<T>()` → `{ searchParams, getParam, setSearchParams }`
-Read/write URL query params; writing triggers a soft-nav loader re-run. Pass the route pattern as a generic to type the result against `RouteSearchParamsMap` (augment it per route, §18); an object shape also works.
+The low-level escape hatch: raw string `URLSearchParams` read/write; writing triggers a soft-nav loader re-run. Prefer `useSearch`/`useSetSearch` (above) when the route has a `searchSchema`.
 ```ts
 const { searchParams, getParam, setSearchParams } = useSearchParams<"/blog/:id">();
 const q = getParam("q");                        // string | null
@@ -385,12 +439,24 @@ setSearchParams({ q: "bun" });                  // replace all params
 setSearchParams((prev) => { prev.set("page", "2"); return prev; }); // update
 ```
 
-### `useFetcher()` → `{ data, state, load, submit }`
-Background fetch without navigating.
+### `useFetcher({ key? })` → `{ data, state, formData, formMethod, load, submit, Form, key }`
+Background fetch/mutation without navigating. After a `submit`, the active route's loaders revalidate automatically (gated by `shouldRevalidate`). `formData`/`formMethod` are set from the moment `submit` is called — render them for **optimistic UI**. A `key` gives the fetcher a stable identity shared across components and surviving remounts; unkeyed fetchers are component-bound.
 ```ts
-const fetcher = useFetcher();
+const fetcher = useFetcher({ key: `delete-${id}` });
 await fetcher.load("/products?q=bun");                       // GET loader data
 await fetcher.submit("/cart", { method: "post", body: { id: "1" } });
+const optimisticTitle = fetcher.formData?.get("title");      // while submitting
+<fetcher.Form method="post" action="/cart">…</fetcher.Form>  {/* scoped form, no navigation */}
+```
+
+### `useFetchers()` → `FetcherEntry[]`
+Every active fetcher — the cross-component view for optimistic UI (e.g. dim each table row whose keyed delete fetcher is in flight elsewhere in the tree).
+```ts
+const deleting = new Set(
+  useFetchers()
+    .filter((f) => f.state === "submitting" && f.key.startsWith("delete-"))
+    .map((f) => f.key.slice("delete-".length)),
+);
 ```
 
 ### `useFetcher<T>({ stream: true })` → `{ connect }`
@@ -426,15 +492,36 @@ export default function BlogLayout() {
 }
 ```
 
-### `<Link to params? prefetch? viewTransition?>`
-Soft-navigates without a full reload. After codegen (§18), `to` autocompletes your routes; for a dynamic route pass typed `params`. Building the URL yourself still works, so existing links need no changes.
+### `<Link to params? search? prefetch? replace? viewTransition?>`
+Soft-navigates without a full reload. After codegen (§18), `to` autocompletes your routes; for a dynamic route pass typed `params`, and `search` is typed by the target's `searchSchema`. Building the URL yourself still works, so existing links need no changes.
 ```tsx
 <Link to="/blog/:id" params={{ id: "42" }}>Read</Link>  {/* typed route + params */}
 <Link to={`/blog/${id}`}>Read</Link>                    {/* built string — also fine */}
-<Link to="/about" prefetch="hover">About</Link>         {/* preload chunk + loader on hover */}
+<Link to="/posts" search={{ page: 2 }}>Page 2</Link>    {/* typed search params */}
+<Link to="/about" prefetch="intent">About</Link>        {/* preload on hover/focus intent */}
 <Link to="/gallery" viewTransition>Gallery</Link>       {/* use View Transitions API */}
 ```
 Modifier-clicks (ctrl/cmd/shift/alt) fall back to native browser navigation.
+
+**Prefetch modes** — prefetching warms the route chunk (`modulepreload`) *and* the loader cache, so the click commits instantly (prefetched data stays fresh ≥ 30s; concurrent data prefetches are capped at 6 so long lists can't stampede the server):
+
+| mode | when |
+|---|---|
+| `"none"` (default) | never |
+| `"intent"` | hover **or focus**, after a 100 ms delay (canceled on fly-by) — best default |
+| `"hover"` | immediately on mouseenter (legacy alias) |
+| `"viewport"` | when the link scrolls into view (one shared IntersectionObserver) — for lists |
+| `"render"` | as soon as the link mounts |
+
+### `<ScrollRestoration getKey? storageKey?>`
+Restores the window scroll position on back/forward (and reload), scrolls to top — or to the `#hash` element — on new navigations. Render it **once** in `app/root.tsx`, next to `<Scripts />`. Positions persist in `sessionStorage`. Pass `getKey={(location) => location.pathname}` to share one position across every visit to the same path.
+```tsx
+<body>
+  <Outlet />
+  <ScrollRestoration />
+  <Scripts />
+</body>
+```
 
 ### `<Form method action?>`
 Fetch-based submission that re-runs the current route's loader after the action.
@@ -936,6 +1023,37 @@ Bun.serve({ port: 3000, fetch: handler });
 
 `renderRoute(options)` (low-level SSR render) and the `RenderOptions`/`ServerManifest`/`BractJSConfig` types are also exported for advanced embedding.
 
+### Rendering modes
+
+Three levels of SSR control, all opt-in:
+
+**Per-route selective SSR** — `export const ssr = false | "data-only"` plus a `Fallback` component on any route (§5 item 8). The document SSRs the Fallback; the client swaps in the real component after hydration. `beforeLoad` always runs server-side.
+
+**App-wide SPA mode** — `ssr: false` in `bractjs.config.ts`:
+
+```ts
+// bractjs.config.ts
+export default {
+  ssr: false,   // every document GET serves one static shell
+};
+```
+
+SPA mode means **"no document SSR", not "no server"**: the Bun server keeps serving `/_data` (loaders), `/_action`/mutations (CSRF gate intact), `/_image`, API routes, and static assets. `bractjs build` emits the shell at `build/client/__spa.html`; in dev it renders on the fly so `root.tsx` edits show up. Constraints: the root component renders without loader data and with a `/` location, so keep location/loader-dependent markup out of `root.tsx`; route-level `meta()` only applies after hydration (no SEO for route content).
+
+**Build-time prerendering (SSG)** — `prerender` in `bractjs.config.ts`:
+
+```ts
+// bractjs.config.ts
+export default {
+  prerender: ["/", "/about", "/blog/intro"],
+  // or resolve dynamically: prerender: async () => (await db.posts()).map(p => `/blog/${p.slug}`),
+};
+```
+
+`bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations *into* a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported for custom pipelines.
+
+Deployment notes: with `bun build --compile`, ship `build/client/` (including `_prerender/`) alongside the binary — or pass it via `--asset`. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs.
+
 ---
 
 ## 22. Single-binary deployment (`bun build --compile`)
@@ -1062,6 +1180,8 @@ All fields optional. Put them in `bractjs.config.ts` (default export) or pass to
 | `plugins` | `BunPlugin[]` | `[]` | Extra client-build plugins |
 | `adapter` | `BractAdapter` | `BunAdapter` | Custom server adapter |
 | `i18n` | `I18nConfig` | — | Locale config consumed by the i18n utilities |
+| `ssr` | `boolean` | `true` | `false` → SPA mode: static shell for every document GET (§21) |
+| `prerender` | `string[] \| () => paths` | — | Paths to prerender at build time (§21) |
 | `onStart` / `onShutdown` / `onError` | hooks | — | Lifecycle (§16) |
 
 `loadUserConfig()` validates these shapes and throws a clear error on an obvious mistake (e.g. a string `port`).
@@ -1072,7 +1192,7 @@ All fields optional. Put them in `bractjs.config.ts` (default export) or pass to
 
 Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `BunAdapter`, `defineLifecycle`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `validateSearch`, `searchParamsToObject`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
 **Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
 
@@ -1084,15 +1204,17 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
 **Sessions:** `createCookieSession`
 
-**Components:** `Outlet`, `Link`, `Form`, `Scripts`, `LiveReload`, `Await`, `Image`
+**Components:** `Outlet`, `Link`, `Form`, `Scripts`, `LiveReload`, `Await`, `Image`, `ScrollRestoration`
 
-**Hooks:** `useLoaderData`, `useActionData`, `useParams`, `useNavigation`, `useFetcher`, `useSearchParams`, `useBlocker`, `useLocale`, `useLocalizedLink`
+**Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useLocale`, `useLocalizedLink`
+
+**Search serialization:** `serializeSearch`
 
 **i18n:** `wrapRoutesWithLocale`, `stripLocale`, `localizedDataPath`
 
 **Client RPC:** `createClient`
 
-**Build / programmatic:** `createDevServer`, `runBuild`, `loadUserConfig`
+**Build / programmatic:** `createDevServer`, `runBuild`, `loadUserConfig`, `runPrerender`
 
 **Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`
 
@@ -1100,7 +1222,7 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
 
-**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
+**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 
 ---
 
