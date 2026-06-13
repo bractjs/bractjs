@@ -8,6 +8,12 @@ export interface LayoutChain {
   root: RouteModule;
   layouts: RouteModule[];
   route: RouteModule;
+  /**
+   * appDir-relative source paths for each module in the chain, for error
+   * messages ("loader error in routes/blog/[id].tsx"). Optional so hand-built
+   * chains in tests don't have to supply it.
+   */
+  files?: { root?: string; layouts: string[]; route?: string };
 }
 
 export interface ResolvedRoute extends RouteFile {
@@ -168,7 +174,12 @@ export async function resolveRouteChain(
     const layoutMods = layoutKeys.map((k) => pickRouteModule(registry[k]));
     const routeKey = routeFile.filePath.split("\\").join("/");
     const routeMod = pickRouteModule(registry[routeKey]);
-    return { root: rootMod, layouts: layoutMods, route: routeMod };
+    return {
+      root: rootMod,
+      layouts: layoutMods,
+      route: routeMod,
+      files: { root: rootKey, layouts: layoutKeys, route: routeKey },
+    };
   }
 
   const resolved = await resolveLayoutChain(routeFile, appDir);
@@ -180,9 +191,15 @@ export async function resolveRouteChain(
     resolve(join(appDir, routeFile.filePath))
   );
 
+  // Relativize the absolute layout paths back to appDir-relative for messages.
+  const appRoot = resolve(appDir);
+  const rel = (abs: string) => abs.startsWith(appRoot + "/") ? abs.slice(appRoot.length + 1) : abs;
+  const [rootFile, ...layoutFiles] = resolved.layoutFiles.map(rel);
+
   return {
     root: rootMod ?? {},
     layouts: layoutMods,
     route: routeMod,
+    files: { root: rootFile, layouts: layoutFiles, route: routeFile.filePath },
   };
 }

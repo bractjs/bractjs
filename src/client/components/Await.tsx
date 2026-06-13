@@ -1,7 +1,13 @@
 import { Suspense, use, type ReactNode } from "react";
+import { Deferred } from "../../shared/deferred.ts";
 
 interface AwaitProps<T> {
-  resolve: Promise<T>;
+  /**
+   * A promise, or a `Deferred<T>` field from a loader that returned `defer()`.
+   * `useLoaderData<typeof loader>()` preserves deferred fields as `Deferred<T>`,
+   * so they can be passed straight through.
+   */
+  resolve: Promise<T> | Deferred<T>;
   fallback: ReactNode;
   children: (data: T) => ReactNode;
 }
@@ -13,7 +19,8 @@ interface AwaitProps<T> {
  * with the resolved value.
  */
 function Resolved<T>({ resolve, children }: Pick<AwaitProps<T>, "resolve" | "children">) {
-  const data = use(resolve);
+  const promise = resolve instanceof Deferred ? resolve.promise : resolve;
+  const data = use(promise);
   return <>{children(data)}</>;
 }
 

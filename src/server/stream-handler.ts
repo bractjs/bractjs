@@ -1,5 +1,6 @@
 import { resolveAction } from "./action-registry.ts";
 import { isExplicitDev } from "./env.ts";
+import { csrfHint } from "./csrf.ts";
 
 // ── SSE helpers ────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ export async function handleStreamRequest(request: Request): Promise<Response | 
   // it cross-origin without a CORS preflight, and the real client (useFetcher)
   // always sends it. This is strictly tighter than the /_action gate.
   if (!request.headers.get("X-BractJS-Action")) {
-    return new Response(sseChunk("error", { message: "Forbidden" }), {
+    return new Response(sseChunk("error", { message: isExplicitDev() ? csrfHint() : "Forbidden" }), {
       status: 403,
       headers: {
         "Content-Type": "text/event-stream",

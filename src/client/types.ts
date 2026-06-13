@@ -26,5 +26,7 @@ declare global {
     __BRACTJS_DATA__: BractJSClientData;
     /** Dev-only: registered by ClientRouter for module-level HMR swaps. */
     __BRACTJS_HMR_ACCEPT__?: (pattern: string, mod: Record<string, unknown>) => void;
+    /** Dev-only: HMR WebSocket port published by the server's dev bootstrap. */
+    __BRACTJS_HMR_PORT__?: number;
   }
 }

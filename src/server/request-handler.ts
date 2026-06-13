@@ -11,7 +11,7 @@ import { isRedirect, isHttpError } from "../shared/errors.ts";
 import { isExplicitDev } from "./env.ts";
 import { pipeline, type MiddlewareContext } from "./middleware.ts";
 import { BractJSProvider } from "../shared/context.ts";
-import { isAllowedMutation } from "./csrf.ts";
+import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
 import { getCspNonce } from "./csp.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
@@ -154,7 +154,7 @@ async function route(
   // ── Action (mutating methods) ─────────────────────────────────────────
   let actionData: unknown = null;
   if (MUTATING_METHODS.has(request.method)) {
-    if (!isAllowedMutation(request)) return error("Forbidden", 403);
+    if (!isAllowedMutation(request)) return csrfForbiddenResponse();
     // Reject up front if the client advertises an oversized body.
     const clRaw = request.headers.get("Content-Length");
     if (clRaw) {
@@ -171,6 +171,8 @@ async function route(
     } catch (err) {
       if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
       if (isHttpError(err)) return error(err.message, err.status);
+      // Name the failing route so the log points at the right file.
+      console.error(`[bractjs] action error in ${chain.files?.route ?? match.routeFile.filePath}:`, err);
       await fireOnError(onError, err, request);
       if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
       return error("Internal Server Error", 500);

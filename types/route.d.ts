@@ -11,21 +11,36 @@ export interface RouterLocation {
   key: string;
 }
 
-export interface LoaderArgs {
+export interface LoaderArgs<TSearch extends Record<string, unknown> = Record<string, unknown>> {
   request: Request;
   params: Record<string, string>;
   context: Record<string, unknown>;
   /**
    * The request's search params, validated/coerced by the route's
    * `searchSchema` export when present; otherwise the raw string record
-   * (repeated keys become arrays).
+   * (repeated keys become arrays). Parameterize to skip the cast:
+   * `loader({ search }: LoaderArgs<BoardSearch>)`.
    */
-  search: Record<string, unknown>;
+  search: TSearch;
 }
 
-export interface ActionArgs extends LoaderArgs {
+export interface ActionArgs<TSearch extends Record<string, unknown> = Record<string, unknown>>
+  extends LoaderArgs<TSearch> {
   formData: FormData;
 }
+
+/**
+ * The data a route's loader resolves to, for typing `useLoaderData`. Pass the
+ * loader function type to infer it (`useLoaderData<typeof loader>()` →
+ * awaited return, `Response` excluded, `Deferred` fields preserved). A plain
+ * object type is returned as-is (back-compat).
+ */
+export type LoaderData<T> = T extends (...args: never[]) => unknown
+  ? Exclude<Awaited<ReturnType<T>>, Response>
+  : T;
+
+/** The data a route's action resolves to, for typing `useActionData`. See {@link LoaderData}. */
+export type ActionData<T> = LoaderData<T>;
 
 export type MetaDescriptor =
   | { title: string }

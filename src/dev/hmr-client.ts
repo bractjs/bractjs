@@ -23,7 +23,9 @@ export const hmrClientScript: string = `
   }
 
   function connect() {
-    var ws = new WebSocket("ws://localhost:3001");
+    // Port published by the server's dev bootstrap (config hmrPort), else 3001.
+    var port = window.__BRACTJS_HMR_PORT__ || 3001;
+    var ws = new WebSocket("ws://localhost:" + port);
     ws.onmessage = function (event) {
       try {
         var msg = JSON.parse(event.data);

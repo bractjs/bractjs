@@ -6,6 +6,20 @@ All notable changes to Bract are documented here.
 
 ## [Unreleased]
 
+### Added — Developer experience
+
+- **`useLoaderData<typeof loader>()` / `useActionData<typeof action>()`** — pass the loader/action FUNCTION type and the data type is inferred from its return (awaited, `Response` branch excluded, `Deferred` fields preserved). No more hand-written `LoaderData` aliases. The object form (`useLoaderData<HomeData>()`) still works. New exported helper types `LoaderData<T>` / `ActionData<T>`; `<Await resolve>` now also accepts a `Deferred<T>`.
+- **`LoaderArgs<TSearch>` / `ActionArgs<TSearch>`** — parameterize to drop the `search as X` cast: `loader({ search }: LoaderArgs<BoardSearch>)`. Codegen also emits `LoaderArgsFor<"/posts">` / `ActionArgsFor<"/posts">` for the full route-literal arg shape (params + context + validated search).
+- **Auto-codegen in dev** — `bractjs dev` regenerates `route-types.gen.ts` on boot and whenever a route file is added/removed/renamed; `bractjs new` runs it on scaffold. The generated file is now deterministic (route-sorted) and carries a `// bractjs:routes <hash>` fingerprint; `writeRouteTypes` skips identical writes (no editor reload loops) and returns `{ dest, written }`. New exports `routesFingerprint`, `explainStaleness`.
+- **`safeValidate(schema, input)`** — non-throwing validation returning `{ ok: true, data } | { ok: false, fieldErrors, firstError }` — the ergonomic action idiom. Plus `isValidationResponse(err)` and `readValidationError(res)` for the try/catch style, and `formText` / `formValues` FormData helpers.
+- **`defineActions({ ... })` + `<Form intent="...">`** — compose one route action from per-intent handlers (dispatch on the form's `intent` field; unknown intent → 400 listing the known ones in dev). `<Form>` / `<fetcher.Form>` gained an `intent` prop that renders the matching hidden input.
+- **`defineConfig()`** — identity helper for `bractjs.config.ts` (autocomplete + type-checking without annotating the full type). `hmrPort` is now a config field (and threaded to the HMR client, which previously hardcoded `3001`).
+- **Dev failure-mode DX** — boot prints a route table (pattern ← file, loader/action markers) + the HMR port; route modules are statically linted (warns on a route with no `default`/`loader`/`action`/`beforeLoad`, and on miscased exports like `Loader`/`fallback`); loader/action errors name the failing route file (in the log and the dev error overlay, which now has a producer); CSRF 403s explain the fix in dev (terse in prod); a port already in use prints a friendly message pointing at `port`/`hmrPort`.
+
+### Deprecated
+
+- **`StreamFetcherResult.events`** — never emitted; use `connect(actionId)`. Removed in 0.2.
+
 ### Added
 
 - **`useLocation()` + `RouterLocation`** — reactive `{ pathname, search, hash, state, key }`; SSR-safe (request-derived on the server). History entries are now stamped with a stable `key`, and `navigate`/`<Link>` accept `replace` and `state` options.

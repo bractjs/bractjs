@@ -1,6 +1,6 @@
 import { resolveAction } from "./action-registry.ts";
 import { json } from "./response.ts";
-import { isAllowedMutation } from "./csrf.ts";
+import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
 
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 // Cap action JSON bodies. Anything over this looks like an abuse attempt;
@@ -23,7 +23,7 @@ export async function handleActionRequest(request: Request): Promise<Response | 
   // would otherwise also reach this handler).
   if (url.pathname !== "/_action") return null;
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
-  if (!isAllowedMutation(request)) return new Response("Forbidden", { status: 403 });
+  if (!isAllowedMutation(request)) return csrfForbiddenResponse();
 
   const id = url.searchParams.get("id");
   if (!id) return new Response("Bad Request: missing action id", { status: 400 });

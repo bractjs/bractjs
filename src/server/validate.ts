@@ -98,3 +98,64 @@ export async function validate<T>(
 ): Promise<T> {
   return runSchema(schema, toPlainObject(input));
 }
+
+// ── Non-throwing validation (ergonomic action idiom) ───────────────────────
+
+export type SafeValidateResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; fieldErrors: FieldErrors; firstError: string };
+
+/**
+ * Like {@link validate}, but returns a result instead of throwing — the
+ * ergonomic shape for actions that want to render field errors:
+ *
+ * ```ts
+ * const r = await safeValidate(PostSchema, formData);
+ * if (!r.ok) return { error: r.firstError, fieldErrors: r.fieldErrors };
+ * usePost(r.data);
+ * ```
+ *
+ * `firstError` is the first message across all fields, or a generic fallback.
+ */
+export async function safeValidate<T>(
+  schema: Schema<T>,
+  input: FormData | Record<string, unknown>,
+): Promise<SafeValidateResult<T>> {
+  try {
+    const data = await runSchema(schema, toPlainObject(input));
+    return { ok: true, data };
+  } catch (err) {
+    if (isValidationResponse(err)) {
+      const { fieldErrors, firstError } = await readValidationError(err);
+      return { ok: false, fieldErrors, firstError };
+    }
+    throw err; // not a validation failure — let it propagate
+  }
+}
+
+/**
+ * True for the 400 `Response` thrown by {@link validate} / `searchSchema`
+ * validation (identified by status 400 + `statusText "Validation failed"`).
+ * Use it in the try/catch idiom when you keep calling `validate()` directly.
+ */
+export function isValidationResponse(value: unknown): value is Response {
+  return value instanceof Response && value.status === 400 && value.statusText === "Validation failed";
+}
+
+/**
+ * Parse the `{ errors }` body of a validation 400 `Response` into field errors
+ * plus the first message. Tolerant of a non-JSON / unexpected body.
+ */
+export async function readValidationError(
+  res: Response,
+): Promise<{ fieldErrors: FieldErrors; firstError: string }> {
+  const fallback = "Please check your input.";
+  try {
+    const body = (await res.clone().json()) as { errors?: FieldErrors };
+    const fieldErrors = body.errors ?? {};
+    const firstError = Object.values(fieldErrors)[0]?.[0] ?? fallback;
+    return { fieldErrors, firstError };
+  } catch {
+    return { fieldErrors: {}, firstError: fallback };
+  }
+}
