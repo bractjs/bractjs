@@ -6,6 +6,37 @@ import { join, relative, resolve, isAbsolute } from "node:path";
 const SERVER_RE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use server["']/;
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 
+// SECURITY(high): exporting a function from a `"use server"` module publishes
+// it as an unauthenticated RPC endpoint reachable via POST /_action and
+// GET /_stream. For files under `routes/`, these reserved exports are framework
+// lifecycle hooks / components — NOT intended as callable actions — so we never
+// register them. Without this filter a route's `loader`/`action`/`default`
+// could be invoked directly over the wire, bypassing search/param validation
+// and (for /_stream) with zero arguments. Authors who genuinely want an action
+// must export it under a different name.
+const RESERVED_ROUTE_EXPORTS = new Set([
+  "default",
+  "loader",
+  "action",
+  "meta",
+  "beforeLoad",
+  "context",
+  "ErrorBoundary",
+  "Fallback",
+  "config",
+  "searchSchema",
+  "ssr",
+]);
+
+function isRouteFile(rel: string): boolean {
+  return rel.startsWith("routes/") || rel.startsWith("routes\\");
+}
+
+function shouldRegisterExport(name: string, fromRouteFile: boolean): boolean {
+  if (fromRouteFile && RESERVED_ROUTE_EXPORTS.has(name)) return false;
+  return true;
+}
+
 /**
  * Hash key for an action — must use the same string the client-side proxy
  * plugin hashes (`pathKey + "#" + name`). Mismatch → `/_action?id=...` 404.
@@ -61,8 +92,10 @@ export async function loadServerActions(appDir: string): Promise<void> {
       continue;
     }
 
+    const fromRouteFile = isRouteFile(rel);
     for (const [name, val] of Object.entries(mod)) {
       if (typeof val !== "function") continue;
+      if (!shouldRegisterExport(name, fromRouteFile)) continue;
       const id = await computeId(pathKeyForAction(filePath, appDir), name);
       registry.set(id, val as (...args: unknown[]) => Promise<unknown>);
     }
@@ -82,8 +115,10 @@ export async function loadServerActionsFromRegistry(
   entries: Array<{ relPath: string; mod: Record<string, unknown> }>,
 ): Promise<void> {
   for (const { relPath, mod } of entries) {
+    const fromRouteFile = isRouteFile(relPath);
     for (const [name, val] of Object.entries(mod)) {
       if (typeof val !== "function") continue;
+      if (!shouldRegisterExport(name, fromRouteFile)) continue;
       const id = await computeId(relPath, name);
       registry.set(id, val as (...args: unknown[]) => Promise<unknown>);
     }

@@ -104,6 +104,48 @@ describe("action-handler — arg validation", () => {
     expect(res?.status).toBe(400);
   });
 
+  test("nested __proto__ below the old depth-20 cap → 400 (scan reaches it)", async () => {
+    // Build a raw JSON string so "__proto__" is an OWN key (an object literal
+    // would set the prototype instead). Bury it 24 levels deep — past the old
+    // depth-20 short-circuit that previously let it slip through.
+    let body = '{"__proto__":{"polluted":true}}';
+    for (let i = 0; i < 24; i++) body = `{"a":${body}}`;
+    const req = new Request(`http://x/_action?id=${registeredActionId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-BractJS-Action": "1" },
+      body: `[${body}]`,
+    });
+    const res = await handleActionRequest(req);
+    expect(res?.status).toBe(400);
+  });
+
+  test("payload nested past MAX_SCAN_DEPTH → 400 (fails closed)", async () => {
+    // Over-deep nesting with NO forbidden key must still be rejected: a
+    // security scan that can't see the bottom must not pass it through.
+    let body = '{"value":"x"}';
+    for (let i = 0; i < 250; i++) body = `{"a":${body}}`;
+    const req = new Request(`http://x/_action?id=${registeredActionId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-BractJS-Action": "1" },
+      body: `[${body}]`,
+    });
+    const res = await handleActionRequest(req);
+    expect(res?.status).toBe(400);
+  });
+
+  test("normal nested payload (within cap) still succeeds", async () => {
+    // A legitimately nested object (no forbidden keys) must NOT be rejected.
+    let obj: Record<string, unknown> = { value: "ok" };
+    for (let i = 0; i < 30; i++) obj = { nested: obj };
+    const req = new Request(`http://x/_action?id=${registeredActionId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-BractJS-Action": "1" },
+      body: JSON.stringify([obj]),
+    });
+    const res = await handleActionRequest(req);
+    expect(res?.status).toBe(200);
+  });
+
   test("JSON body > 1 MiB rejected with 413 (advertised via Content-Length)", async () => {
     const huge = "a".repeat(2 * 1024 * 1024);
     const req = new Request(`http://x/_action?id=${registeredActionId}`, {
@@ -132,6 +174,45 @@ describe("action-handler — arg validation", () => {
     });
     const res = await handleActionRequest(req);
     expect(res?.status).toBe(413);
+  });
+});
+
+// ── F2 — reserved route exports are not registered as actions ──────────────
+
+describe("action-registry — reserved route exports", () => {
+  const TMP = resolve(import.meta.dir, ".tmp-reserved-exports");
+
+  beforeAll(async () => {
+    await rm(TMP, { recursive: true, force: true });
+    await mkdir(join(TMP, "routes"), { recursive: true });
+    await writeFile(
+      join(TMP, "routes", "page.tsx"),
+      `"use server";
+export async function loader() { return { secret: "leaked" }; }
+export async function action() { return "mutated"; }
+export default function Page() { return null; }
+export async function doThing() { return "ok"; }
+`,
+    );
+    await loadServerActions(TMP);
+  });
+
+  afterAll(async () => {
+    await rm(TMP, { recursive: true, force: true });
+  });
+
+  test("loader / action / default in a routes/ file are NOT resolvable as actions", async () => {
+    const { resolveAction } = await import("../server/action-registry.ts");
+    for (const name of ["loader", "action", "default"]) {
+      const id = await computeId(join(TMP, "routes", "page.tsx"), name, TMP);
+      expect(resolveAction(id)).toBeNull();
+    }
+  });
+
+  test("a genuine named export in the same file IS resolvable", async () => {
+    const { resolveAction } = await import("../server/action-registry.ts");
+    const id = await computeId(join(TMP, "routes", "page.tsx"), "doThing", TMP);
+    expect(resolveAction(id)).not.toBeNull();
   });
 });
 
