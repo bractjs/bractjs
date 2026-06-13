@@ -1,6 +1,6 @@
 import { renderToReadableStream } from "react-dom/server";
 import { createElement, Fragment, type ReactNode } from "react";
-import type { MetaDescriptor } from "../shared/route-types.ts";
+import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 import { safeStringify, isDevRuntime, getDevHmrPort } from "./env.ts";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
 import { mergeMeta } from "./meta.ts";
@@ -22,6 +22,8 @@ export interface RenderOptions {
   search?: Record<string, unknown>;
   manifest: ServerManifest;
   meta: MetaDescriptor[];
+  /** The matched route chain (root → layouts → route) for `useMatches()`. */
+  matches?: RouteMatch[];
   status?: number;
   /** Path of the matched route file (e.g. "routes/_index.tsx"), used by the client to pre-import the module before hydration. */
   routeFile?: string;
@@ -34,6 +36,11 @@ export interface RenderOptions {
    * "spa": static shell, everything resolved client-side).
    */
   ssrMode?: "client-only" | "data-only" | "spa";
+  /**
+   * Resolved route `headers()` output (root → layout → route merged). Applied
+   * on top of the baseline document headers, overriding any same-key default.
+   */
+  headers?: Headers | null;
 }
 
 export async function renderRoute(options: RenderOptions): Promise<Response> {
@@ -59,7 +66,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   // The merged descriptor array is what the client reads to keep the document
   // head in sync on soft navigation — keep it shaped, not stringified HTML.
   const bootstrapScriptContent =
-    devOverlay + `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, ssrMode: options.ssrMode })};`;
+    devOverlay + `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: options.matches, ssrMode: options.ssrMode })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers
@@ -90,19 +97,30 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
 
   const responseStatus = renderError ? 500 : status;
 
-  return new Response(stream, {
-    status: responseStatus,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-      // SECURITY(medium): baseline hardening headers. For a Content-Security-
-      // Policy, opt into the nonce-based `csp()` middleware — it generates a
-      // per-request nonce, applies it to the inline bootstrap script + client
-      // entry module here (via renderToReadableStream's `nonce` option), and
-      // sets the CSP response header.
-      "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "SAMEORIGIN",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-    },
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "Transfer-Encoding": "chunked",
+    // SECURITY(medium): baseline hardening headers. For a Content-Security-
+    // Policy, opt into the nonce-based `csp()` middleware — it generates a
+    // per-request nonce, applies it to the inline bootstrap script + client
+    // entry module here (via renderToReadableStream's `nonce` option), and
+    // sets the CSP response header.
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
   });
+
+  // Route `headers()` output (root → layout → route) overrides the baseline.
+  // Content-Type / Transfer-Encoding stay framework-owned: a route shouldn't
+  // be able to corrupt the streamed document envelope. Don't apply on render
+  // errors — that path serves a generic 500, not the route's cached document.
+  if (options.headers && !renderError) {
+    options.headers.forEach((value, key) => {
+      const k = key.toLowerCase();
+      if (k === "content-type" || k === "transfer-encoding") return;
+      headers.set(key, value);
+    });
+  }
+
+  return new Response(stream, { status: responseStatus, headers });
 }

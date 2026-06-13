@@ -154,13 +154,17 @@ Drop a file in `app/routes/`; it becomes a route. BractJS scans at startup and b
 | `routes/about.tsx` | `/about` |
 | `routes/blog/_index.tsx` | `/blog` |
 | `routes/blog/[id].tsx` | `/blog/:id` |
+| `routes/users/[[id]].tsx` | `/users` **and** `/users/:id` (optional) |
 | `routes/docs/[...slug].tsx` | `/docs/*` (catch-all) |
 | `routes/blog/layout.tsx` | wraps all `/blog/*` routes |
+| `routes/(marketing)/about.tsx` | `/about` (group adds no URL segment) |
 
 - `[param]` → a dynamic segment, read via `useParams()` / `params` arg.
+- `[[param]]` → an **optional** dynamic segment: the route matches whether the segment is present or not (when absent, `params.param` is simply unset).
 - `[...name]` → a catch-all; the rest of the path lands in `params.name`.
 - `layout.tsx` in any directory wraps every route under it (layouts nest: `root → blog/layout → blog/[id]`).
-- Match priority per segment: **static > dynamic > catch-all**.
+- `(group)/` → a **route group**: the folder organizes files and contributes its `layout.tsx`, but adds **no** URL segment. Use it to give a set of routes a shared layout without a shared path prefix.
+- Match priority per segment: **static > dynamic > optional > catch-all**.
 
 No registration step — the file IS the route.
 
@@ -171,7 +175,7 @@ No registration step — the file IS the route.
 Every file in `app/routes/` (and `root.tsx`/`layout.tsx`) may export any combination of these. Import the arg types from the package.
 
 ```tsx
-import type { LoaderArgs, ActionArgs, MetaArgs } from "@bractjs/bractjs";
+import type { LoaderArgs, ActionArgs, MetaArgs, HeadersArgs } from "@bractjs/bractjs";
 import { redirect, json, HttpError } from "@bractjs/bractjs";
 
 // 1) loader — runs on every GET. Return value → useLoaderData().
@@ -242,7 +246,40 @@ export function Fallback() {
   return <p>Loading dashboard…</p>;             // SSR'd in the component's place
 }
 
-// 9) default — the page component (required for a renderable route).
+// 9) headers — set response headers (Cache-Control / ETag / Vary / CDN hints)
+//    for this route's document AND /_data responses. Runs root → layout →
+//    route; innermost wins per key, and you receive the merged parentHeaders.
+export function headers({ loaderData, parentHeaders }: HeadersArgs<LoaderData>) {
+  return { "Cache-Control": "public, max-age=300, s-maxage=3600" };
+}
+
+// 10) middleware — nested, server-side. Runs root → layout → route BEFORE
+//     beforeLoad/action/loaders, with a shared mutable `context`. Return a
+//     Response to short-circuit (a cleaner per-route alternative to beforeLoad,
+//     and to a single global pipeline). Protects the document and /_data.
+export const middleware = [
+  async (ctx, next) => {
+    if (!ctx.context.user) return redirect("/login");
+    ctx.context.startedAt = Date.now();         // visible to loaders
+    return next();
+  },
+];
+
+// 11) clientLoader / clientAction — RR7-style browser-side data. clientLoader
+//     runs on navigation and its result becomes useLoaderData(); call
+//     serverLoader() for this route's server data. Set clientLoader.hydrate =
+//     true to also run on the first hydration of an SSR'd document.
+export async function clientLoader({ serverLoader }) {
+  const server = await serverLoader();          // the normal /_data route slice
+  return { ...server, fetchedAt: Date.now() };
+}
+// clientLoader.hydrate = true;                  // opt into running on hydration
+export async function clientAction({ formData, serverAction }) {
+  // optimistic local work, then defer to the server action:
+  return serverAction();
+}
+
+// 12) default — the page component (required for a renderable route).
 export default function BlogPost() {
   const { post } = useLoaderData<LoaderData>();
   return <article><h1>{post.title}</h1></article>;
@@ -252,9 +289,10 @@ export default function BlogPost() {
 **Execution order for a request:**
 
 ```
-searchSchema → beforeLoad → (action, if mutating method) → loaders (root + layouts + route, in parallel) → render
+global pipeline → searchSchema → route middleware (root → layout → route) → beforeLoad → (action, if mutating method) → loaders (root + layouts + route, in parallel) → render
 ```
 
+- **Route middleware** wraps everything after search validation: it runs in chain order with a shared `context`, can short-circuit with a `Response`, and (being outermost-first) can also post-process the final response. It runs inside the app-wide `pipeline` (§14).
 - **Loaders run concurrently** (root, every layout, and the route loader all in one `Promise.all`).
 - A loader that throws an `HttpError`/redirect `Response` is intentional control flow. Any *other* thrown error is caught, sanitized (generic message in production, full message+stack only when `NODE_ENV=development`), and rendered via the nearest `ErrorBoundary`.
 
@@ -430,6 +468,19 @@ const { id } = useParams<"/blog/:id">();        // { id: string } — typed from
 const { id } = useParams<{ id: string }>();     // or a hand-written shape
 ```
 > The pattern is supplied by the caller because the framework can't infer the active route at the type level (React Router's `useParams` works the same way).
+
+### `useMatches()` → `RouteMatch[]`
+The matched route chain, **outermost → innermost** (root, layouts, then the leaf route). Each entry is `{ id, pathname, params, data, handle }`, where `handle` is that module's static `handle` export. Ideal for breadcrumbs and conditional chrome without threading props through every layout. SSR-safe; updates on soft navigation and revalidation.
+```tsx
+// routes/blog/[id].tsx
+export const handle = { breadcrumb: "Post" };
+
+// a layout
+const crumbs = useMatches()
+  .filter((m) => m.handle?.breadcrumb)
+  .map((m) => m.handle!.breadcrumb as string);
+```
+> `handle` travels in the SSR bootstrap and the `/_data` payload, so it must be JSON-serializable (same constraint as loader data).
 
 ### `useLocation()` → `{ pathname, search, hash, state, key }`
 The current location — reactive on the client, request-derived during SSR (`hash` is always `""` there). `key` is the history entry's identity (what scroll restoration uses); `state` is whatever you passed via `navigate(to, { state })`.
@@ -785,6 +836,27 @@ pipeline.use(trace);
 ```
 
 You can also construct an isolated `new MiddlewarePipeline()` and `.run(ctx, handler)` it yourself (used internally and in tests).
+
+### Nested route middleware
+
+The global `pipeline` is app-wide. For middleware scoped to a branch of the route tree, export `middleware` from a route, `layout.tsx`, or `root.tsx` — a single function or an array. It runs **inside** the global pipeline, in chain order (root → layout → route), before `beforeLoad`/action/loaders, sharing the same mutable `context`. Return a `Response` to short-circuit; because the chain is outermost-first, an ancestor can also post-process the response.
+
+```ts
+// routes/admin/layout.tsx — gates every /admin/* route
+import type { RouteMiddlewareFunction } from "@bractjs/bractjs";
+import { redirect } from "@bractjs/bractjs";
+
+const requireAdmin: RouteMiddlewareFunction = async (ctx, next) => {
+  if (!(ctx.context.user as { admin?: boolean } | undefined)?.admin) {
+    return redirect("/login");
+  }
+  return next();                 // continue to child layouts/route + loaders
+};
+
+export const middleware = [requireAdmin];
+```
+
+It protects the **document and the `/_data` soft-nav endpoint** alike, so it's a safe place for auth — same guarantee as `beforeLoad`. Prefer route middleware over `beforeLoad` when you want composition (multiple concerns, shared across a folder) or response post-processing; `beforeLoad` remains the lighter single-gate option.
 
 ---
 
@@ -1271,13 +1343,13 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
 **Context:** `BractJSContext`, `BractJSProvider`, `useBractJSContext`
 
-**Middleware:** `pipeline`, `MiddlewarePipeline`, `requestLogger`, `cors`, `authGuard`, `csp`, `getCspNonce`, `CSP_NONCE_KEY`
+**Middleware:** `pipeline`, `MiddlewarePipeline`, `runRouteMiddleware`, `collectRouteMiddleware`, `requestLogger`, `cors`, `authGuard`, `csp`, `getCspNonce`, `CSP_NONCE_KEY`
 
 **Sessions:** `createCookieSession`
 
 **Components:** `Outlet`, `Link`, `Form`, `Scripts`, `LiveReload`, `Await`, `Image`, `ScrollRestoration`
 
-**Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useLocale`, `useLocalizedLink`
+**Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useMatches`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useLocale`, `useLocalizedLink`
 
 **Search serialization:** `serializeSearch`
 

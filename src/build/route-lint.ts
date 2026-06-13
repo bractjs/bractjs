@@ -4,9 +4,9 @@ import { extractExports } from "./directives.ts";
 // (wrong case) of one of these is almost always a mistake — the framework's
 // projection is case-sensitive, so `Loader` is silently ignored.
 export const ROUTE_EXPORT_NAMES = [
-  "default", "loader", "action", "meta", "beforeLoad", "shouldRevalidate",
-  "searchSchema", "ssr", "Fallback", "handle", "ErrorBoundary", "config",
-  "loaderDeps", "context",
+  "default", "loader", "action", "clientLoader", "clientAction", "meta", "headers",
+  "middleware", "beforeLoad", "shouldRevalidate", "searchSchema", "ssr", "Fallback",
+  "handle", "ErrorBoundary", "config", "loaderDeps", "context",
 ] as const;
 
 const CANONICAL_LOWER = new Map(ROUTE_EXPORT_NAMES.map((n) => [n.toLowerCase(), n]));

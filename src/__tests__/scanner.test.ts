@@ -1,5 +1,10 @@
 import { test, expect, describe } from "bun:test";
-import { filePathToPattern, pathToSegments } from "../server/scanner.ts";
+import {
+  filePathToPattern,
+  pathToSegments,
+  layoutDirsFromFilePath,
+  isRouteGroupSegment,
+} from "../server/scanner.ts";
 
 describe("filePathToPattern", () => {
   test("_index maps to empty pattern (root index)", () => {
@@ -25,6 +30,42 @@ describe("filePathToPattern", () => {
   test("strips .ts extension too", () => {
     expect(filePathToPattern("routes/api/data.ts")).toBe("api/data");
   });
+
+  test("route group folder adds no URL segment", () => {
+    expect(filePathToPattern("routes/(marketing)/about.tsx")).toBe("about");
+  });
+
+  test("nested route group strips only the group segment", () => {
+    expect(filePathToPattern("routes/(marketing)/blog/[id].tsx")).toBe("blog/[id]");
+  });
+
+  test("group wrapping the index → root pattern", () => {
+    expect(filePathToPattern("routes/(marketing)/_index.tsx")).toBe("");
+  });
+
+  test("[[id]] optional kept in pattern string", () => {
+    expect(filePathToPattern("routes/users/[[id]].tsx")).toBe("users/[[id]]");
+  });
+});
+
+describe("route groups", () => {
+  test("isRouteGroupSegment detects (group) but not () or plain", () => {
+    expect(isRouteGroupSegment("(marketing)")).toBe(true);
+    expect(isRouteGroupSegment("()")).toBe(false);
+    expect(isRouteGroupSegment("about")).toBe(false);
+    expect(isRouteGroupSegment("[id]")).toBe(false);
+  });
+
+  test("layoutDirsFromFilePath includes group folders", () => {
+    expect(layoutDirsFromFilePath("routes/(marketing)/blog/[id].tsx")).toEqual([
+      "(marketing)",
+      "(marketing)/blog",
+    ]);
+  });
+
+  test("layoutDirsFromFilePath for a top-level route → empty", () => {
+    expect(layoutDirsFromFilePath("routes/about.tsx")).toEqual([]);
+  });
 });
 
 describe("pathToSegments", () => {
@@ -42,6 +83,10 @@ describe("pathToSegments", () => {
 
   test("[...slug] → catchAll segment", () => {
     expect(pathToSegments("docs/[...slug]")).toEqual(["docs", { catchAll: "slug" }]);
+  });
+
+  test("[[id]] → optional segment", () => {
+    expect(pathToSegments("users/[[id]]")).toEqual(["users", { optional: "id" }]);
   });
 
   test("nested static path", () => {

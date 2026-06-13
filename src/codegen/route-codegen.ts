@@ -3,11 +3,12 @@ import { scanRoutes } from "../server/scanner.ts";
 import type { Segment } from "../server/scanner.ts";
 import { hashString } from "../build/hash.ts";
 
-// Convert [param] / [...catchAll] notation to :param colon-style for URLs.
+// Convert [param] / [[optional]] / [...catchAll] notation to :param colon-style.
 function patternToColon(urlPattern: string): string {
   if (urlPattern === "") return "/";
   return "/" + urlPattern.split("/").map((seg) => {
     if (seg.startsWith("[...") && seg.endsWith("]")) return ":" + seg.slice(4, -1);
+    if (seg.startsWith("[[") && seg.endsWith("]]")) return ":" + seg.slice(2, -2);
     if (seg.startsWith("[") && seg.endsWith("]")) return ":" + seg.slice(1, -1);
     return seg;
   }).join("/");
@@ -16,7 +17,9 @@ function patternToColon(urlPattern: string): string {
 function paramsFromSegments(segments: Segment[]): string[] {
   return segments.flatMap((seg) =>
     typeof seg === "string" ? [] :
-    "param" in seg ? [seg.param] : [seg.catchAll],
+    "param" in seg ? [seg.param] :
+    "optional" in seg ? [seg.optional] :
+    [seg.catchAll],
   );
 }
 
@@ -36,7 +39,9 @@ function substituteParams(pattern: string, params: string[]): string {
 const SAFE_PATTERN_RE = /^\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*)(?:\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*))*$|^\/$/;
 const SAFE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Same guard the module-registry codegen applies before emitting import paths.
-const SAFE_FILEPATH_RE = /^[A-Za-z0-9._\/\-\[\]]+$/;
+// Parens are permitted for route-group folders like `(marketing)`; they are
+// inert inside the double-quoted import string the codegen emits.
+const SAFE_FILEPATH_RE = /^[A-Za-z0-9._\/\-\[\]()]+$/;
 
 function assertSafePattern(pattern: string): void {
   if (!SAFE_PATTERN_RE.test(pattern)) {

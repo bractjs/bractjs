@@ -16,7 +16,7 @@ import { matchPatternForPath, toSamePath, parseTo, createLocationKey } from "./n
 import { loaderCache, cacheKey } from "./cache.ts";
 import { registerRevalidator, type RevalidationInfo } from "./revalidation.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
-import type { MetaDescriptor, RouterLocation, ShouldRevalidateFunction } from "../shared/route-types.ts";
+import type { MetaDescriptor, RouterLocation, RouteMatch, ShouldRevalidateFunction } from "../shared/route-types.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
   const [params, setParams] = useState(initialData.params);
   const [location, setLocation] = useState<RouterLocation>(initialData.location);
   const [search, setSearch] = useState<Record<string, unknown>>(initialData.search ?? {});
+  const [matches, setMatches] = useState<RouteMatch[]>(initialData.matches ?? []);
   const [navState, setNavState] = useState<NavigationState>("idle");
   const [revalidationState, setRevalidationState] = useState<"idle" | "loading">("idle");
   const [currentModule, setCurrentModule] = useState<RouteModuleClient | null>(initialModule);
@@ -61,6 +62,8 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
   // Refs mirroring state that the stable revalidate/submit callbacks need.
   const locationRef = useRef(location);
   useEffect(() => { locationRef.current = location; }, [location]);
+  const paramsRef = useRef(params);
+  useEffect(() => { paramsRef.current = params; }, [params]);
   const currentModuleRef = useRef(currentModule);
   useEffect(() => { currentModuleRef.current = currentModule; }, [currentModule]);
 
@@ -69,6 +72,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
     if (state.actionData !== undefined) setActionData(state.actionData);
     if (state.params !== undefined) setParams(state.params);
     if (state.search !== undefined) setSearch(state.search);
+    if (state.matches !== undefined) setMatches(state.matches);
     if (state.location !== undefined) setLocation(state.location);
     else if (state.pathname !== undefined) {
       // Legacy callers pass a (possibly query-carrying) pathname string.
@@ -148,6 +152,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
           // React 19 hoists the <title>/<meta> elements rendered by <MetaTags>
           // into <head>, so description/OG tags update on soft navigation.
           setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
+          setMatches((data.matches as RouteMatch[] | undefined) ?? []);
         });
       };
 
@@ -199,6 +204,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
               setParams(((fresh as Record<string, unknown>).params as Record<string, string>) ?? {});
               setSearch(((fresh as Record<string, unknown>).search as Record<string, unknown>) ?? {});
               setMeta(((fresh as Record<string, unknown>).meta as MetaDescriptor[] | undefined) ?? []);
+              setMatches(((fresh as Record<string, unknown>).matches as RouteMatch[] | undefined) ?? []);
             });
           });
         return;
@@ -215,6 +221,27 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
         return;
       }
       const data = await res.json() as Record<string, unknown>;
+
+      // clientLoader (RR7-style): when the route exports one, it runs in the
+      // browser and its result replaces the route's loader slice. It receives a
+      // `serverLoader()` that resolves to the freshly-fetched server data, so a
+      // clientLoader can wrap/augment/cache it. Other slices (root/layouts) and
+      // the meta/matches payload are untouched.
+      const clientLoader = (routeModule as Record<string, unknown> | null)
+        ?.clientLoader as import("../shared/route-types.ts").ClientLoaderFunction | undefined;
+      if (typeof clientLoader === "function") {
+        try {
+          data.route = await clientLoader({
+            request: new Request(new URL(dataPath, window.location.origin)),
+            params: (data.params as Record<string, string>) ?? {},
+            search: (data.search as Record<string, unknown>) ?? {},
+            serverLoader: () => Promise.resolve(data.route),
+          });
+        } catch (err) {
+          console.error("[bractjs] clientLoader error:", err);
+        }
+      }
+
       if (staleTime > 0) loaderCache.set(key, data, staleTime, gcTime);
 
       // Update DevTools state (dev-only — no-op in prod since the import fails).
@@ -290,6 +317,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
         setParams((data.params as Record<string, string>) ?? {});
         setSearch((data.search as Record<string, unknown>) ?? {});
         setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
+        setMatches((data.matches as RouteMatch[] | undefined) ?? []);
       });
     } catch (err) {
       console.error("[bractjs] revalidate error:", err);
@@ -303,6 +331,39 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
     registerRevalidator(revalidate);
     return () => registerRevalidator(null);
   }, [revalidate]);
+
+  // clientLoader.hydrate: for a fully-SSR'd route whose clientLoader opted into
+  // hydration, run it once after mount and replace the route's loader slice.
+  // Routes that didn't SSR (hydrationPending truthy) take the fetch path below,
+  // where clientLoader already applies via loadRoute on navigation; this effect
+  // is only for the first paint of an SSR document.
+  useEffect(() => {
+    if (hydrationPending) return;
+    const cl = (initialModule as Record<string, unknown> | null)
+      ?.clientLoader as import("../shared/route-types.ts").ClientLoaderFunction | undefined;
+    if (typeof cl !== "function" || cl.hydrate !== true) return;
+    let cancelled = false;
+    void (async () => {
+      const path = window.location.pathname + window.location.search;
+      const serverSlice = (initialData.loaderData as Record<string, unknown>)?.route;
+      try {
+        const next = await cl({
+          request: new Request(new URL(path, window.location.origin)),
+          params: initialData.params,
+          search: initialData.search ?? {},
+          serverLoader: async () => serverSlice,
+        });
+        if (cancelled) return;
+        startTransition(() => {
+          setLoaderData((prev) => ({ ...prev, route: next }));
+        });
+      } catch (err) {
+        console.error("[bractjs] clientLoader (hydrate) error:", err);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Selective-SSR / SPA hydration completion. The first client render matched
   // the server (Fallback or empty shell); after mount, put loader data in
@@ -334,6 +395,7 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
             setParams((data.params as Record<string, string>) ?? {});
             setSearch((data.search as Record<string, unknown>) ?? {});
             setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
+            setMatches((data.matches as RouteMatch[] | undefined) ?? []);
             setHydrationPending(false);
           });
           return;
@@ -402,34 +464,72 @@ export function ClientRouter({ children, initialData, initialModule = null }: Cl
       const body = opts.body instanceof FormData
         ? opts.body
         : new URLSearchParams(opts.body);
-      const res = await fetch(to, {
-        method: opts.method.toUpperCase(),
-        body,
-        headers: { "X-BractJS-Action": "1" },
-      });
-      if (res.redirected) {
-        const safe = toSamePath(res.url);
-        if (safe) {
-          // navigate() loads fresh data for the target — no extra revalidation.
-          await navigateRef.current(safe);
-          return;
+
+      // The server submit — also the `serverAction()` a clientAction can call.
+      // A redirected response short-circuits to a real navigation (via
+      // toSamePath so an attacker Location can never soft-nav the SPA); it
+      // returns a sentinel so the caller stops.
+      const REDIRECTED = Symbol("redirected");
+      let lastStatus = 0;
+      const doServerPost = async (): Promise<unknown> => {
+        const res = await fetch(to, {
+          method: opts.method.toUpperCase(),
+          body,
+          headers: { "X-BractJS-Action": "1" },
+        });
+        lastStatus = res.status;
+        if (res.redirected) {
+          const safe = toSamePath(res.url);
+          if (safe) { await navigateRef.current(safe); return REDIRECTED; }
+          window.location.assign(res.url);
+          return REDIRECTED;
         }
-        window.location.assign(res.url);
-        return;
+        return res.json();
+      };
+
+      // clientAction (RR7-style): if the target route exports one, it runs in
+      // the browser and decides whether/how to hit the server via serverAction().
+      const [toPath] = to.split("?");
+      const pattern = matchPatternForPath(toPath, manifest);
+      const chunkUrl = pattern !== null ? manifest.routes[pattern]?.chunk : undefined;
+      let clientAction: import("../shared/route-types.ts").ClientActionFunction | undefined;
+      if (chunkUrl) {
+        try {
+          const mod = await import(/* @vite-ignore */ chunkUrl) as Record<string, unknown>;
+          if (typeof mod.clientAction === "function") {
+            clientAction = mod.clientAction as import("../shared/route-types.ts").ClientActionFunction;
+          }
+        } catch { /* fall back to a plain server submit */ }
       }
-      const data = (await res.json()) as unknown;
+
+      let data: unknown;
+      if (clientAction) {
+        let calledServer = false;
+        data = await clientAction({
+          request: new Request(new URL(to, window.location.origin), { method: opts.method.toUpperCase() }),
+          params: paramsRef.current,
+          formData: body instanceof FormData ? body : new FormData(),
+          serverAction: () => { calledServer = true; return doServerPost(); },
+        });
+        // If the clientAction triggered a redirect via serverAction(), stop.
+        if (calledServer && data === REDIRECTED) return;
+      } else {
+        data = await doServerPost();
+        if (data === REDIRECTED) return;
+      }
+
       setActionData(data);
       setNavState("loading");
-      await revalidate({ formMethod: opts.method, actionStatus: res.status });
+      await revalidate({ formMethod: opts.method, actionStatus: lastStatus });
     } finally {
       setNavState("idle");
     }
-  }, [revalidate]);
+  }, [revalidate, manifest]);
 
   return (
     <RouterContext.Provider
       value={{
-        loaderData, actionData, params, pathname: location.pathname, location, search,
+        loaderData, actionData, params, pathname: location.pathname, location, search, matches,
         manifest, currentModule, setRoute, revalidate, revalidationState, hydrationPending,
       }}
     >

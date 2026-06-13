@@ -1,5 +1,5 @@
 import { createContext, useContext, createElement, type ComponentType, type ReactNode } from "react";
-import type { RouterLocation } from "./route-types.ts";
+import type { RouterLocation, RouteMatch } from "./route-types.ts";
 
 export interface RouteManifest {
   [routeId: string]: {
@@ -20,6 +20,8 @@ export interface BractJSContextValue {
   location?: RouterLocation;
   /** Validated search params (route `searchSchema` output), so `useSearch()` works during SSR. */
   search?: Record<string, unknown>;
+  /** The matched route chain (root → layouts → route) for `useMatches()`. */
+  matches?: RouteMatch[];
 }
 
 export const BractJSContext = createContext<BractJSContextValue>(null!);
