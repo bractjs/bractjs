@@ -763,9 +763,12 @@ pipeline.use(authGuard({ session, required: true })); // 401 if no session.user
 pipeline.use(csp({
   directives: { "img-src": "'self' data: https://cdn.example", "frame-ancestors": "'none'" },
   reportOnly: false, // true → Content-Security-Policy-Report-Only
+  strict: false,     // true → drop 'unsafe-inline' from style-src (see below)
 }));
 ```
 Read the nonce inside a component/middleware with `getCspNonce(context)` (key: `CSP_NONCE_KEY`) to nonce your own inline scripts.
+
+`script-src` is always nonce-based (`'nonce-…' 'strict-dynamic'`), so injected `<script>` cannot execute. The default `style-src` allows `'unsafe-inline'` for ergonomics (React inline styles, CSS-in-JS); this leaves inline-style injection possible. Pass `strict: true` (or override `style-src` with a nonce/hash) if your app serves all styles from same-origin stylesheets.
 
 ### Custom middleware
 
@@ -1291,6 +1294,19 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
 
 **Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
+
+---
+
+## 27. Security model
+
+BractJS ships secure defaults, but a few behaviors are worth understanding so you don't accidentally widen your attack surface.
+
+- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any *other* exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** (read the session, check the user). The CSRF gate only proves the call is same-origin; it does not authenticate the user.
+- **`/_stream` calls actions with no arguments.** A streaming action invoked over `GET /_stream` receives no caller input. It must be safe to call with none and must authorize itself.
+- **CORS + credentials.** Listing an origin in `cors({ origin: [...], credentials: true })` fully trusts that origin for credentialed cross-origin reads. Only list origins you control. `credentials:true` with `origin:"*"` is refused at setup. Never add `X-BractJS-Action` to `Access-Control-Allow-Headers` — it is the CSRF gate.
+- **Error messages.** In production, loader/action errors are surfaced to the client as a generic message; the real message + stack appear only in dev (`NODE_ENV=development`). For user-facing structured errors throw an `HttpError` (its message *is* shown) — never put secrets in a raw `Error.message`.
+- **CSP `style-src`.** The opt-in `csp()` middleware nonces all scripts, but its default `style-src` includes `'unsafe-inline'` for ergonomics. Pass `csp({ strict: true })` (or override `style-src` with a nonce/hash) if you want to block inline-style injection.
+- **Already handled for you:** path traversal + symlink escape on `/public` and `/_image`, open-redirect neutralization (`redirect()` requires `{ allowExternal: true }` to go off-origin), XSS-safe SSR data island (`safeStringify`), prototype-pollution rejection on action JSON bodies, request body-size caps, signed/constant-time-verified cookie sessions, and CSRF via layered `Sec-Fetch-Site` + custom-header + `Origin` checks.
 
 ---
 

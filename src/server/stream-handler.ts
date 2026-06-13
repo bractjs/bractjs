@@ -71,6 +71,14 @@ export async function handleStreamRequest(request: Request): Promise<Response | 
     async start(controller) {
       const encoder = new TextEncoder();
       try {
+        // SECURITY(medium): /_stream invokes the resolved action with NO
+        // caller-supplied arguments (GET carries no body, and we deliberately
+        // pass none). Any function reachable here therefore runs purely on
+        // server-side state. The X-BractJS-Action gate above blocks browser
+        // cross-origin abuse; the action-registry's RESERVED_ROUTE_EXPORTS
+        // filter keeps route lifecycle exports (loader/action/…) from ever
+        // being resolvable. Authors must still ensure stream actions are safe
+        // to call with no input and perform their own authorization.
         const result = await action();
         // If the action is an async generator, stream each value.
         if (result && typeof (result as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function") {

@@ -54,6 +54,16 @@ describe("csp middleware", () => {
     expect(res.headers.get("Content-Security-Policy")).not.toContain("object-src");
   });
 
+  test("default style-src allows 'unsafe-inline'; strict drops it", async () => {
+    const def = await runCsp(csp(), () => Promise.resolve(new Response("ok")));
+    expect(def.res.headers.get("Content-Security-Policy")).toContain("style-src 'self' 'unsafe-inline'");
+
+    const strict = await runCsp(csp({ strict: true }), () => Promise.resolve(new Response("ok")));
+    const policy = strict.res.headers.get("Content-Security-Policy")!;
+    expect(policy).toContain("style-src 'self'");
+    expect(policy).not.toContain("'unsafe-inline'");
+  });
+
   test("reportOnly emits the report-only header instead", async () => {
     const { res } = await runCsp(csp({ reportOnly: true }), () => Promise.resolve(new Response("ok")));
     expect(res.headers.get("Content-Security-Policy-Report-Only")).toBeTruthy();
