@@ -1,5 +1,6 @@
 import type { BunPlugin } from "bun";
 import type { RouteFile, RouteModule } from "./route.d.ts";
+import type { BractAdapter, I18nConfig, OnErrorHook } from "./index.d.ts";
 
 export interface BractJSConfig {
   /** TCP port to listen on. Default: 3000. */
@@ -20,10 +21,20 @@ export interface BractJSConfig {
   clientEnv?: string[];
   /** User Bun bundler plugins appended to the client build (e.g. bun-plugin-tailwind). */
   plugins?: BunPlugin[];
+  /** Directory for the transformed-image cache. Default: ".bract-image-cache". */
+  imageCacheDir?: string;
+  /** WebSocket port for dev HMR (used by `bractjs dev` only). Default 3001. */
+  hmrPort?: number;
+  /** Custom server adapter (Cloudflare Workers, Deno, Node, etc.). Defaults to Bun.serve(). */
+  adapter?: BractAdapter;
+  /** i18n locale-prefix routing config consumed by the i18n utilities. */
+  i18n?: I18nConfig;
   /** Called once after the server starts listening. Use to open DB connections, warm caches, etc. */
   onStart?: () => Promise<void> | void;
   /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */
   onShutdown?: () => Promise<void> | void;
+  /** Called for every unexpected error (loader/action throws, uncaught exceptions). Redirects and HttpErrors are not reported. */
+  onError?: OnErrorHook;
   /**
    * Pre-scanned route list. Typically imported from `app/_generated/routes.ts`.
    * Required for `bun build --compile` binaries where the routes/ directory

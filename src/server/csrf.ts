@@ -29,6 +29,32 @@
 // header. If CORS policy is ever loosened, Sec-Fetch-Site (1) remains as the
 // browser-enforced backstop, and apps that loosen CORS should add a
 // cryptographic double-submit token.
+import { isExplicitDev } from "./env.ts";
+
+/**
+ * The developer-facing explanation of a CSRF rejection. In dev it spells out
+ * the accepted signals and the usual fix; in prod it stays terse so the 403
+ * leaks nothing. Used for the plain route/action 403 bodies — the stream
+ * handler embeds {@link csrfHint} in its SSE error event instead.
+ */
+export function csrfHint(): string {
+  return (
+    "Blocked a cross-site or unattributed mutation (CSRF protection). " +
+    "Same-origin browser requests are allowed automatically; a manual fetch() " +
+    'must send the header `X-BractJS-Action: 1` (BractJS\'s <Form> and ' +
+    "useFetcher do this for you)."
+  );
+}
+
+/** A 403 Response for a rejected mutation: explanatory in dev, terse in prod. */
+export function csrfForbiddenResponse(): Response {
+  if (isExplicitDev()) {
+    console.warn("[bractjs] 403 (CSRF): " + csrfHint());
+    return new Response("Forbidden — " + csrfHint(), { status: 403 });
+  }
+  return new Response("Forbidden", { status: 403 });
+}
+
 export function isAllowedMutation(request: Request): boolean {
   // (1) Browser-enforced signal. If present, it vetoes cross-origin requests
   // regardless of what the Origin/custom headers claim.

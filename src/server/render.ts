@@ -1,7 +1,7 @@
 import { renderToReadableStream } from "react-dom/server";
 import { createElement, Fragment, type ReactNode } from "react";
 import type { MetaDescriptor } from "../shared/route-types.ts";
-import { safeStringify, isDevRuntime } from "./env.ts";
+import { safeStringify, isDevRuntime, getDevHmrPort } from "./env.ts";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
 import { mergeMeta } from "./meta.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
@@ -47,7 +47,13 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     status = 200,
   } = options;
 
-  const devFlag = isDevRuntime() ? "window.__BRACT_DEV__=true;" : "";
+  // In dev, publish the HMR port so the injected client connects to the
+  // configured `hmrPort` rather than a hardcoded 3001. 0 → omit (client
+  // defaults to 3001).
+  const hmrPort = isDevRuntime() ? getDevHmrPort() : 0;
+  const devFlag = isDevRuntime()
+    ? "window.__BRACT_DEV__=true;" + (hmrPort ? `window.__BRACTJS_HMR_PORT__=${hmrPort};` : "")
+    : "";
   const devOverlay = isDevRuntime() ? devFlag + errorOverlayScript + "\n" : "";
   const mergedMeta = mergeMeta(options.meta ?? []);
   // The merged descriptor array is what the client reads to keep the document

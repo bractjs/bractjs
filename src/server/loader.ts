@@ -21,6 +21,7 @@ export async function safeRun<T>(
   fn: ((args: LoaderArgs) => Promise<T> | T) | undefined,
   args: LoaderArgs,
   onError?: OnErrorHook,
+  where?: string,
 ): Promise<T | { __error: unknown } | null> {
   if (!fn) return null;
 
@@ -36,12 +37,14 @@ export async function safeRun<T>(
     // dev we surface the real message + stack for DX. Routes wanting to
     // surface structured user-facing errors should throw an HttpError, not
     // a custom Error subclass.
-    console.error("[bractjs] loader error:", err);
+    // Name the failing module so the log/overlay points at the right file.
+    console.error(`[bractjs] loader error${where ? ` in ${where}` : ""}:`, err);
     await fireOnError(onError, err, args.request);
     const safe = isExplicitDev()
       ? {
           message: err instanceof Error ? err.message : String(err),
           stack: err instanceof Error ? err.stack : undefined,
+          routeFile: where,
         }
       : { message: "Internal Server Error" };
     return { __error: safe };
@@ -84,13 +87,14 @@ export async function runLoaders(
   // Run every loader in the chain concurrently — root, all layouts, and the
   // route loader. The route loader is usually the slowest and most important
   // one, so it must not be serialized behind the layout wave.
-  const layoutLoaders = chain.layouts.map((mod) =>
-    safeRun(mod.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError)
+  const files = chain.files;
+  const layoutLoaders = chain.layouts.map((mod, i) =>
+    safeRun(mod.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError, files?.layouts[i])
   );
 
   const [root, route, ...layoutResults] = await Promise.all([
-    safeRun(chain.root.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError),
-    safeRun(chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError),
+    safeRun(chain.root.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError, files?.root),
+    safeRun(chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError, files?.route),
     ...layoutLoaders,
   ]);
 
