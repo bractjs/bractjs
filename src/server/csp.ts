@@ -21,6 +21,15 @@ export interface CspOptions {
    * Useful for staging a policy before turning it on. Default: false.
    */
   reportOnly?: boolean;
+  /**
+   * Drop `'unsafe-inline'` from the default `style-src`. The baseline policy
+   * allows inline styles for ergonomics (React inline styles, CSS-in-JS), which
+   * leaves inline-style injection (CSS exfiltration / UI redress) possible.
+   * Set `strict: true` for `style-src 'self'` only — you must then serve all
+   * styles from same-origin stylesheets (or override `style-src` yourself with
+   * a nonce/hash via `directives`). Default: false.
+   */
+  strict?: boolean;
 }
 
 /**
@@ -70,7 +79,7 @@ export function csp(options: CspOptions = {}): MiddlewareFn {
       // imports without each chunk needing its own nonce. Falls back to 'self'
       // in browsers that don't support it.
       "script-src": `'self' 'nonce-${nonce}' 'strict-dynamic'`,
-      "style-src": "'self' 'unsafe-inline'",
+      "style-src": options.strict ? "'self'" : "'self' 'unsafe-inline'",
       "img-src": "'self' data: blob:",
       "connect-src": "'self'",
       "base-uri": "'self'",
