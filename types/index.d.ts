@@ -6,8 +6,9 @@ export type {
   LoaderFunction, ActionFunction, MetaFunction, RouteModule,
   RouteFile, Segment, RouterLocation,
   ShouldRevalidateArgs, ShouldRevalidateFunction,
+  LoaderData, ActionData,
 } from "./route.d.ts";
-import type { RouterLocation } from "./route.d.ts";
+import type { RouterLocation, LoaderData, ActionData, ActionArgs } from "./route.d.ts";
 
 // ── Config + Server ───────────────────────────────────────────────────────
 export type { BractJSConfig, ServerManifest, BuildConfig } from "./config.d.ts";
@@ -141,6 +142,27 @@ export declare function validate<T>(
   input: FormData | Record<string, unknown>,
 ): Promise<T>;
 
+export type SafeValidateResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; fieldErrors: FieldErrors; firstError: string };
+/** Non-throwing validate(): returns a result instead of throwing a 400. */
+export declare function safeValidate<T>(
+  schema: { safeParse?(i: unknown): unknown } | { parse(i: unknown): T },
+  input: FormData | Record<string, unknown>,
+): Promise<SafeValidateResult<T>>;
+/** True for the 400 Response thrown by validate()/searchSchema validation. */
+export declare function isValidationResponse(value: unknown): value is Response;
+/** Parse the `{ errors }` body of a validation 400 into field errors + first message. */
+export declare function readValidationError(
+  res: Response,
+): Promise<{ fieldErrors: FieldErrors; firstError: string }>;
+
+// ── FormData helpers ──────────────────────────────────────────────────────
+/** String field from FormData; "" when missing or a File. */
+export declare function formText(formData: FormData, key: string): string;
+/** Collect string fields from FormData (all, or a named subset). */
+export declare function formValues(formData: FormData, keys?: string[]): Record<string, string>;
+
 // ── Search-param validation ───────────────────────────────────────────────
 /** URLSearchParams → plain object; repeated keys collapse into arrays. */
 export declare function searchParamsToObject(sp: URLSearchParams): Record<string, string | string[]>;
@@ -220,10 +242,16 @@ export interface ScrollRestorationProps {
 /** Restores scroll on back/forward, scrolls to top (or `#hash`) on new navigations. Render once in root.tsx. */
 export declare function ScrollRestoration(props?: ScrollRestorationProps): null;
 
-export interface FormProps { method?: "post" | "put" | "delete"; action?: string; children?: ReactNode; [key: string]: unknown; }
+export interface FormProps { method?: "post" | "put" | "delete"; action?: string; /** Renders a hidden `intent` input (pairs with defineActions()). */ intent?: string; children?: ReactNode; [key: string]: unknown; }
 export declare function Form(props: FormProps): ReactNode;
 
-export interface AwaitProps<T> { resolve: Promise<T>; fallback: ReactNode; children: (data: T) => ReactNode; }
+// ── defineActions (intent dispatch) ───────────────────────────────────────
+/** Compose a route action from per-intent handlers, dispatching on the form's `intent` field. */
+export declare function defineActions<M extends Record<string, (args: ActionArgs) => unknown>>(
+  handlers: M,
+): (args: ActionArgs) => Promise<Awaited<ReturnType<M[keyof M]>> | Response>;
+
+export interface AwaitProps<T> { resolve: Promise<T> | Deferred<T>; fallback: ReactNode; children: (data: T) => ReactNode; }
 export declare function Await<T>(props: AwaitProps<T>): ReactNode;
 
 export type ImageFormat = "webp" | "avif" | "jpeg" | "png";
@@ -244,8 +272,9 @@ export interface ImageProps {
 export declare function Image(props: ImageProps): ReactNode;
 
 // ── Client hooks ──────────────────────────────────────────────────────────
-export declare function useLoaderData<T = unknown>(): T;
-export declare function useActionData<T = unknown>(): T | null;
+// Pass the loader/action function type to infer the data — useLoaderData<typeof loader>().
+export declare function useLoaderData<T = unknown>(): LoaderData<T>;
+export declare function useActionData<T = unknown>(): ActionData<T> | null;
 /** The current location — reactive on the client, request-derived during SSR. */
 export declare function useLocation(): RouterLocation;
 export declare function useParams<TTo extends string>(): ParamsFor<TTo>;
@@ -280,6 +309,8 @@ export interface FetcherEntry {
 export interface FetcherFormProps {
   method?: "post" | "put" | "delete";
   action?: string;
+  /** Renders a hidden `intent` input (pairs with defineActions()). */
+  intent?: string;
   children?: ReactNode;
   [key: string]: unknown;
 }
@@ -295,6 +326,7 @@ export interface FetcherResult {
   Form: (props: FetcherFormProps) => ReactNode;
 }
 export interface StreamFetcherResult<T = unknown> {
+  /** @deprecated Never emitted — call `connect(actionId)` instead. Removed in 0.2. */
   events: AsyncGenerator<T>;
   connect(actionId: string): AsyncGenerator<T>;
 }
@@ -419,6 +451,9 @@ export interface DevServer {
 export declare function createDevServer(options?: DevServerOptions): Promise<DevServer>;
 
 export declare function loadUserConfig(): Promise<Partial<BractJSConfig>>;
+
+/** Identity helper for bractjs.config.ts — wrap your default export for autocomplete + type-checking. */
+export declare function defineConfig(config: Partial<BractJSConfig>): Partial<BractJSConfig>;
 
 // ── Prerendering / SPA shell ──────────────────────────────────────────────
 export interface PrerenderOptions {

@@ -32,6 +32,16 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   const routeFilePaths = routes.map((r) => join(appDir, r.filePath));
   const rootFilePath = join(appDir, "root.tsx");
 
+  // Static route-module lint: surface empty routes and miscased exports at
+  // build time (no execution — just source analysis).
+  const { lintRouteModuleSource } = await import("./route-lint.ts");
+  for (const r of routes) {
+    const src = await Bun.file(join(appDir, r.filePath)).text().catch(() => "");
+    for (const warning of lintRouteModuleSource(src, r.filePath)) {
+      console.warn(`[bract] ${warning}`);
+    }
+  }
+
   // ── 1. Clean stale artefacts ────────────────────────────────────────────
   const buildDir = config.buildDir ?? "build";
   await Promise.all([

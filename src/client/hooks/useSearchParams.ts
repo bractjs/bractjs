@@ -18,8 +18,13 @@ export interface SearchParamsResult<T extends Record<string, string>> {
 // ── Hook ───────────────────────────────────────────────────────────────────
 
 /**
- * Reads and writes URL search params. Triggers a loader re-run (soft-nav fetch)
- * when params change.
+ * Low-level read/write of raw `URLSearchParams` (string values only). Triggers a
+ * loader re-run (soft-nav fetch) when params change.
+ *
+ * Prefer `useSearch()` / `useSetSearch()` when the route has a `searchSchema`:
+ * those return the VALIDATED, coerced object (numbers stay numbers, defaults
+ * applied) and accept typed patches. Reach for `useSearchParams` only when you
+ * want raw string access or the route has no schema.
  *
  * Pass the route pattern as a generic to type the result against your codegen'd
  * routes: `useSearchParams<"/posts">()`. Augment `RouteSearchParamsMap` to give a

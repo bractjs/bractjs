@@ -25,6 +25,8 @@ export interface BractJSConfig {
   appDir: string;
   publicDir: string;
   manifest: ServerManifest;
+  /** WebSocket port for dev HMR (used by `bractjs dev` only). Default 3001. */
+  hmrPort?: number;
   /** Optional custom adapter (Cloudflare Workers, Deno, Node, etc.). Defaults to Bun.serve(). */
   adapter?: BractAdapter;
   /** i18n locale prefix routing (E2). */

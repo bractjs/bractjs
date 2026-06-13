@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, spyOn } from "bun:test";
 import { safeRun, runLoaders, buildLoaderArgs } from "../server/loader.ts";
 import { HttpError } from "../shared/errors.ts";
 import type { LoaderArgs } from "../shared/route-types.ts";
@@ -41,6 +41,36 @@ describe("safeRun", () => {
   test("re-throws redirect Response", async () => {
     const fn = async () => { throw new Response(null, { status: 302, headers: { Location: "/" } }); };
     await expect(safeRun(fn, stubArgs)).rejects.toBeInstanceOf(Response);
+  });
+
+  test("includes the `where` location in the error log", async () => {
+    const spy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await safeRun(async () => { throw new Error("boom"); }, stubArgs, undefined, "routes/x.tsx");
+      const logged = spy.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(logged).toContain("loader error in routes/x.tsx");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("dev __error carries the routeFile; prod stays generic", async () => {
+    const original = Bun.env.NODE_ENV;
+    const spy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      Bun.env.NODE_ENV = "development";
+      const dev = await safeRun(async () => { throw new Error("boom"); }, stubArgs, undefined, "routes/x.tsx");
+      expect(dev).toMatchObject({ __error: { routeFile: "routes/x.tsx" } });
+
+      Bun.env.NODE_ENV = "production";
+      const prod = await safeRun(async () => { throw new Error("boom"); }, stubArgs, undefined, "routes/x.tsx") as { __error: Record<string, unknown> };
+      expect(prod.__error.routeFile).toBeUndefined();
+      expect(prod.__error.message).toBe("Internal Server Error");
+    } finally {
+      if (original === undefined) delete Bun.env.NODE_ENV;
+      else Bun.env.NODE_ENV = original;
+      spy.mockRestore();
+    }
   });
 });
 

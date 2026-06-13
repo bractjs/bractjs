@@ -5,8 +5,10 @@ export { defineContext } from "./server/context.ts";
 export type { ContextFactory } from "./server/context.ts";
 export { route } from "./server/api-route.ts";
 export type { ApiRouteDefinition, AppApiRoutes } from "./server/api-route.ts";
-export { validate } from "./server/validate.ts";
-export type { FieldErrors, ValidationError } from "./server/validate.ts";
+export { validate, safeValidate, isValidationResponse, readValidationError } from "./server/validate.ts";
+export type { FieldErrors, ValidationError, SafeValidateResult } from "./server/validate.ts";
+export { formText, formValues } from "./shared/form-data.ts";
+export { defineActions } from "./shared/define-actions.ts";
 export { validateSearch, searchParamsToObject } from "./server/search.ts";
 export type { BractAdapter } from "./server/adapter.ts";
 export { BunAdapter } from "./server/adapter.ts";
@@ -74,6 +76,8 @@ export type {
   RouterLocation,
   ShouldRevalidateArgs,
   ShouldRevalidateFunction,
+  LoaderData,
+  ActionData,
 } from "./shared/route-types.ts";
 export type { RouteFile, Segment } from "./server/scanner.ts";
 
@@ -158,7 +162,7 @@ export { createDevServer } from "./dev/server.ts";
 export type { DevServerOptions, DevServer } from "./dev/server.ts";
 export { runBuild } from "./build/bundler.ts";
 export type { BuildConfig } from "./build/bundler.ts";
-export { loadUserConfig } from "./config/load.ts";
+export { loadUserConfig, defineConfig } from "./config/load.ts";
 export { runPrerender } from "./build/prerender.ts";
 export type { PrerenderOptions, PrerenderResult } from "./build/prerender.ts";
 export { renderSpaShell } from "./server/spa.ts";

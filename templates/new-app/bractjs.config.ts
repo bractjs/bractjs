@@ -1,14 +1,9 @@
-import type { BractJSConfig } from "@bractjs/bractjs";
+import { defineConfig } from "@bractjs/bractjs";
 
-const config: BractJSConfig = {
+// All fields are optional and merged over BractJS defaults. `defineConfig`
+// gives you autocomplete + type-checking without annotating the full type.
+// (The build manifest is injected at runtime — you never set it here.)
+export default defineConfig({
   port: 3000,
-  appDir: "./app",
-  publicDir: "./public",
-  buildDir: "./build",
-  manifest: { clientEntry: "", routes: {} }, // populated by `bractjs build`
-  minify: true,
-  sourcemap: "external",
-  clientEnv: [],
-};
-
-export default config;
+  clientEnv: [], // process.env keys to expose to the client bundle
+});

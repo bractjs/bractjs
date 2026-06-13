@@ -21,6 +21,19 @@ export function isDevRuntime(): boolean {
 }
 
 /**
+ * The dev HMR WebSocket port, set by createDevServer and read when rendering
+ * the dev bootstrap so the injected HMR client connects to the right port
+ * (the config's `hmrPort`, not a hardcoded 3001). 0 = default.
+ */
+let _devHmrPort = 0;
+export function setDevHmrPort(port: number): void {
+  _devHmrPort = port;
+}
+export function getDevHmrPort(): number {
+  return _devHmrPort;
+}
+
+/**
  * Strict "is development?" check used to gate sensitive output (error
  * messages, stack traces) that would otherwise leak in production.
  *

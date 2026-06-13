@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { scanRoutes } from "../server/scanner.ts";
 import type { Segment } from "../server/scanner.ts";
+import { hashString } from "../build/hash.ts";
 
 // Convert [param] / [...catchAll] notation to :param colon-style for URLs.
 function patternToColon(urlPattern: string): string {
@@ -202,13 +203,80 @@ function registerAugmentationLines(routes: Array<{ pattern: string; params: stri
   ].join("\n");
 }
 
+// ── Freshness fingerprint ────────────────────────────────────────────────
+// The generated file embeds a hash of its route patterns so the dev server can
+// detect drift precisely (and skip rewrites when nothing changed, which would
+// otherwise trigger an editor reload loop). Patterns are sorted everywhere so
+// the output is identical across machines regardless of filesystem scan order.
+
+const FINGERPRINT_RE = /^\/\/ bractjs:routes ([0-9a-f]+) \((\d+) routes?\)$/m;
+
+/** Stable 8-hex fingerprint of a route-pattern set (order-independent). */
+export function routesFingerprint(patterns: string[]): Promise<string> {
+  return hashString([...patterns].sort().join("\n"));
+}
+
+/** Extract the fingerprint hash previously written into a generated file, or null. */
+export function readFingerprint(src: string | null): string | null {
+  if (!src) return null;
+  const m = src.match(FINGERPRINT_RE);
+  return m ? m[1] : null;
+}
+
+/**
+ * A precise human-readable reason the generated types are stale, or null when
+ * fresh. `patterns` must be colon-style (the form the generated file embeds);
+ * prefer {@link explainStalenessForApp} which derives them for you.
+ */
+export async function explainStaleness(
+  oldSrc: string | null,
+  patterns: string[],
+): Promise<string | null> {
+  if (!oldSrc) return "route-types.gen.ts is missing — generating it";
+  const current = await routesFingerprint(patterns);
+  if (readFingerprint(oldSrc) === current) return null;
+  // Recover the old pattern set from the union members to report add/remove
+  // counts. The last member ends with `;`, so allow an optional trailing `;`.
+  const old = new Set(
+    [...oldSrc.matchAll(/^ {2}\| "([^"]+)";?$/gm)].map((m) => m[1]),
+  );
+  const now = new Set(patterns);
+  const added = patterns.filter((p) => !old.has(p)).length;
+  const removed = [...old].filter((p) => !now.has(p)).length;
+  const parts: string[] = [];
+  if (added) parts.push(`+${added} added`);
+  if (removed) parts.push(`-${removed} removed`);
+  const detail = parts.length ? ` (${parts.join(", ")})` : "";
+  return `routes changed since last codegen${detail} — regenerating`;
+}
+
+/** Colon-style route patterns for an app dir (the form the generated file uses). */
+export async function routePatternsForApp(appDir: string): Promise<string[]> {
+  const routeFiles = await scanRoutes(appDir);
+  return routeFiles.map((r) => patternToColon(r.urlPattern));
+}
+
+/** {@link explainStaleness} against the current generated file + route set on disk. */
+export async function explainStalenessForApp(
+  appDir: string,
+  outPath?: string,
+): Promise<string | null> {
+  const dest = outPath ?? join(appDir, "route-types.gen.ts");
+  const existing = await Bun.file(dest).text().catch(() => null);
+  return explainStaleness(existing, await routePatternsForApp(appDir));
+}
+
 export async function generateRouteTypes(appDir: string): Promise<string> {
   const routeFiles = await scanRoutes(appDir);
-  const routes = routeFiles.map((r) => ({
-    pattern: patternToColon(r.urlPattern),
-    params: paramsFromSegments(r.segments),
-    filePath: r.filePath,
-  }));
+  const routes = routeFiles
+    .map((r) => ({
+      pattern: patternToColon(r.urlPattern),
+      params: paramsFromSegments(r.segments),
+      filePath: r.filePath,
+    }))
+    // Deterministic order independent of filesystem scan order, so the output
+    // is byte-identical across machines (and the idempotent write works).
+    .sort((a, b) => a.pattern.localeCompare(b.pattern));
 
   const union = routes.length > 0
     ? routes.map((r) => {
@@ -225,8 +293,14 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
   // derives each route's validated search shape from its `searchSchema` export.
   const IMPORTS = 'import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs";';
 
+  // Freshness breadcrumb: lets the dev server detect drift without re-deriving
+  // the whole file, and lets writeRouteTypes skip identical writes.
+  const fingerprint = await routesFingerprint(routes.map((r) => r.pattern));
+  const FINGERPRINT = `// bractjs:routes ${fingerprint} (${routes.length} route${routes.length === 1 ? "" : "s"})`;
+
   return [
     HEADER,
+    FINGERPRINT,
     IMPORTS,
     "",
     "export type AppRoutes =",
@@ -249,6 +323,11 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
     "export type TypedActionArgs<T extends AppRoutes> =",
     "  TypedLoaderArgs<T> & { formData: FormData };",
     "",
+    "/** Loader args fully typed for a route literal: `loader(args: LoaderArgsFor<\"/posts\">)`. */",
+    "export type LoaderArgsFor<T extends AppRoutes> = TypedLoaderArgs<T>;",
+    "/** Action args fully typed for a route literal: `action(args: ActionArgsFor<\"/posts\">)`. */",
+    "export type ActionArgsFor<T extends AppRoutes> = TypedActionArgs<T>;",
+    "",
     "/** A locale-prefixed variant of a route (E2 i18n routing). */",
     "export type LocalizedRoute<T extends AppRoutes> = `/${string}${T}`;",
     "",
@@ -262,8 +341,17 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
   ].join("\n");
 }
 
-export async function writeRouteTypes(appDir: string, outPath?: string): Promise<void> {
+export async function writeRouteTypes(
+  appDir: string,
+  outPath?: string,
+): Promise<{ dest: string; written: boolean }> {
   const dest = outPath ?? join(appDir, "route-types.gen.ts");
-  await Bun.write(dest, await generateRouteTypes(appDir));
+  const next = await generateRouteTypes(appDir);
+  // Skip the write (and the log, and the resulting file-watcher event) when the
+  // content is unchanged — otherwise auto-codegen in dev would loop the editor.
+  const existing = await Bun.file(dest).text().catch(() => null);
+  if (existing === next) return { dest, written: false };
+  await Bun.write(dest, next);
   console.log("[bract] codegen →", dest);
+  return { dest, written: true };
 }

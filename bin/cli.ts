@@ -43,6 +43,10 @@ async function scaffoldNew(appName: string): Promise<void> {
   try {
     const { writeModuleRegistries } = await import("../src/codegen/module-registry.ts");
     await writeModuleRegistries(join(appDir, "app"));
+    // Generate typed routes so the scaffold has working <Link>/useParams typing
+    // out of the box (no manual `bractjs codegen` step before first dev run).
+    const { writeRouteTypes } = await import("../src/codegen/route-codegen.ts");
+    await writeRouteTypes(join(appDir, "app"));
     // Manifest stub — overwritten by `bractjs codegen:manifest` after a build
     const stubManifest = [
       "// Stub manifest — replaced by `bractjs codegen:manifest` after running",

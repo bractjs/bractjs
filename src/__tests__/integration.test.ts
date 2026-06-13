@@ -82,6 +82,52 @@ test("GET /nonexistent returns 404", async () => {
   expect(res.status).toBe(404);
 });
 
+// defineActions: dispatch on the form's `intent` field through one route action.
+test("defineActions dispatches POST intent=add to the right handler", async () => {
+  const form = new FormData();
+  form.set("intent", "add");
+  form.set("title", "Buy milk");
+  const res = await fetch(`${BASE}/intent-demo`, {
+    method: "POST",
+    body: form,
+    headers: { Origin: BASE, "X-BractJS-Action": "1" },
+  });
+  expect(res.status).toBe(200);
+  const data = (await res.json()) as { ok?: boolean; title?: string };
+  expect(data.ok).toBe(true);
+  expect(data.title).toBe("Buy milk");
+});
+
+test("defineActions returns 400 for an unknown intent", async () => {
+  const form = new FormData();
+  form.set("intent", "bogus");
+  const res = await fetch(`${BASE}/intent-demo`, {
+    method: "POST",
+    body: form,
+    headers: { Origin: BASE, "X-BractJS-Action": "1" },
+  });
+  expect(res.status).toBe(400);
+});
+
+// <Form intent="add"> renders the hidden input server-side (no DOM harness:
+// assert on the SSR HTML directly).
+test("<Form intent> renders the hidden intent input in SSR HTML", async () => {
+  const res = await fetch(`${BASE}/intent-demo`);
+  const html = await res.text();
+  expect(html).toContain('name="intent"');
+  expect(html).toContain('value="add"');
+});
+
+// A loader that throws is isolated into the route's __error slot (not a 500),
+// so layout/root still render. (The dev-only `routeFile` field is covered as a
+// unit in loader.test.ts; this server runs in prod mode.)
+test("a throwing loader is captured in the route slot's __error", async () => {
+  const res = await fetch(`${BASE}/_data?path=/boom`);
+  expect(res.status).toBe(200);
+  const data = (await res.json()) as { route: { __error?: { message: string } } };
+  expect(data.route.__error).toBeDefined();
+});
+
 test("HTML includes window.__BRACTJS_DATA__", async () => {
   const res = await fetch(`${BASE}/`);
   const html = await res.text();

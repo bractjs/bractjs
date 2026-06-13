@@ -8,19 +8,31 @@ type FormMethod = "post" | "put" | "delete";
 interface FormProps extends Omit<FormHTMLAttributes<HTMLFormElement>, "method" | "onSubmit"> {
   method?: FormMethod;
   action?: string;
+  /**
+   * Convenience: renders `<input type="hidden" name="intent" value={intent}>`
+   * as the first child, so a single route action can dispatch on it (pairs with
+   * `defineActions()`). Carried on no-JS POSTs too.
+   */
+  intent?: string;
   children: ReactNode;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function Form({ method = "post", action, children, ...rest }: FormProps) {
+export function Form({ method = "post", action, intent, children, ...rest }: FormProps) {
   const routerCtx = useContext(RouterContext);
   const navCtx = useContext(NavigationContext);
+  // The hidden intent input, rendered first so it's part of every submission
+  // (JS and native). `key` keeps React happy alongside arbitrary children.
+  const intentInput = intent !== undefined
+    ? <input key="__bract_intent" type="hidden" name="intent" value={intent} />
+    : null;
 
   // SSR: render a plain form — no JS submit handler needed
   if (!routerCtx || !navCtx) {
     return (
       <form method={method} action={action} {...rest}>
+        {intentInput}
         {children}
       </form>
     );
@@ -46,6 +58,7 @@ export function Form({ method = "post", action, children, ...rest }: FormProps) 
 
   return (
     <form method={method} onSubmit={(e) => { void handleSubmit(e); }} {...rest}>
+      {intentInput}
       {children}
     </form>
   );

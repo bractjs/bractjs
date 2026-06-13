@@ -2,7 +2,11 @@ import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { generateRouteTypes } from "../codegen/route-codegen.ts";
+import {
+  generateRouteTypes,
+  routesFingerprint,
+  readFingerprint,
+} from "../codegen/route-codegen.ts";
 
 let appDir = "";
 
@@ -27,6 +31,23 @@ describe("route-codegen — output shape", () => {
     expect(out).toContain("\"/users/:id\":");
     // The pattern key in the literal union must also be JSON-quoted.
     expect(out).toMatch(/\| "\/users\/:id"/);
+  });
+
+  test("emits a fingerprint matching routesFingerprint, and is deterministic", async () => {
+    const out = await generateRouteTypes(appDir);
+    // Header carries the route fingerprint.
+    const embedded = readFingerprint(out);
+    expect(embedded).toMatch(/^[0-9a-f]+$/);
+    expect(embedded).toBe(await routesFingerprint(["/", "/users/:id"]));
+    // Same input → byte-identical output (order-independent / reproducible).
+    expect(await generateRouteTypes(appDir)).toBe(out);
+    // Pattern union is sorted (deterministic across filesystems).
+    expect(out.indexOf('| "/"')).toBeLessThan(out.indexOf('| "/users/:id"'));
+  });
+
+  test("routesFingerprint is order-independent", async () => {
+    expect(await routesFingerprint(["/a", "/b"])).toBe(await routesFingerprint(["/b", "/a"]));
+    expect(await routesFingerprint(["/a"])).not.toBe(await routesFingerprint(["/a", "/b"]));
   });
 
   test("wires the Register augmentation for typed routing", async () => {

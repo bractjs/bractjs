@@ -114,13 +114,23 @@ describe("typed routing (type-level)", () => {
     await writeFile(join(app, "routes", "blog", "[id].tsx"), "export default () => null;\n");
     // A route with a typed searchSchema: its safeParse return type is what
     // `InferSchemaOutput` (and therefore useSearch<"/posts">) must pick up.
+    // It also has a loader whose return type drives `useLoaderData<typeof loader>`:
+    // an object union with a Response branch (must be excluded) and a Deferred
+    // field (must be preserved so <Await> accepts it).
     await writeFile(
       join(app, "routes", "posts.tsx"),
-      `export const searchSchema = {\n` +
+      `import { defer } from "@bractjs/bractjs";\n` +
+        `import type { LoaderArgs } from "@bractjs/bractjs";\n` +
+        `export const searchSchema = {\n` +
         `  safeParse(_input: unknown): { success: boolean; data?: { page: number; q?: string } } {\n` +
         `    return { success: true, data: { page: 1 } };\n` +
         `  },\n` +
         `};\n` +
+        `export function loader({ search }: LoaderArgs<{ page: number }>) {\n` +
+        `  const p: number = search.page;\n` +
+        `  if (p < 0) return new Response("bad", { status: 400 });\n` +
+        `  return { count: p, comments: defer({ list: Promise.resolve([1, 2]) }).list };\n` +
+        `}\n` +
         `export default () => null;\n`,
     );
 
@@ -130,7 +140,9 @@ describe("typed routing (type-level)", () => {
 
     await writeFile(
       join(app, "usage.tsx"),
-      `import { Link, useNavigate, useParams, useSearchParams, useSearch, useSetSearch } from "@bractjs/bractjs";\n` +
+      `import { Link, useNavigate, useParams, useSearchParams, useSearch, useSetSearch, useLoaderData, Await } from "@bractjs/bractjs";\n` +
+        `import type { LoaderArgsFor } from "./route-types.gen.ts";\n` +
+        `import { loader } from "./routes/posts.tsx";\n` +
         `import "./route-types.gen.ts";\n` +
         `export function Ok() {\n` +
         `  const navigate = useNavigate();\n` +
@@ -142,7 +154,16 @@ describe("typed routing (type-level)", () => {
         `  const setSearch = useSetSearch<"/posts">();\n` +
         `  void setSearch({ page: page + 1 });\n` +
         `  void setSearch((prev) => ({ page: prev.page + 1 }), { replace: true });\n` +
+        `  // useLoaderData<typeof loader>(): Response branch excluded, count typed,\n` +
+        `  // Deferred field preserved + accepted by <Await>.\n` +
+        `  const data = useLoaderData<typeof loader>();\n` +
+        `  const count: number = data.count;\n` +
+        `  // LoaderArgsFor<"/posts">: full route-literal arg typing.\n` +
+        `  const argSearch = (null as unknown as LoaderArgsFor<"/posts">).search;\n` +
+        `  const argPage: number = argSearch.page;\n` +
+        `  void count; void argPage;\n` +
         `  return (<>\n` +
+        `    <Await resolve={data.comments} fallback={null}>{(list) => <span>{list.length}</span>}</Await>\n` +
         `    <Link to="/blog/:id" params={{ id }}>typed</Link>\n` +
         `    <Link to="/">static literal</Link>\n` +
         `    <Link to="/posts" search={{ page: 2 }}>typed search</Link>\n` +
@@ -161,6 +182,9 @@ describe("typed routing (type-level)", () => {
         `  void setSearch({ page: "2" });\n` +
         `  // @ts-expect-error the schema declares no \`bogus\` key\n` +
         `  void (s.bogus);\n` +
+        `  const data = useLoaderData<typeof loader>();\n` +
+        `  // @ts-expect-error loader data has no \`missing\` field (Response branch excluded, object inferred)\n` +
+        `  void (data.missing);\n` +
         `  return (<>\n` +
         `    {/* @ts-expect-error wrong param key */}\n` +
         `    <Link to="/blog/:id" params={{ wrong: "1" }}>x</Link>\n` +

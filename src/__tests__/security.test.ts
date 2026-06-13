@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, spyOn } from "bun:test";
 import { mkdir, rm, writeFile, symlink } from "node:fs/promises";
 import { resolve, join, relative, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
@@ -165,6 +165,34 @@ describe("CSRF — cross-origin mutation", () => {
       headers: { Origin: "https://evil.example" },
     });
     expect(res.status).toBe(403);
+  });
+
+  test("403 body is terse in prod (no info disclosure)", async () => {
+    // This server runs in prod mode (NODE_ENV unset) — the body must not
+    // include the dev hint.
+    const res = await fetch(`${BASE}/`, {
+      method: "POST",
+      body: new FormData(),
+      headers: { Origin: "https://evil.example" },
+    });
+    expect(await res.text()).toBe("Forbidden");
+  });
+
+  test("csrfForbiddenResponse explains the fix in dev, stays terse in prod", async () => {
+    const { csrfForbiddenResponse } = await import("../server/csrf.ts");
+    const original = Bun.env.NODE_ENV;
+    const spy = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      Bun.env.NODE_ENV = "development";
+      expect(await csrfForbiddenResponse().text()).toContain("X-BractJS-Action");
+
+      Bun.env.NODE_ENV = "production";
+      expect(await csrfForbiddenResponse().text()).toBe("Forbidden");
+    } finally {
+      if (original === undefined) delete Bun.env.NODE_ENV;
+      else Bun.env.NODE_ENV = original;
+      spy.mockRestore();
+    }
   });
 });
 

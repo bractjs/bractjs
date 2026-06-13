@@ -25,6 +25,7 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
   };
 
   check("port", typeof c.port === "number" && Number.isFinite(c.port), "a finite number");
+  check("hmrPort", typeof c.hmrPort === "number" && Number.isFinite(c.hmrPort), "a finite number");
   check("appDir", typeof c.appDir === "string", "a string");
   check("publicDir", typeof c.publicDir === "string", "a string");
   check("buildDir", typeof c.buildDir === "string", "a string");
@@ -54,6 +55,19 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
   );
 
   return c as Partial<BractJSConfig>;
+}
+
+/**
+ * Identity helper for `bractjs.config.ts` — wrap your default export to get
+ * autocomplete and type-checking on the config fields (no runtime effect):
+ *
+ * ```ts
+ * import { defineConfig } from "@bractjs/bractjs";
+ * export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
+ * ```
+ */
+export function defineConfig(config: Partial<BractJSConfig>): Partial<BractJSConfig> {
+  return config;
 }
 
 /**

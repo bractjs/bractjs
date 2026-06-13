@@ -184,7 +184,9 @@ export async function loader({ request, params, context, search }: LoaderArgs) {
 }
 export type LoaderData = Awaited<ReturnType<typeof loader>>;
 
-// 2) action — runs on POST / PUT / DELETE / PATCH.
+// 2) action — runs on POST / PUT / DELETE / PATCH. For one route handling
+//    several buttons, compose it from `defineActions` (§5a) instead of a
+//    hand-rolled `intent` switch.
 export async function action({ request, params, context, formData }: ActionArgs) {
   await db.post.update(params.id, { title: formData.get("title") as string });
   return redirect("/blog");
@@ -257,6 +259,44 @@ searchSchema → beforeLoad → (action, if mutating method) → loaders (root +
 - A loader that throws an `HttpError`/redirect `Response` is intentional control flow. Any *other* thrown error is caught, sanitized (generic message in production, full message+stack only when `NODE_ENV=development`), and rendered via the nearest `ErrorBoundary`.
 
 > **Security:** put auth checks in `beforeLoad` (per route) or middleware (cross-cutting) — never in a component. `/_data` (used by `<Link>` soft-nav) runs `beforeLoad` and the loader, so a component-only check would still leak loader JSON. See §14.
+
+### Less boilerplate
+
+**Infer loader data — `useLoaderData<typeof loader>()`.** Pass the loader function type and the data type is inferred from its return (no `LoaderData` alias to maintain). The `Response` redirect branch is excluded; `Deferred` fields (from `defer()`, §8) are preserved for `<Await>`. Same for `useActionData<typeof action>()`.
+```tsx
+export async function loader() { return { post: await db.post.find() }; }
+export default function Post() {
+  const { post } = useLoaderData<typeof loader>();   // typed — no hand-written type
+}
+```
+
+**Type search params on the args — `LoaderArgs<T>`.** Parameterize to drop the cast (the schema's output type):
+```tsx
+export async function loader({ search }: LoaderArgs<{ page: number }>) {
+  return db.posts({ page: search.page });            // search.page is a number
+}
+// After codegen (§18), `LoaderArgsFor<"/posts">` types params + context + search from the route.
+```
+
+### `defineActions` — multi-button forms without an `intent` switch
+
+A route action that handles several buttons usually devolves into `if (intent === …)`. `defineActions` composes it from one handler per intent, and `<Form intent="…">` (§10) renders the matching hidden input. An unknown/missing intent returns a 400 automatically (dev lists the known intents).
+```tsx
+import { defineActions, safeValidate, formText } from "@bractjs/bractjs";
+
+export const action = defineActions({
+  add:    async ({ formData }) => {
+    const r = await safeValidate(TitleSchema, formData);   // §13
+    if (!r.ok) return { error: r.firstError };
+    addTodo(r.data.title); return {};
+  },
+  toggle: ({ formData }) => { toggleTodo(formText(formData, "id")); return {}; },
+  delete: ({ formData }) => { deleteTodo(formText(formData, "id")); return {}; },
+});
+```
+```tsx
+<Form method="post" intent="toggle"><input type="hidden" name="id" value={id} /><button>Toggle</button></Form>
+```
 
 ---
 
@@ -347,22 +387,22 @@ export async function loader({ params }: LoaderArgs) {
 }
 
 export default function BlogPost() {
-  const { post, comments } = useLoaderData<LoaderData>();
+  // useLoaderData<typeof loader>() infers the shape — `comments` stays a
+  // Deferred<Comment[]>, which <Await> accepts directly.
+  const { post, comments } = useLoaderData<typeof loader>();
   return (
     <article>
       <h1>{post.title}</h1>
-      <Suspense fallback={<p>Loading comments…</p>}>
-        <Await resolve={comments}>
-          {(c) => <CommentList comments={c} />}
-        </Await>
-      </Suspense>
+      <Await resolve={comments} fallback={<p>Loading comments…</p>}>
+        {(c) => <CommentList comments={c} />}
+      </Await>
     </article>
   );
 }
 ```
 
-### `<Await resolve={promise} fallback={…}>{(data) => …}</Await>`
-Unwraps a promise with React 19's `use()` inside its own `<Suspense>`. `isDeferred(value)` and the `Deferred` class are exported if you need to detect/construct deferred values manually.
+### `<Await resolve={promise | Deferred} fallback={…}>{(data) => …}</Await>`
+Unwraps a promise (or a `Deferred` field from a `defer()` loader) with React 19's `use()` inside its own `<Suspense>`. `isDeferred(value)` and the `Deferred` class are exported if you need to detect/construct deferred values manually.
 
 ---
 
@@ -371,15 +411,16 @@ Unwraps a promise with React 19's `use()` inside its own `<Suspense>`. `isDeferr
 All hooks are SSR-safe (they return sensible values during SSR) and imported from `@bractjs/bractjs`.
 
 ### `useLoaderData<T>()` → `T`
-The current route's loader return value.
+The current route's loader return value. **Pass the loader function type** to infer it (`Response` branch excluded, `Deferred` fields preserved) — no hand-written type to keep in sync. An explicit object type still works.
 ```ts
-const { post } = useLoaderData<LoaderData>();
+const { post } = useLoaderData<typeof loader>();   // inferred from loader()
+const { post } = useLoaderData<LoaderData>();       // or an explicit type
 ```
 
 ### `useActionData<T>()` → `T | null`
-The most recent action return value (null until an action runs).
+The most recent action return value (null until an action runs). Like `useLoaderData`, accepts the action function type.
 ```ts
-const result = useActionData<{ error?: string }>();
+const result = useActionData<typeof action>();
 ```
 
 ### `useParams<T>()` → `T`
@@ -660,6 +701,27 @@ export async function action({ formData }: ActionArgs) {
 - Repeated `FormData` keys become arrays automatically.
 - On failure it throws a `Response.json({ errors }, { status: 400 })`. The exported `ValidationError` type and `FieldErrors` shape describe the structure.
 
+### `safeValidate` — validate without try/catch (recommended for inline form errors)
+
+Returns a result instead of throwing — the clean idiom when you want to render field errors rather than a 400 page. `firstError` is the first field message.
+```ts
+import { safeValidate } from "@bractjs/bractjs";
+
+export const action = defineActions({
+  create: async ({ formData }) => {
+    const r = await safeValidate(Schema, formData);
+    if (!r.ok) return { error: r.firstError, fieldErrors: r.fieldErrors };
+    await db.post.create(r.data);   // r.data is typed + coerced
+    return redirect("/blog");
+  },
+});
+```
+If you prefer to keep calling `validate()` and catching: `isValidationResponse(err)` narrows the thrown 400, and `readValidationError(res)` parses it into `{ fieldErrors, firstError }`.
+
+### FormData helpers
+
+`formText(formData, key)` returns a string (`""` for missing or File values) — no more `String(formData.get(k) ?? "")`. `formValues(formData, keys?)` collects string fields into an object (all, or a named subset).
+
 ---
 
 ## 14. Middleware
@@ -846,7 +908,7 @@ bractjs codegen                       # ./app → ./app/route-types.gen.ts
 bractjs codegen ./app ./app/types.ts  # explicit paths
 ```
 
-Runs automatically during `bractjs build`. Make sure the generated file is part of your TypeScript program (it is, if your `tsconfig.json` `include`s `app/`). It augments BractJS's `Register` interface, after which the runtime components and hooks become type-safe — **no per-route imports needed**:
+**You rarely run this by hand.** `bractjs new` generates it on scaffold, `bractjs dev` regenerates it on boot and whenever you add/remove/rename a route file, and `bractjs build` runs it too. The output is deterministic (route-sorted) and carries a `// bractjs:routes <hash>` fingerprint, so re-runs that change nothing don't rewrite the file (no editor reload loops); on boot the dev server prints precisely what drifted. Make sure the generated file is part of your TypeScript program (it is, if your `tsconfig.json` `include`s `app/`). It augments BractJS's `Register` interface, after which the runtime components and hooks become type-safe — **no per-route imports needed**:
 
 ```tsx
 <Link to="/blog/:id" params={{ id }} />     // ✅ "/blog/:id" autocompletes; params typed
@@ -1165,11 +1227,17 @@ plugins: [
 
 ## 25. Configuration reference
 
-All fields optional. Put them in `bractjs.config.ts` (default export) or pass to `createServer` / `createDevServer` / `runBuild`.
+All fields optional. Wrap the default export in `defineConfig()` for autocomplete + type-checking (it's a no-op identity helper), or pass these to `createServer` / `createDevServer` / `runBuild`.
+
+```ts
+import { defineConfig } from "@bractjs/bractjs";
+export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
+```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `port` | `number` | `3000` | TCP port |
+| `hmrPort` | `number` | `3001` | Dev HMR WebSocket port (`bractjs dev` only) |
 | `appDir` | `string` | `"./app"` | Contains `routes/` and `root.tsx` |
 | `publicDir` | `string` | `"./public"` | Static assets (served no-cache) |
 | `buildDir` | `string` | `"./build"` | Build output |
@@ -1192,7 +1260,7 @@ All fields optional. Put them in `bractjs.config.ts` (default export) or pass to
 
 Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `validateSearch`, `searchParamsToObject`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
 **Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
 
@@ -1214,7 +1282,7 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
 **Client RPC:** `createClient`
 
-**Build / programmatic:** `createDevServer`, `runBuild`, `loadUserConfig`, `runPrerender`
+**Build / programmatic:** `createDevServer`, `runBuild`, `loadUserConfig`, `defineConfig`, `runPrerender`
 
 **Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`
 
@@ -1222,7 +1290,7 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
 
-**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
+**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 
 ---
 

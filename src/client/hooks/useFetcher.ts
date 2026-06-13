@@ -16,6 +16,8 @@ interface SubmitOptions {
 export interface FetcherFormProps extends Omit<FormHTMLAttributes<HTMLFormElement>, "method" | "onSubmit"> {
   method?: "post" | "put" | "delete";
   action?: string;
+  /** Renders a hidden `intent` input (pairs with `defineActions()`). */
+  intent?: string;
   children: ReactNode;
 }
 
@@ -35,6 +37,7 @@ export interface FetcherResult {
 }
 
 interface StreamFetcherResult<T = unknown> {
+  /** @deprecated Never emitted — call `connect(actionId)` instead. Removed in 0.2. */
   events: AsyncGenerator<T>;
   connect(actionId: string): AsyncGenerator<T>;
 }
@@ -171,14 +174,17 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
   // Stable component identity across renders (remounting a form on every
   // render would drop focus/IME state).
   const FetcherForm = useMemo<FunctionComponent<FetcherFormProps>>(() => {
-    return function FetcherFormImpl({ method = "post", action, children, ...rest }: FetcherFormProps) {
+    return function FetcherFormImpl({ method = "post", action, intent, children, ...rest }: FetcherFormProps) {
       function handleSubmit(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
         const target = e.currentTarget;
         const url = action ?? window.location.pathname + window.location.search;
         void submit(url, { method, body: new FormData(target) });
       }
-      return createElement("form", { method, onSubmit: handleSubmit, ...rest }, children);
+      const intentInput = intent !== undefined
+        ? createElement("input", { key: "__bract_intent", type: "hidden", name: "intent", value: intent })
+        : null;
+      return createElement("form", { method, onSubmit: handleSubmit, ...rest }, intentInput, children);
     };
   }, [submit]);
 

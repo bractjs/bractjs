@@ -7,7 +7,7 @@
  * Behavioral coverage (HTTP response, HMR) lives in integration.test.ts.
  */
 import { test, expect, describe } from "bun:test";
-import { loadUserConfig, validateUserConfig } from "../config/load.ts";
+import { loadUserConfig, validateUserConfig, defineConfig } from "../config/load.ts";
 import { runBuild } from "../build/bundler.ts";
 import { createDevServer } from "../dev/server.ts";
 import type { BuildConfig } from "../build/bundler.ts";
@@ -60,8 +60,27 @@ describe("validateUserConfig", () => {
     expect(() => validateUserConfig({ sourcemap: "yes" })).toThrow(/"sourcemap" must be/);
   });
 
+  test("rejects a string hmrPort but accepts a number", () => {
+    expect(() => validateUserConfig({ hmrPort: "3001" })).toThrow(/"hmrPort" must be a finite number/);
+    expect(validateUserConfig({ hmrPort: 3005 })).toEqual({ hmrPort: 3005 });
+  });
+
   test("ignores unknown keys and undefined values", () => {
     expect(() => validateUserConfig({ port: undefined, somethingCustom: 1 })).not.toThrow();
+  });
+});
+
+// ── defineConfig ──────────────────────────────────────────────────────────
+
+describe("defineConfig", () => {
+  test("is an identity function (returns the same reference)", () => {
+    const cfg = { port: 3000, clientEnv: ["X"] };
+    expect(defineConfig(cfg)).toBe(cfg);
+  });
+
+  test("is re-exported from src/index.ts", async () => {
+    const mod = await import("../index.ts");
+    expect(typeof mod.defineConfig).toBe("function");
   });
 });
 
