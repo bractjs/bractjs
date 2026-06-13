@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { scanRoutes, type RouteFile } from "../server/scanner.ts";
+import { scanRoutes, layoutDirsFromFilePath, type RouteFile } from "../server/scanner.ts";
 
 // Codegen entry-points: `bun build --compile` can't statically trace
 // `Bun.Glob` scans or `import(absPath)` calls, so we materialise the route /
@@ -9,13 +9,14 @@ import { scanRoutes, type RouteFile } from "../server/scanner.ts";
 
 // ── Path safety ────────────────────────────────────────────────────────────
 
-// Allow ASCII filename characters, `/` for nested directories, and `[`/`]`
-// for file-based dynamic route syntax (`[id]`, `[...slug]`). All emit sites
-// wrap the path in JSON.stringify, but we still allowlist the charset as
-// defense-in-depth against a hostile filename containing a backtick, $, quote,
-// backslash, or whitespace breaking out of the generated literal. `..` as a
-// whole segment is rejected separately below (path-traversal guard).
-const SAFE_FILEPATH_RE = /^[A-Za-z0-9._\/\-\[\]]+$/;
+// Allow ASCII filename characters, `/` for nested directories, `[`/`]` for
+// file-based dynamic route syntax (`[id]`, `[...slug]`, `[[id]]`), and `(`/`)`
+// for route-group folders (`(marketing)`). All emit sites wrap the path in
+// JSON.stringify, but we still allowlist the charset as defense-in-depth
+// against a hostile filename containing a backtick, $, quote, backslash, or
+// whitespace breaking out of the generated literal. `..` as a whole segment is
+// rejected separately below (path-traversal guard).
+const SAFE_FILEPATH_RE = /^[A-Za-z0-9._\/\-\[\]()]+$/;
 
 function assertSafeFilePath(filePath: string): void {
   if (!SAFE_FILEPATH_RE.test(filePath)) {
@@ -37,26 +38,17 @@ function pathToIdent(prefix: string, relPath: string): string {
 
 // ── Layout discovery ───────────────────────────────────────────────────────
 
-function layoutDirsForPattern(urlPattern: string): string[] {
-  if (urlPattern === "") return [];
-  const segments = urlPattern.split("/");
-  segments.pop();
-  const dirs: string[] = [];
-  for (let i = 1; i <= segments.length; i++) {
-    dirs.push(segments.slice(0, i).join("/"));
-  }
-  return dirs;
-}
-
 /**
  * Find every `routes/<dir>/layout.tsx` (or `.ts`) that exists on disk for the
  * given set of routes. Mirrors the runtime probe in `resolveLayoutChain` but
- * runs once at codegen time so the generated registry is exhaustive.
+ * runs once at codegen time so the generated registry is exhaustive. Layout
+ * dirs are derived from each route's FILE path (via `layoutDirsFromFilePath`)
+ * so route-group folders are covered identically to the runtime.
  */
 async function collectLayouts(appDir: string, routes: RouteFile[]): Promise<string[]> {
   const layoutPaths = new Set<string>();
   for (const route of routes) {
-    for (const dir of layoutDirsForPattern(route.urlPattern)) {
+    for (const dir of layoutDirsFromFilePath(route.filePath)) {
       for (const ext of ["tsx", "ts"]) {
         const rel = `routes/${dir}/layout.${ext}`;
         const abs = resolve(join(appDir, rel));

@@ -18,9 +18,8 @@ beforeAll(async () => {
   await writeFile(join(TMP, "root.tsx"), `export default function Root() { return null; }\n`);
   await writeFile(join(TMP, "routes", "_index.tsx"), `export default function Home() { return null; }\n`);
   await writeFile(join(TMP, "routes", "blog", "layout.tsx"), `export default function L({ children }: any) { return children; }\n`);
-  // Nested route — `routes/blog/layout.tsx` only applies because there is a
-  // deeper route under /blog/. Layouts wrap children, not the leaf at the
-  // same path level (matches `layout.ts`'s `layoutDirs` resolution).
+  // Nested route under /blog/ — `routes/blog/layout.tsx` wraps everything in
+  // its directory (including a `blog/_index`), per `layoutDirsFromFilePath`.
   await writeFile(join(TMP, "routes", "blog", "[slug].tsx"), `export default function P() { return null; }\n`);
 
   await writeFile(

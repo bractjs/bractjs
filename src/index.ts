@@ -71,6 +71,12 @@ export type {
   LoaderFunction,
   ActionFunction,
   MetaFunction,
+  HeadersFunction,
+  HeadersArgs,
+  RouteMiddlewareFunction,
+  ClientLoaderFunction,
+  ClientActionFunction,
+  RouteMatch,
   RouteModule,
   RouteDefinition,
   RouterLocation,
@@ -87,8 +93,8 @@ export { BractJSContext, BractJSProvider, useBractJSContext } from "./shared/con
 export type { BractJSContextValue, RouteManifest } from "./shared/context.ts";
 
 // Middleware
-export { pipeline, MiddlewarePipeline } from "./server/middleware.ts";
-export type { MiddlewareFn, MiddlewareContext } from "./server/middleware.ts";
+export { pipeline, MiddlewarePipeline, runRouteMiddleware, collectRouteMiddleware } from "./server/middleware.ts";
+export type { MiddlewareFn, MiddlewareContext, RouteMiddleware } from "./server/middleware.ts";
 export { requestLogger } from "./middleware/requestLogger.ts";
 export { cors } from "./middleware/cors.ts";
 export type { CorsOptions } from "./middleware/cors.ts";
@@ -118,6 +124,7 @@ export { useLoaderData } from "./client/hooks/useLoaderData.ts";
 export { useActionData } from "./client/hooks/useActionData.ts";
 export { useLocation } from "./client/hooks/useLocation.ts";
 export { useParams } from "./client/hooks/useParams.ts";
+export { useMatches } from "./client/hooks/useMatches.ts";
 export { useNavigation } from "./client/hooks/useNavigation.ts";
 export { useNavigate } from "./client/hooks/useNavigate.ts";
 export type { NavigateFn, NavigateOptions } from "./client/hooks/useNavigate.ts";

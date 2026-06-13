@@ -67,3 +67,32 @@ describe("matchRoute", () => {
     expect(r2?.params.id).toBe("123");
   });
 });
+
+describe("optional segments [[id]]", () => {
+  test("matches with the segment present (binds the param)", () => {
+    const trie = buildTrie([makeRoute("users/[[id]]")]);
+    const r = matchRoute("/users/42", trie);
+    expect(r).not.toBeNull();
+    expect(r?.params).toEqual({ id: "42" });
+  });
+
+  test("matches with the segment absent (param unset)", () => {
+    const trie = buildTrie([makeRoute("users/[[id]]")]);
+    const r = matchRoute("/users", trie);
+    expect(r).not.toBeNull();
+    expect(r?.params).toEqual({});
+  });
+
+  test("static sibling still wins over the optional param", () => {
+    const trie = buildTrie([makeRoute("users/[[id]]"), makeRoute("users/me")]);
+    const r = matchRoute("/users/me", trie);
+    expect(r?.routeFile.urlPattern).toBe("users/me");
+  });
+
+  test("does not over-consume — extra segment falls through to catch-all", () => {
+    const trie = buildTrie([makeRoute("users/[[id]]"), makeRoute("users/[...rest]")]);
+    const r = matchRoute("/users/1/2", trie);
+    expect(r?.routeFile.urlPattern).toBe("users/[...rest]");
+    expect(r?.params.rest).toBe("1/2");
+  });
+});

@@ -6,6 +6,15 @@ All notable changes to Bract are documented here.
 
 ## [Unreleased]
 
+### Added — React Router v7 / TanStack parity
+
+- **Route `headers` export** — `export function headers({ loaderData, params, request, parentHeaders })` returns a `HeadersInit` to set `Cache-Control`/`ETag`/`Vary`/CDN headers on the route's **document and `/_data`** responses. Runs in chain order (root → layout → route); innermost wins per key, and each call sees the `parentHeaders` accumulated so far. `Content-Type`/`Transfer-Encoding` stay framework-owned. New exports `HeadersFunction`, `HeadersArgs`.
+- **`useMatches()`** — returns the matched route chain (root → layouts → route) as `RouteMatch[]` (`{ id, pathname, params, data, handle }`), for breadcrumbs and conditional chrome driven by each route's `handle` export. SSR-safe; updates on soft navigation and revalidation. `handle` must be JSON-serializable (it travels in the SSR bootstrap + `/_data`). New exports `useMatches`, `RouteMatch`.
+- **Route groups `(group)/`** — a parenthesized folder segment groups files (and their `layout.tsx`) **without** adding a URL segment: `routes/(marketing)/about.tsx` → `/about`, wrapped by `routes/(marketing)/layout.tsx`. Layout resolution now derives ancestor dirs from the file path, so a folder's `_index` is also correctly wrapped by that folder's layout.
+- **Optional segments `[[id]]`** — `routes/users/[[id]].tsx` matches both `/users` and `/users/42` (param unset when absent). Ranks above catch-all, below a required param / static sibling. Codegen types the route accordingly.
+- **Nested route middleware** — `export const middleware = [...]` (a fn or array) runs on the server in chain order (root → layout → route) before `beforeLoad`/action/loaders, with a shared mutable `context`, and can short-circuit by returning a `Response`. Runs *inside* the global `pipeline`; protects the document **and** `/_data`. The cleaner successor to `beforeLoad` + a single global pipeline (both still supported). New exports `RouteMiddlewareFunction`, `RouteMiddleware`, `runRouteMiddleware`, `collectRouteMiddleware`.
+- **`clientLoader` / `clientAction`** — RR7-style browser-side data. `clientLoader({ request, params, search, serverLoader })` runs on navigation and its result becomes `useLoaderData()`; set `clientLoader.hydrate = true` to also run on the initial hydration of an SSR'd document. `clientAction({ request, params, formData, serverAction })` runs on `<Form>`/fetcher submit and decides whether/how to hit the server. New exports `ClientLoaderFunction`, `ClientActionFunction`.
+
 ### Added — Developer experience
 
 - **`useLoaderData<typeof loader>()` / `useActionData<typeof action>()`** — pass the loader/action FUNCTION type and the data type is inferred from its return (awaited, `Response` branch excluded, `Deferred` fields preserved). No more hand-written `LoaderData` aliases. The object form (`useLoaderData<HomeData>()`) still works. New exported helper types `LoaderData<T>` / `ActionData<T>`; `<Await resolve>` now also accepts a `Deferred<T>`.

@@ -58,6 +58,11 @@ describe("lintRouteModuleSource — miscased exports", () => {
       `export default () => null;\n` +
       `export function loader() { return {}; }\n` +
       `export function action() { return {}; }\n` +
+      `export const clientLoader = () => ({});\n` +
+      `export const clientAction = () => ({});\n` +
+      `export function headers() { return {}; }\n` +
+      `export const middleware = [];\n` +
+      `export const handle = {};\n` +
       `export const searchSchema = {};\n` +
       `export function Fallback() { return null; }\n` +
       `export const ssr = false;\n`;
