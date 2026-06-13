@@ -182,3 +182,37 @@ test("/_data of a beforeLoad-gated route is blocked and never leaks loader data"
   const body = await res.text();
   expect(body).not.toContain("TOP-SECRET-LOADER-DATA");
 });
+
+// ── Route headers / useMatches / nested middleware (Phases 1, 2, 4) ──────────
+
+test("route `headers` export sets Cache-Control on the document response", async () => {
+  const res = await fetch(`${BASE}/features-demo`);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("Cache-Control")).toBe("public, max-age=120");
+  // Baseline hardening headers still present (not clobbered).
+  expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+});
+
+test("route `headers` export also applies to the /_data response", async () => {
+  const res = await fetch(`${BASE}/_data?path=/features-demo`);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("Cache-Control")).toBe("public, max-age=120");
+  expect(res.headers.get("content-type")).toContain("application/json");
+});
+
+test("nested middleware runs (sets context read by the loader, stamps a header)", async () => {
+  const res = await fetch(`${BASE}/_data?path=/features-demo`);
+  expect(res.headers.get("X-Demo-Mw")).toBe("1");
+  const data = (await res.json()) as { route?: { user?: string } };
+  // The loader saw the context value the middleware set.
+  expect(data.route?.user).toBe("alice");
+});
+
+test("/_data payload carries the matched chain (useMatches) with handle", async () => {
+  const res = await fetch(`${BASE}/_data?path=/features-demo`);
+  const data = (await res.json()) as { matches?: Array<{ id: string; handle?: { breadcrumb?: string } }> };
+  expect(Array.isArray(data.matches)).toBe(true);
+  // Leaf route carries its handle export.
+  const leaf = data.matches!.at(-1)!;
+  expect(leaf.handle?.breadcrumb).toBe("Features");
+});

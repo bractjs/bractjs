@@ -1,6 +1,6 @@
 import { createContext, useContext, type ComponentType } from "react";
 import type { ServerManifest } from "../server/render.ts";
-import type { RouterLocation } from "../shared/route-types.ts";
+import type { RouterLocation, RouteMatch } from "../shared/route-types.ts";
 
 // ── Route module shape visible on the client ───────────────────────────────
 
@@ -9,6 +9,10 @@ export interface RouteModuleClient {
   ErrorBoundary?: ComponentType<{ error: Error }>;
   /** SSR'd placeholder for selective-SSR routes (`ssr: false` / `"data-only"`). */
   Fallback?: ComponentType;
+  /** Browser-side loader (RR7-style). Runs on navigation instead of just fetching /_data. */
+  clientLoader?: import("../shared/route-types.ts").ClientLoaderFunction;
+  /** Browser-side action (RR7-style). Runs on submit instead of POSTing directly. */
+  clientAction?: import("../shared/route-types.ts").ClientActionFunction;
 }
 
 /**
@@ -30,6 +34,8 @@ export interface RouteState {
   location: RouterLocation;
   /** Validated search params (route `searchSchema` output; raw string record otherwise). */
   search: Record<string, unknown>;
+  /** The matched route chain (root → layouts → route) for `useMatches()`. */
+  matches: RouteMatch[];
 }
 
 export interface RouterContextValue extends RouteState {

@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import type { RouteFile } from "./scanner.ts";
+import { layoutDirsFromFilePath, type RouteFile } from "./scanner.ts";
 import type { RouteModule } from "../shared/route-types.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -28,21 +28,6 @@ export interface ResolvedRoute extends RouteFile {
  */
 export type ModuleRegistry = Record<string, RouteModule | Record<string, unknown>>;
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-/** Derive the ancestor directory segments from a route's urlPattern. */
-function layoutDirs(urlPattern: string): string[] {
-  if (urlPattern === "") return [];
-  const segments = urlPattern.split("/");
-  // For "blog/[id]" → check "routes/blog/layout.tsx" only (not the leaf)
-  segments.pop();
-  const dirs: string[] = [];
-  for (let i = 1; i <= segments.length; i++) {
-    dirs.push(segments.slice(0, i).join("/"));
-  }
-  return dirs;
-}
-
 // ── resolveLayoutChain ─────────────────────────────────────────────────────
 
 export async function resolveLayoutChain(
@@ -58,8 +43,9 @@ export async function resolveLayoutChain(
     layoutFiles.push(rootPath);
   }
 
-  // Intermediate layout.tsx files, outermost → innermost
-  for (const dir of layoutDirs(routeFile.urlPattern)) {
+  // Intermediate layout.tsx files, outermost → innermost. Derived from the
+  // file path so route-group folders ((marketing)/…) contribute their layout.
+  for (const dir of layoutDirsFromFilePath(routeFile.filePath)) {
     const layoutPath = resolve(join(appDir, "routes", dir, "layout.tsx"));
     if (await Bun.file(layoutPath).exists()) {
       layoutFiles.push(layoutPath);
@@ -84,7 +70,7 @@ export function resolveLayoutChainFromRegistry(
   if (registry["root.tsx"]) layoutFiles.push("root.tsx");
   else if (registry["root.ts"]) layoutFiles.push("root.ts");
 
-  for (const dir of layoutDirs(routeFile.urlPattern)) {
+  for (const dir of layoutDirsFromFilePath(routeFile.filePath)) {
     const tsxKey = `routes/${dir}/layout.tsx`;
     const tsKey = `routes/${dir}/layout.ts`;
     if (registry[tsxKey]) layoutFiles.push(tsxKey);
@@ -102,6 +88,10 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
     loader: mod.loader,
     action: mod.action,
     meta: mod.meta,
+    headers: mod.headers,
+    // SECURITY(high): like beforeLoad, route middleware can be an auth gate —
+    // project it or every `middleware` export becomes a silent no-op.
+    middleware: mod.middleware,
     // SECURITY(high): beforeLoad is the auth/redirect gate and `context` is the
     // per-route context factory. Both MUST be projected here — dropping them
     // turns every beforeLoad() export into a silent no-op, bypassing auth on
@@ -134,6 +124,9 @@ function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined)
     loader: m.loader as RouteModule["loader"],
     action: m.action as RouteModule["action"],
     meta: m.meta as RouteModule["meta"],
+    headers: m.headers as RouteModule["headers"],
+    // SECURITY(high): keep middleware (auth gate) — see importRouteModule.
+    middleware: m.middleware as RouteModule["middleware"],
     // SECURITY(high): keep beforeLoad + context in the projection — see the
     // note in importRouteModule. The compiled-binary path goes through here.
     beforeLoad: m.beforeLoad as RouteModule["beforeLoad"],

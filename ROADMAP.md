@@ -244,3 +244,14 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] SPA mode — config `ssr: false` serves a static shell for all document GETs; build emits `build/client/__spa.html`; loaders/actions/CSRF unaffected (`src/server/spa.ts`, `src/server/serve.ts`, `src/build/bundler.ts`)
 - [x] Prerendering / SSG — config `prerender`; build-time HTML + `/_data` payloads under `build/client/_prerender/`; production serves clean URLs from disk, query strings stay dynamic (`src/build/prerender.ts`)
 - [ ] Prerender assets embedded INSIDE the compiled binary (today: ship `build/client/` alongside it, or via `--asset`)
+
+## Phase H — RR7 / TanStack gap-closure (round 2)
+
+> Second pass against React Router v7 framework mode and TanStack Start, closing the remaining nesting / caching / data-loading gaps.
+
+- [x] Route `headers` export — per-route `Cache-Control`/`ETag`/`Vary`/CDN headers, merged root → layout → route (innermost wins), applied to the document **and** `/_data` responses; `Content-Type`/`Transfer-Encoding` stay framework-owned (`src/server/headers.ts`, `src/server/render.ts`, `src/server/request-handler.ts`; `HeadersFunction`/`HeadersArgs` in `src/shared/route-types.ts`)
+- [x] `useMatches()` — matched chain (root → layouts → route) as `RouteMatch[]` for breadcrumbs / conditional chrome from each route's `handle`; SSR-safe, updates on soft-nav + revalidation (`src/client/hooks/useMatches.ts`, `src/server/matches.ts`, wired through `ClientRouter`/`BractJSContext`)
+- [x] Route groups `(group)/` — parenthesized folders group files + their `layout.tsx` without adding a URL segment; layout dirs derived from the file path so a folder's `_index` is wrapped too (`src/server/scanner.ts` `layoutDirsFromFilePath`/`isRouteGroupSegment`, `src/server/layout.ts`, `src/codegen/module-registry.ts`)
+- [x] Optional segments `[[id]]` — match with/without the segment (param unset when absent); ranked above catch-all, below required param/static (`src/server/scanner.ts`, `src/server/matcher.ts` `optionalChild`, `src/codegen/route-codegen.ts`)
+- [x] Nested route middleware — `export const middleware` (fn or array) runs root → layout → route before `beforeLoad`/action/loaders with a shared mutable `context`; short-circuits via a returned `Response`; protects the document and `/_data`; runs inside the global `pipeline` (`src/server/middleware.ts` `runRouteMiddleware`/`collectRouteMiddleware`, `src/server/request-handler.ts`)
+- [x] `clientLoader` / `clientAction` — RR7-style browser-side data with `serverLoader()`/`serverAction()` escape hatches; `clientLoader.hydrate = true` opts into running on the initial hydration of an SSR'd document (`src/client/ClientRouter.tsx`; `ClientLoaderFunction`/`ClientActionFunction` in `src/shared/route-types.ts`)

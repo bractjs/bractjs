@@ -6,10 +6,12 @@ import { runLoaders, runAction, buildLoaderArgs, runRouteContext, runBeforeLoad 
 import { validateSearch } from "./search.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
 import { resolveMeta, mergeMeta } from "./meta.ts";
+import { resolveHeaders } from "./headers.ts";
+import { buildMatches } from "./matches.ts";
 import { json, error, sanitizeRedirect } from "./response.ts";
 import { isRedirect, isHttpError } from "../shared/errors.ts";
 import { isExplicitDev } from "./env.ts";
-import { pipeline, type MiddlewareContext } from "./middleware.ts";
+import { pipeline, runRouteMiddleware, collectRouteMiddleware, type MiddlewareContext } from "./middleware.ts";
 import { BractJSProvider } from "../shared/context.ts";
 import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
 import { getCspNonce } from "./csp.ts";
@@ -92,24 +94,42 @@ async function route(
       // never see unvalidated input, and a 400 here is cheaper than a wasted
       // context-factory/loader run. The thrown 400 Response propagates below.
       const search = await validateSearch(chain.route.searchSchema, targetUrl);
+
       // SECURITY(high): /_data must run the same auth/redirect gates as a full
       // page request — otherwise a SPA-style soft navigation to a protected
-      // route would bypass beforeLoad() / defineContext() and leak loader data.
-      const routeContext = await runRouteContext(
-        chain.route as Parameters<typeof runRouteContext>[0],
-        loaderRequest,
-        match.params,
-        context,
-      );
-      const args = buildLoaderArgs(loaderRequest, match.params, routeContext, search);
-      const beforeLoadResponse = await runBeforeLoad(chain.route, args);
-      if (beforeLoadResponse) return beforeLoadResponse;
-      const results = await runLoaders(chain, args, onError);
-      // Merged meta must ride along: ClientRouter re-renders the document head
-      // from this payload on soft navigation, and the initial __BRACTJS_DATA__
-      // already carries the merged shape.
-      const meta = mergeMeta(resolveMeta(chain, results, match.params));
-      return json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params, meta, search });
+      // route would bypass nested middleware / beforeLoad() / defineContext()
+      // and leak loader data. Run the route middleware chain around the work,
+      // sharing the same mutable `context` so a gate can set/clear fields.
+      const mwCtx: MiddlewareContext = { request: loaderRequest, params: match.params, context };
+      return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
+        const routeContext = await runRouteContext(
+          chain.route as Parameters<typeof runRouteContext>[0],
+          loaderRequest,
+          match.params,
+          mwCtx.context,
+        );
+        const args = buildLoaderArgs(loaderRequest, match.params, routeContext, search);
+        const beforeLoadResponse = await runBeforeLoad(chain.route, args);
+        if (beforeLoadResponse) return beforeLoadResponse;
+        const results = await runLoaders(chain, args, onError);
+        // Merged meta must ride along: ClientRouter re-renders the document head
+        // from this payload on soft navigation, and the initial __BRACTJS_DATA__
+        // already carries the merged shape.
+        const meta = mergeMeta(resolveMeta(chain, results, match.params));
+        const matches = buildMatches(chain, results, match.params, targetPathname);
+        const dataRes = json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params, meta, search, matches });
+        // Apply the route `headers()` chain so a soft navigation gets the same
+        // Cache-Control/ETag/Vary as the full document load (renderRoute applies
+        // them there). Content-Type stays application/json.
+        const dataHeaders = resolveHeaders(chain, results, match.params, loaderRequest);
+        if (dataHeaders) {
+          dataHeaders.forEach((value, key) => {
+            if (key.toLowerCase() === "content-type") return;
+            dataRes.headers.set(key, value);
+          });
+        }
+        return dataRes;
+      });
     } catch (err) {
       if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
       // A non-redirect Response (e.g. the 400 thrown by search validation)
@@ -138,12 +158,19 @@ async function route(
     throw err;
   }
 
+  // Nested route middleware (root → layout → route) wraps the action, loaders,
+  // and render. It shares the same mutable `context` object, runs *inside* the
+  // global pipeline, and can short-circuit (auth gate / redirect) by returning
+  // a Response. Empty chains call the work directly (no overhead).
+  const mwCtx: MiddlewareContext = { request, params: match.params, context };
+  return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
+
   // Run per-route context factory (defineContext export) before loaders.
   const routeContext = await runRouteContext(
     chain.route as Parameters<typeof runRouteContext>[0],
     request,
     match.params,
-    context,
+    mwCtx.context,
   );
   const args = buildLoaderArgs(request, match.params, routeContext, search);
 
@@ -227,6 +254,10 @@ async function route(
   const RouteComponent = routeSsr === true ? chain.route.default : chain.route.Fallback;
   const ssrMode = routeSsr === true ? undefined : routeSsr === false ? "client-only" as const : "data-only" as const;
 
+  // useMatches() payload — the chain's handle + data, for breadcrumbs etc.
+  // Built from loaderChain so the loader slices line up with what ran.
+  const matches = buildMatches(loaderChain, loaderResults, match.params, pathname);
+
   // Wrap root in BractJSProvider so <Outlet> can render the route component
   // server-side without needing a ClientRouter.
   const shell = createElement(
@@ -241,12 +272,17 @@ async function route(
         RouteComponent,
         location: { pathname, search: url.search, hash: "", state: null, key: "default" },
         search,
+        matches,
       },
       children: createElement(RootComponent),
     },
   );
 
   const meta = resolveMeta(chain, loaderResults, match.params);
+  // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
+  // baseline document headers in renderRoute. Uses the loaders that actually
+  // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
+  const routeHeaders = resolveHeaders(loaderChain, loaderResults, match.params, request);
 
   return renderRoute({
     shell,
@@ -257,9 +293,13 @@ async function route(
     search,
     manifest,
     meta,
+    matches,
+    headers: routeHeaders,
     routeFile: match.routeFile.filePath,
     // Set by the opt-in csp() middleware; undefined otherwise.
-    nonce: getCspNonce(context),
+    nonce: getCspNonce(mwCtx.context),
     ssrMode,
+  });
+
   });
 }

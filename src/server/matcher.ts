@@ -5,6 +5,13 @@ import type { RouteFile, Segment } from "./scanner.ts";
 export interface TrieNode {
   children: Map<string, TrieNode>;
   paramChild?: { name: string; node: TrieNode };
+  /**
+   * An optional param segment (`[[id]]`). When present it behaves like a param
+   * child (binds `name` to the consumed part); the matcher additionally tries
+   * skipping it entirely, so the route at `node` matches with the segment
+   * absent too (the param is then simply not set).
+   */
+  optionalChild?: { name: string; node: TrieNode };
   catchAllChild?: { name: string; node: TrieNode };
   routeFile?: RouteFile;
 }
@@ -33,6 +40,9 @@ export function buildTrie(routes: RouteFile[]): TrieNode {
       } else if ("param" in seg) {
         if (!node.paramChild) node.paramChild = { name: seg.param, node: makeNode() };
         node = node.paramChild.node;
+      } else if ("optional" in seg) {
+        if (!node.optionalChild) node.optionalChild = { name: seg.optional, node: makeNode() };
+        node = node.optionalChild.node;
       } else {
         // catchAll — terminal, store and stop
         if (!node.catchAllChild) node.catchAllChild = { name: seg.catchAll, node: makeNode() };
@@ -62,7 +72,13 @@ function walk(
 ): MatchResult {
   // All parts consumed — check for route at this node
   if (idx === parts.length) {
-    return node.routeFile ? { routeFile: node.routeFile, params } : null;
+    if (node.routeFile) return { routeFile: node.routeFile, params };
+    // An optional param's segment was omitted (e.g. /users for [[id]]). The
+    // route lives one node deeper; the param is simply left unset.
+    if (node.optionalChild?.node.routeFile) {
+      return { routeFile: node.optionalChild.node.routeFile, params };
+    }
+    return null;
   }
 
   const part = parts[idx];
@@ -83,7 +99,18 @@ function walk(
     if (result) return result;
   }
 
-  // 3. Try catch-all — consumes remaining segments
+  // 3. Try optional param — consume this part as the param (the "present"
+  //    case). The "absent" case is handled at the all-parts-consumed branch
+  //    above. Param-before-catch-all keeps optional more specific than splat.
+  if (node.optionalChild) {
+    const result = walk(node.optionalChild.node, parts, idx + 1, {
+      ...params,
+      [node.optionalChild.name]: part,
+    });
+    if (result) return result;
+  }
+
+  // 4. Try catch-all — consumes remaining segments
   if (node.catchAllChild) {
     const remaining = parts.slice(idx).join("/");
     const catchNode = node.catchAllChild.node;

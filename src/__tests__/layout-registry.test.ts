@@ -58,13 +58,17 @@ describe("resolveLayoutChainFromRegistry", () => {
     expect(r.layoutFiles).toEqual([]);
   });
 
-  test("matches sibling-dir layouts only when route is deeper", () => {
-    // urlPattern "blog" → layoutDirs returns [] (no ancestor)
+  test("wraps a folder index in that folder's layout", () => {
+    // routes/blog/_index.tsx (URL /blog) lives inside routes/blog/, so the
+    // sibling routes/blog/layout.tsx wraps it — matching Remix/RR/Next, where
+    // an index is nested under its directory's layout. Layout dirs are derived
+    // from the FILE path, so the `_index` → `blog` urlPattern collapse no
+    // longer hides the ancestor directory.
     const r = resolveLayoutChainFromRegistry(
       { filePath: "routes/blog/_index.tsx", urlPattern: "blog", segments: ["blog"] },
       registry,
     );
-    expect(r.layoutFiles).toEqual(["root.tsx"]);
+    expect(r.layoutFiles).toEqual(["root.tsx", "routes/blog/layout.tsx"]);
   });
 });
 
