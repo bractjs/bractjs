@@ -1,55 +1,14 @@
 {
-  "name": "@bractjs/bractjs",
-  "version": "0.1.28",
-  "description": "Production-grade SSR framework for Bun + React 19. File-based routing, streaming SSR, server actions, typed routes.",
+  "name": "bractjs-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "description": "BractJS monorepo — pnpm workspace for the @bractjs/bractjs framework and example apps.",
   "license": "MIT",
-  "homepage": "https://github.com/bractjs/bractjs#readme",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/bractjs/bractjs.git"
-  },
-  "bugs": {
-    "url": "https://github.com/bractjs/bractjs/issues"
-  },
-  "keywords": [
-    "bun",
-    "react",
-    "react19",
-    "ssr",
-    "framework",
-    "routing",
-    "server-actions",
-    "streaming",
-    "typescript",
-    "full-stack"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "files": [
-    "src",
-    "bin",
-    "types",
-    "templates"
-  ],
-  "bin": {
-    "bractjs": "./bin/cli.ts"
-  },
-  "types": "./types/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./types/index.d.ts",
-      "default": "./src/index.ts"
-    }
-  },
   "scripts": {
-    "dev": "bun run src/dev/server.ts",
-    "build": "bun run src/build/bundler.ts",
-    "test": "bun test"
-  },
-  "peerDependencies": {
-    "react": "^19",
-    "react-dom": "^19"
+    "dev": "bun run packages/core/src/dev/server.ts",
+    "build": "pnpm --filter @bractjs/bractjs build",
+    "test": "pnpm --filter @bractjs/bractjs test",
+    "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -57,5 +16,11 @@
     "@types/react-dom": "^19",
     "react": "^19",
     "react-dom": "^19"
+  },
+  "pnpm": {
+    "overrides": {
+      "react": "19.2.6",
+      "react-dom": "19.2.6"
+    }
   }
 }

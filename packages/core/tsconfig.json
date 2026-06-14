@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@bractjs/bractjs": ["./src/index.ts"]
+    }
+  },
+  "include": ["src", "bin"],
+  "exclude": ["node_modules", "build"]
+}
