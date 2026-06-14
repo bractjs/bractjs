@@ -23,6 +23,9 @@ export interface BractJSConfig {
   plugins?: BunPlugin[];
   /** Directory for the transformed-image cache. Default: ".bract-image-cache". */
   imageCacheDir?: string;
+  /** Hard ceiling (bytes) on any incoming request body, enforced by the Bun
+   *  adapter regardless of advertised Content-Length. Default 16 MiB. */
+  maxRequestBodySize?: number;
   /** WebSocket port for dev HMR (used by `bractjs dev` only). Default 3001. */
   hmrPort?: number;
   /** Custom server adapter (Cloudflare Workers, Deno, Node, etc.). Defaults to Bun.serve(). */

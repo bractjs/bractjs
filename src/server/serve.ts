@@ -1,6 +1,7 @@
 import { scanRoutes, type RouteFile } from "./scanner.ts";
 import { buildTrie, matchRoute } from "./matcher.ts";
 import { handleRequest, type HandlerConfig } from "./request-handler.ts";
+import { pipeline, type MiddlewareContext } from "./middleware.ts";
 import { renderSpaShell } from "./spa.ts";
 import { type ServerManifest } from "./render.ts";
 import { isDevRuntime, isExplicitDev } from "./env.ts";
@@ -52,6 +53,14 @@ export interface BractJSConfig {
   buildDir?: string;
   /** Directory for transformed image cache. Defaults to .bract-image-cache */
   imageCacheDir?: string;
+  /**
+   * Hard ceiling (bytes) on the size of any incoming request body, enforced by
+   * the Bun adapter regardless of the advertised Content-Length. Defaults to
+   * 16 MiB — above the 10 MiB route-form cap so normal requests pass while a
+   * single client can't stream an unbounded body into memory. Raise it for a
+   * dedicated large-upload endpoint. Only applies to the default Bun adapter.
+   */
+  maxRequestBodySize?: number;
   /** Called once after the server starts listening. Use to open DB connections, warm caches, etc. */
   onStart?: () => Promise<void> | void;
   /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */
@@ -169,7 +178,13 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     return Bun.file(join(buildDir, "client", "_prerender", relHtmlOrJson));
   }
 
-  return async function fetch(request: Request): Promise<Response> {
+  // The full per-request dispatch: special endpoints (API, actions, stream,
+  // image, static, prerender) first, then the SSR route handler. Runs INSIDE
+  // the global middleware pipeline (see the returned `fetch` below), so
+  // `pipeline.use(cors()/csp()/auth/…)` governs every response — not just SSR
+  // documents. `context` is the shared mutable object threaded through the
+  // pipeline; route-level middleware and getCspNonce() read the same object.
+  async function dispatch(request: Request, context: Record<string, unknown>): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
 
@@ -285,7 +300,17 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
 
     const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
     const handlerConfig: HandlerConfig = { appDir, publicDir, manifest, onError, moduleRegistry };
-    return handleRequest(request, trie, handlerConfig);
+    return handleRequest(request, trie, handlerConfig, context);
+  }
+
+  return async function fetch(request: Request): Promise<Response> {
+    // Run the global middleware pipeline around the ENTIRE dispatch so
+    // cors()/csp()/logging/auth attached via `pipeline.use(...)` apply to
+    // API routes, server actions, /_stream, /_image and static assets — not
+    // only SSR documents. The per-route (nested) middleware chain still runs
+    // inside handleRequest for SSR/_data, sharing this same `context` object.
+    const ctx: MiddlewareContext = { request, params: {}, context: {} };
+    return pipeline.run(ctx, () => dispatch(request, ctx.context));
   };
 }
 
@@ -330,7 +355,7 @@ export function createServer(config?: Partial<BractJSConfig>): {
   const fetchHandler = buildFetchHandler(config ?? {});
 
   // Use provided adapter or fall back to the default Bun adapter.
-  const adapter = config?.adapter ?? new BunAdapter();
+  const adapter = config?.adapter ?? new BunAdapter(config?.maxRequestBodySize);
 
   if (adapter instanceof BunAdapter) {
     adapter.setHandler(fetchHandler);

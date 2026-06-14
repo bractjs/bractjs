@@ -22,9 +22,24 @@ export interface BractAdapter {
  * Default adapter — wraps `Bun.serve()`.
  * Created internally by `createServer()` when no adapter is provided.
  */
+// SECURITY(medium): hard ceiling on request body size at the server boundary,
+// independent of any Content-Length the client advertises. The per-route and
+// /_action handlers apply their own (smaller) caps and double-check the decoded
+// size, but this is the single backstop every code path inherits — it bounds
+// memory even for paths that don't pre-check (e.g. an app's own /api handler
+// that reads request.formData() directly). Sits above the 10 MiB route-form
+// cap so legitimate uploads still pass; raise it via the `maxRequestBodySize`
+// config for apps with a dedicated large-upload endpoint.
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024; // 16 MiB
+
 export class BunAdapter implements BractAdapter {
   private server: ReturnType<typeof Bun.serve> | null = null;
   private handler: ((request: Request) => Promise<Response>) | null = null;
+  private maxRequestBodySize: number;
+
+  constructor(maxRequestBodySize: number = DEFAULT_MAX_REQUEST_BODY_BYTES) {
+    this.maxRequestBodySize = maxRequestBodySize;
+  }
 
   setHandler(handler: (request: Request) => Promise<Response>): void {
     this.handler = handler;
@@ -40,6 +55,7 @@ export class BunAdapter implements BractAdapter {
     const handler = this.handler;
     this.server = Bun.serve({
       port,
+      maxRequestBodySize: this.maxRequestBodySize,
       fetch: handler,
       error(err: Error) {
         console.error("[bractjs] unhandled server error:", err);

@@ -22,6 +22,13 @@ export class MiddlewarePipeline {
     return this;
   }
 
+  /** Remove all registered middleware. Useful for tests and for embedders that
+   * rebuild the pipeline (e.g. on a hot reload). */
+  clear(): this {
+    this.fns = [];
+    return this;
+  }
+
   /**
    * Compose all registered middleware into a single chain and execute it.
    * Each fn calls `next()` to invoke the next fn; the last `next()` calls `handler`.

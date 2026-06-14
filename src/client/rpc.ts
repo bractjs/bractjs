@@ -49,9 +49,19 @@ export function createClient<
             const httpMethod = method.toUpperCase();
             const url = baseUrl + path;
             const hasBody = httpMethod !== "GET" && httpMethod !== "DELETE" && input !== undefined;
+            // Send the custom CSRF marker on every mutating call. The server's
+            // /api CSRF gate accepts Sec-Fetch-Site / Origin too, but this
+            // header keeps same-origin calls working even behind proxies that
+            // strip those — and it can't be set cross-origin without a CORS
+            // preflight the framework's CORS never grants. Mirrors the
+            // server-action proxy in src/build/directives.ts.
+            const isMutating = httpMethod !== "GET";
+            const headers: Record<string, string> = {};
+            if (hasBody) headers["Content-Type"] = "application/json";
+            if (isMutating) headers["X-BractJS-Action"] = "1";
             const res = await fetch(url, {
               method: httpMethod,
-              headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+              headers: Object.keys(headers).length > 0 ? headers : undefined,
               body: hasBody ? JSON.stringify(input) : undefined,
             });
             if (!res.ok) {

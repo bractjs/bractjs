@@ -710,12 +710,17 @@ export const listUsers = route("GET", "/api/users", async () => {
 export const createUser = route("POST", "/api/users", async (input: { name: string }) => {
   return db.users.create(input);
 });
+
+// Public, credential-free endpoint (e.g. a webhook): opt out of CSRF.
+export const webhook = route("POST", "/api/webhook", handleWebhook, { csrf: false });
 ```
 
 - `GET`/`DELETE`: no body parsed. `POST`/`PUT`/`PATCH`: JSON or form body parsed into `input`.
-- Bodies are capped at 1 MiB. Errors return a generic 500 in production (full message in dev).
+- Bodies are capped at 1 MiB. JSON bodies carrying prototype-pollution keys (`__proto__`/`constructor`/`prototype`) are rejected (400). Errors return a generic 500 in production (full message in dev).
 - Handlers also receive the raw `Request` as the 2nd arg.
 - `:param` segments match any non-empty value; **read and validate params from `request.url` yourself** (they aren't injected into `input`).
+- **CSRF — on by default for mutating methods** (`POST`/`PUT`/`PATCH`/`DELETE`): the request must prove same-origin (via `Sec-Fetch-Site`, the `X-BractJS-Action` header `createClient` sends automatically, or a matching `Origin`), exactly like server actions. Cross-site requests get `403`. Pass `{ csrf: false }` **only** for endpoints that don't trust ambient credentials (session cookies / Basic auth) and are meant to be called cross-site (webhooks, token-authenticated or public APIs).
+- Global `pipeline` middleware (`cors`, `csp`, `authGuard`, custom) applies to `/api` responses too — see §14.
 
 ### Call them with `createClient<AppApiRoutes>()`
 
@@ -777,7 +782,7 @@ If you prefer to keep calling `validate()` and catching: `isValidationResponse(e
 
 ## 14. Middleware
 
-Middleware runs **before routing** on the module-level `pipeline` singleton. Each middleware gets `(ctx, next)` and returns a `Response`. `ctx.context` is threaded into every loader/action.
+The module-level `pipeline` singleton wraps the **entire** request — every response flows through it, including typed `/api` routes, server actions (`/_action`, `/_stream`), the image endpoint (`/_image`), static assets, and SSR documents. So `cors()`, `csp()`, `authGuard()`, a rate limiter, or your own logging applies uniformly, not just to page renders. Each middleware gets `(ctx, next)` and returns a `Response`; `ctx.context` is threaded into every loader/action and into nested route middleware.
 
 ```ts
 import { pipeline, requestLogger, cors, authGuard, csp } from "@bractjs/bractjs";
@@ -819,7 +824,7 @@ pipeline.use(csp({
 ```
 Read the nonce inside a component/middleware with `getCspNonce(context)` (key: `CSP_NONCE_KEY`) to nonce your own inline scripts.
 
-`script-src` is always nonce-based (`'nonce-…' 'strict-dynamic'`), so injected `<script>` cannot execute. The default `style-src` allows `'unsafe-inline'` for ergonomics (React inline styles, CSS-in-JS); this leaves inline-style injection possible. Pass `strict: true` (or override `style-src` with a nonce/hash) if your app serves all styles from same-origin stylesheets.
+`script-src` is always nonce-based (`'nonce-…' 'strict-dynamic'`), so injected `<script>` cannot execute. Note that with `'strict-dynamic'`, supporting browsers **ignore** the `'self'`/host expressions in `script-src` — trust flows solely through the nonce and the scripts it loads (the `'self'` is kept only as a fallback for older browsers). The default policy also sets `form-action 'self'` (a `<form>` can only submit same-origin), `base-uri 'self'`, `frame-ancestors 'self'`, and `object-src 'none'`. The default `style-src` allows `'unsafe-inline'` for ergonomics (React inline styles, CSS-in-JS); this leaves inline-style injection possible. Pass `strict: true` (or override `style-src` with a nonce/hash) if your app serves all styles from same-origin stylesheets.
 
 ### Custom middleware
 
@@ -1317,6 +1322,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | `publicDir` | `string` | `"./public"` | Static assets (served no-cache) |
 | `buildDir` | `string` | `"./build"` | Build output |
 | `imageCacheDir` | `string` | `".bract-image-cache"` | Optimized-image disk cache |
+| `maxRequestBodySize` | `number` | `16777216` (16 MiB) | Hard ceiling on any request body, enforced by the Bun adapter (§27) |
 | `sourcemap` | `string` | `"external"` | `"none" \| "linked" \| "inline" \| "external"` |
 | `minify` | `boolean` | `true` | Minify client bundles |
 | `clientEnv` | `string[]` | `[]` | `process.env` keys exposed to the client |
@@ -1335,7 +1341,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 
 Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `hasForbiddenKey`, `nullProtoFromEntries`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
 **Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
 
@@ -1365,7 +1371,7 @@ Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
 
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
 
-**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
+**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `ApiRouteOptions`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 
 ---
 
@@ -1375,10 +1381,13 @@ BractJS ships secure defaults, but a few behaviors are worth understanding so yo
 
 - **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any *other* exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** (read the session, check the user). The CSRF gate only proves the call is same-origin; it does not authenticate the user.
 - **`/_stream` calls actions with no arguments.** A streaming action invoked over `GET /_stream` receives no caller input. It must be safe to call with none and must authorize itself.
-- **CORS + credentials.** Listing an origin in `cors({ origin: [...], credentials: true })` fully trusts that origin for credentialed cross-origin reads. Only list origins you control. `credentials:true` with `origin:"*"` is refused at setup. Never add `X-BractJS-Action` to `Access-Control-Allow-Headers` — it is the CSRF gate.
-- **Error messages.** In production, loader/action errors are surfaced to the client as a generic message; the real message + stack appear only in dev (`NODE_ENV=development`). For user-facing structured errors throw an `HttpError` (its message *is* shown) — never put secrets in a raw `Error.message`.
+- **Typed `/api` routes are CSRF-protected by default.** Mutating routes (`POST`/`PUT`/`PATCH`/`DELETE`) require a same-origin proof just like server actions; cross-site requests get `403`. Opt out with `route(..., { csrf: false })` **only** for endpoints that don't trust ambient credentials (webhooks, token-authenticated/public APIs). As with actions, the CSRF gate is not authentication — authorize inside the handler.
+- **Global middleware covers every endpoint.** Anything attached to `pipeline.use(...)` — `cors()`, `csp()`, `authGuard()`, a rate limiter, custom logging — runs for typed `/api` routes, `/_action`, `/_stream`, `/_image`, static assets, and SSR documents alike. (This was previously SSR-only; a cross-cutting guard you register globally now actually applies to your API surface.)
+- **CORS + credentials.** Listing an origin in `cors({ origin: [...], credentials: true })` fully trusts that origin for credentialed cross-origin reads. Only list origins you control. `credentials:true` with `origin:"*"` is refused at setup. **Never add `X-BractJS-Action` to `Access-Control-Allow-Headers`** — it is part of the CSRF gate; the built-in `cors()` deliberately omits it. If you write your own CORS layer and expose that header cross-origin, you defeat CSRF on both actions and `/api`; add a cryptographic double-submit token if you must. The header-based gate also assumes browsers send `Sec-Fetch-Site` — behind a proxy that strips it, rely on same-origin `Origin` (which `cors()` does not weaken).
+- **Error messages.** In production, loader/action/api errors are surfaced to the client as a generic message; the real message + stack appear only in dev (`NODE_ENV=development`). For user-facing structured errors throw an `HttpError` (its message *is* shown) — never put secrets in a raw `Error.message`.
 - **CSP `style-src`.** The opt-in `csp()` middleware nonces all scripts, but its default `style-src` includes `'unsafe-inline'` for ergonomics. Pass `csp({ strict: true })` (or override `style-src` with a nonce/hash) if you want to block inline-style injection.
-- **Already handled for you:** path traversal + symlink escape on `/public` and `/_image`, open-redirect neutralization (`redirect()` requires `{ allowExternal: true }` to go off-origin), XSS-safe SSR data island (`safeStringify`), prototype-pollution rejection on action JSON bodies, request body-size caps, signed/constant-time-verified cookie sessions, and CSRF via layered `Sec-Fetch-Site` + custom-header + `Origin` checks.
+- **Request body size.** Beyond the per-handler caps (1 MiB JSON for actions/api, 10 MiB route forms), the Bun adapter enforces a hard `maxRequestBodySize` ceiling (default 16 MiB) so no path can stream an unbounded body into memory. Raise it via the `maxRequestBodySize` config for a dedicated large-upload endpoint.
+- **Already handled for you:** path traversal + symlink escape on `/public` and `/_image`, open-redirect neutralization (`redirect()` requires `{ allowExternal: true }` to go off-origin), XSS-safe SSR data island (`safeStringify`), prototype-pollution rejection on action **and** `/api` JSON bodies plus null-prototype objects for form/search inputs, request body-size caps + global backstop, signed/constant-time-verified cookie sessions, CSP defaults (`script-src` nonce + `strict-dynamic`, `form-action`/`base-uri`/`frame-ancestors` `'self'`, `object-src 'none'`), and CSRF via layered `Sec-Fetch-Site` + custom-header + `Origin` checks across actions, `/_stream`, route mutations, and `/api`.
 
 ---
 

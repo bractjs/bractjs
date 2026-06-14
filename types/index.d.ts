@@ -93,6 +93,7 @@ import type { MiddlewareFn, MiddlewareContext } from "./middleware.d.ts";
 
 export declare class MiddlewarePipeline {
   use(fn: MiddlewareFn): this;
+  clear(): this;
   run(ctx: MiddlewareContext, handler: () => Promise<Response>): Promise<Response>;
 }
 export declare const pipeline: MiddlewarePipeline;
@@ -106,16 +107,24 @@ export declare function authGuard(options: AuthGuardOptions): MiddlewareFn;
 
 // ── API routes (C1) ───────────────────────────────────────────────────────
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export interface ApiRouteOptions {
+  /** CSRF protection for this route. Default `true` for mutating methods
+   *  (POST/PUT/PATCH/DELETE). Set `false` only for endpoints that don't trust
+   *  ambient credentials (webhooks, token-authenticated/public APIs). */
+  csrf?: boolean;
+}
 export interface ApiRouteDefinition<TMethod extends HttpMethod, TPath extends string, TInput, TOutput> {
   method: TMethod;
   path: TPath;
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>;
+  csrf: boolean;
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export declare function route<TMethod extends HttpMethod, TPath extends string, TInput, TOutput>(
   method: TMethod,
   path: TPath,
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>,
+  options?: ApiRouteOptions,
 ): ApiRouteDefinition<TMethod, TPath, TInput, TOutput>;
 export type AppApiRoutes = never; // users extend this via codegen
 
@@ -162,6 +171,14 @@ export declare function readValidationError(
 export declare function formText(formData: FormData, key: string): string;
 /** Collect string fields from FormData (all, or a named subset). */
 export declare function formValues(formData: FormData, keys?: string[]): Record<string, string>;
+
+// ── Prototype-pollution guards ────────────────────────────────────────────
+/** Deep-scan a parsed JSON value for `__proto__`/`constructor`/`prototype`
+ *  keys. Fails closed past an internal depth cap. Returns true if found. */
+export declare function hasForbiddenKey(value: unknown, depth?: number): boolean;
+/** Build a null-prototype object from entries, so a key named `__proto__`
+ *  lands as a plain own property instead of mutating the prototype. */
+export declare function nullProtoFromEntries<V>(entries: Iterable<readonly [string, V]>): Record<string, V>;
 
 // ── Search-param validation ───────────────────────────────────────────────
 /** URLSearchParams → plain object; repeated keys collapse into arrays. */

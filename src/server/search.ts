@@ -8,7 +8,11 @@ import { runSchema, type Schema } from "./validate.ts";
  * flattens FormData.
  */
 export function searchParamsToObject(sp: URLSearchParams): Record<string, string | string[]> {
-  const out: Record<string, string | string[]> = {};
+  // Null-prototype so a query param named "__proto__" (?__proto__=x) can't
+  // pollute Object.prototype when the result is later spread/merged. Using a
+  // plain {} here would make `out["__proto__"] = …` a no-op AND, for nested
+  // merges downstream, a pollution vector. SECURITY: see proto-guard.ts.
+  const out = Object.create(null) as Record<string, string | string[]>;
   for (const [key, value] of sp.entries()) {
     const existing = out[key];
     if (existing === undefined) out[key] = value;

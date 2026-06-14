@@ -1,30 +1,11 @@
 import { resolveAction } from "./action-registry.ts";
 import { json } from "./response.ts";
 import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
+import { hasForbiddenKey } from "./proto-guard.ts";
 
-const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 // Cap action JSON bodies. Anything over this looks like an abuse attempt;
 // FormData uploads (large files) take the multipart branch and bypass this.
 const MAX_JSON_BODY_BYTES = 1_048_576; // 1 MiB
-
-// Max nesting we will fully scan for forbidden keys. Legitimate action payloads
-// are shallow; anything deeper is treated as hostile.
-const MAX_SCAN_DEPTH = 200;
-
-// Deep scan: nested objects can carry __proto__ pollution vectors too.
-// SECURITY(high): this is a security filter, so it must FAIL CLOSED. A payload
-// nested past MAX_SCAN_DEPTH is rejected (returns true) rather than silently
-// passed — otherwise an attacker could bury `__proto__` below the cap to evade
-// the check and reach a recursive-merge sink in action code.
-function hasForbiddenKey(value: unknown, depth = 0): boolean {
-  if (!value || typeof value !== "object") return false;
-  if (depth > MAX_SCAN_DEPTH) return true;
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    if (FORBIDDEN_KEYS.has(key)) return true;
-    if (hasForbiddenKey((value as Record<string, unknown>)[key], depth + 1)) return true;
-  }
-  return false;
-}
 
 export async function handleActionRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
