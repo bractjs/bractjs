@@ -23,12 +23,19 @@
  * none of these headers and are rejected by default — they must set
  * `X-BractJS-Action` or a same-origin `Origin` to mutate.
  */
+// This gate protects server actions (/_action), streaming actions (/_stream),
+// route mutations, AND typed /api routes (see api-route.ts) — every
+// state-changing, cookie-trusting surface in the framework.
+//
 // SECURITY(medium): X-BractJS-Action acts as a CSRF token by relying on CORS
 // preflight blocking custom headers cross-origin. This is safe only while the
 // server does NOT emit a permissive Access-Control-Allow-Headers listing this
-// header. If CORS policy is ever loosened, Sec-Fetch-Site (1) remains as the
-// browser-enforced backstop, and apps that loosen CORS should add a
-// cryptographic double-submit token.
+// header. The built-in cors() (middleware/cors.ts) deliberately omits it; if
+// you ship your OWN CORS layer and expose this header cross-origin, you defeat
+// CSRF everywhere — add a cryptographic double-submit token in that case.
+// Sec-Fetch-Site (1) remains a browser-enforced backstop, but note it is NOT
+// sent by every client/proxy: behind a header-stripping proxy the gate falls
+// back to the same-origin Origin check, which cors() does not weaken.
 import { isExplicitDev } from "./env.ts";
 
 /**

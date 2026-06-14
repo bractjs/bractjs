@@ -1,4 +1,6 @@
 import { isExplicitDev } from "./env.ts";
+import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
+import { hasForbiddenKey } from "./proto-guard.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -7,6 +9,27 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 // SECURITY(high): cap request bodies for typed API routes so a single client
 // cannot exhaust memory. Same 1 MiB ceiling used by /_action JSON.
 const MAX_BODY_BYTES = 1_048_576;
+
+// SECURITY(high): the same state-changing methods the route-action / _action
+// paths CSRF-gate. A typed API route using one of these is cross-site
+// forgeable (cookies ride along; a form-encoded body is CORS-"simple" and
+// skips preflight) unless the caller proves same-origin. We require that proof
+// by default — see the gate in handleApiRequest.
+const MUTATING_METHODS = new Set<HttpMethod>(["POST", "PUT", "PATCH", "DELETE"]);
+
+export interface ApiRouteOptions {
+  /**
+   * Cross-site-request-forgery protection for this route. Default `true` for
+   * mutating methods (POST/PUT/PATCH/DELETE): the request must be same-origin
+   * (proven via `Sec-Fetch-Site`, the `X-BractJS-Action` header, or a matching
+   * `Origin`), exactly like server actions. Set `false` ONLY for endpoints
+   * that are safe to call cross-site — i.e. they do NOT rely on ambient
+   * credentials (session cookies / Basic auth) and are intentionally public
+   * (webhooks, token-authenticated APIs, public read/write services).
+   * Only GET is exempt from the gate; DELETE is treated as mutating.
+   */
+  csrf?: boolean;
+}
 
 export interface ApiRouteDefinition<
   TMethod extends HttpMethod,
@@ -17,6 +40,8 @@ export interface ApiRouteDefinition<
   method: TMethod;
   path: TPath;
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>;
+  /** Resolved CSRF setting (defaults applied at registration). */
+  csrf: boolean;
   _types: { input: TInput; output: TOutput };
 }
 
@@ -29,6 +54,11 @@ const routeRegistry: ApiRouteDefinition<HttpMethod, string, any, any>[] = [];
  *
  * Usage in app/api/users.ts:
  *   export const getUsers = bract.route("GET", "/api/users", async () => db.users.findAll());
+ *
+ * Mutating routes (POST/PUT/PATCH/DELETE) are CSRF-protected by default — the
+ * request must be same-origin. Pass `{ csrf: false }` for a deliberately public,
+ * credential-free endpoint (e.g. a webhook):
+ *   bract.route("POST", "/api/webhook", handler, { csrf: false });
  */
 export function route<
   TMethod extends HttpMethod,
@@ -39,11 +69,14 @@ export function route<
   method: TMethod,
   path: TPath,
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>,
+  options?: ApiRouteOptions,
 ): ApiRouteDefinition<TMethod, TPath, TInput, TOutput> {
   const def: ApiRouteDefinition<TMethod, TPath, TInput, TOutput> = {
     method,
     path,
     handler,
+    // Default ON. Opt out only for endpoints that don't trust ambient creds.
+    csrf: options?.csrf ?? true,
     _types: {} as { input: TInput; output: TOutput },
   };
   routeRegistry.push(def);
@@ -61,6 +94,14 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
   for (const def of routeRegistry) {
     if (def.method !== request.method) continue;
     if (!pathMatches(def.path, url.pathname)) continue;
+
+    // SECURITY(high): CSRF gate for mutating methods. Same check the route
+    // action / _action / _stream paths use, so an authenticated user's cookies
+    // can't be used to forge a cross-site write to an /api route. Routes that
+    // opt out (`csrf: false`) are responsible for not trusting ambient creds.
+    if (def.csrf && MUTATING_METHODS.has(def.method) && !isAllowedMutation(request)) {
+      return csrfForbiddenResponse();
+    }
 
     let input: unknown = undefined;
     if (request.method !== "GET" && request.method !== "DELETE") {
@@ -85,6 +126,12 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           input = text ? JSON.parse(text) : undefined;
         } catch {
           return new Response("Bad Request: invalid JSON", { status: 400 });
+        }
+        // SECURITY(high): reject prototype-pollution keys before the parsed
+        // body reaches a handler that might merge it into another object.
+        // Parity with the /_action JSON path.
+        if (hasForbiddenKey(input)) {
+          return new Response("Bad Request: forbidden keys", { status: 400 });
         }
       } else if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
         input = await request.formData();

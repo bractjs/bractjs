@@ -33,7 +33,10 @@ export class ValidationError extends Error {
 
 function toPlainObject(input: FormData | Record<string, unknown>): Record<string, unknown> {
   if (input instanceof FormData) {
-    const out: Record<string, unknown> = {};
+    // Null-prototype: a form field literally named "__proto__" becomes a plain
+    // own key here instead of mutating Object.prototype when the result is
+    // later spread/merged. SECURITY: see src/server/proto-guard.ts.
+    const out = Object.create(null) as Record<string, unknown>;
     for (const [key, value] of input.entries()) {
       if (key in out) {
         const existing = out[key];
