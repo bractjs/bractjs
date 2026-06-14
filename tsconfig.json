@@ -1,19 +1,10 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "strict": true,
-    "lib": ["ESNext", "DOM"],
-    "skipLibCheck": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "types": ["bun-types"],
     "paths": {
-      "@bractjs/bractjs": ["./src/index.ts"]
+      "@bractjs/bractjs": ["./packages/core/src/index.ts"]
     }
   },
-  "include": ["src", "bin"],
-  "exclude": ["node_modules", "build"]
+  "include": ["app"],
+  "exclude": ["node_modules", "build", "packages", "examples"]
 }

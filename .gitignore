@@ -2,10 +2,13 @@
 node_modules/
 jspm_packages/
 
-# Lockfiles from other package managers (bun.lock is the source of truth)
+# Lockfiles from other package managers (pnpm-lock.yaml is the source of truth)
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+bun.lock
+bun.lockb
+examples/*/bun.lock
+examples/*/bun.lockb
 
 # Build outputs (anchored to repo root so they don't match source dirs like
 # src/build/ — an unanchored `build/` ignores that dir at ANY depth).

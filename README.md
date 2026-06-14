@@ -11,7 +11,7 @@
 - [Bun](https://bun.sh) ≥ 1.1 — no Node.js support
 - React 19 (peer dependency)
 
-This README is a **step-by-step guide to every function and feature** BractJS exports. Each section is self-contained and ordered from "first app" to "advanced". Every symbol shown here is a real export from `@bractjs/bractjs` (see [src/index.ts](src/index.ts)).
+This README is a **step-by-step guide to every function and feature** BractJS exports. Each section is self-contained and ordered from "first app" to "advanced". Every symbol shown here is a real export from `@bractjs/bractjs` (see [packages/core/src/index.ts](packages/core/src/index.ts)).
 
 ---
 
@@ -1246,7 +1246,7 @@ bun build --compile app/server.ts \               # D — single binary
 
 The codegen functions are exported: `writeModuleRegistries(appDir)`, `writeManifestModule(appDir, buildDir)`, and the lower-level `generateRouteRegistry` / `generateActionRegistry` / `generateManifestModule`.
 
-> **Contributor note — keep the binary working:** anything on the server request/startup path must avoid runtime `Bun.Glob`/computed-path `import()`, must fall back from `realpath()` to `Bun.file().exists()` for embedded assets, and must preserve every consumed export when projecting route modules. Two tests enforce this: `src/__tests__/compile-safety.test.ts` (fast static scan) and `src/__tests__/compile-smoke.test.ts` (compiles and boots a real binary).
+> **Contributor note — keep the binary working:** anything on the server request/startup path must avoid runtime `Bun.Glob`/computed-path `import()`, must fall back from `realpath()` to `Bun.file().exists()` for embedded assets, and must preserve every consumed export when projecting route modules. Two tests enforce this: `packages/core/src/__tests__/compile-safety.test.ts` (fast static scan) and `packages/core/src/__tests__/compile-smoke.test.ts` (compiles and boots a real binary).
 
 ---
 
@@ -1339,7 +1339,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 
 ## 26. Full export index
 
-Everything importable from `@bractjs/bractjs` ([src/index.ts](src/index.ts)):
+Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
 **Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `hasForbiddenKey`, `nullProtoFromEntries`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
