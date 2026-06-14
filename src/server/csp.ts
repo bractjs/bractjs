@@ -75,14 +75,20 @@ export function csp(options: CspOptions = {}): MiddlewareFn {
 
     const directives: Record<string, string | null> = {
       "default-src": "'self'",
-      // 'strict-dynamic' lets the nonced bootstrap script load the chunks it
-      // imports without each chunk needing its own nonce. Falls back to 'self'
-      // in browsers that don't support it.
+      // 'strict-dynamic': trust flows through the nonce — a nonced script may
+      // load the chunks it imports without each chunk carrying its own nonce.
+      // NOTE: in browsers that support 'strict-dynamic', the 'self' and any
+      // host/allowlist expressions in script-src are IGNORED; only the nonce
+      // (and scripts it transitively loads) are trusted. 'self' is kept solely
+      // as a fallback for older browsers that don't implement 'strict-dynamic'.
       "script-src": `'self' 'nonce-${nonce}' 'strict-dynamic'`,
       "style-src": options.strict ? "'self'" : "'self' 'unsafe-inline'",
       "img-src": "'self' data: blob:",
       "connect-src": "'self'",
       "base-uri": "'self'",
+      // Restrict where <form> can submit so an injected form can't exfiltrate
+      // to an attacker origin even if it slips past other controls.
+      "form-action": "'self'",
       "frame-ancestors": "'self'",
       "object-src": "'none'",
       ...(options.directives ?? {}),

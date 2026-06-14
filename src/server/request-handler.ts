@@ -11,7 +11,7 @@ import { buildMatches } from "./matches.ts";
 import { json, error, sanitizeRedirect } from "./response.ts";
 import { isRedirect, isHttpError } from "../shared/errors.ts";
 import { isExplicitDev } from "./env.ts";
-import { pipeline, runRouteMiddleware, collectRouteMiddleware, type MiddlewareContext } from "./middleware.ts";
+import { runRouteMiddleware, collectRouteMiddleware, type MiddlewareContext } from "./middleware.ts";
 import { BractJSProvider } from "../shared/context.ts";
 import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
 import { getCspNonce } from "./csp.ts";
@@ -40,15 +40,15 @@ const MAX_FORM_BYTES = 10 * 1_048_576; // 10 MiB
 export async function handleRequest(
   request: Request,
   trie: TrieNode,
-  config: HandlerConfig
+  config: HandlerConfig,
+  context: Record<string, unknown> = {},
 ): Promise<Response> {
-  const ctx: MiddlewareContext = {
-    request,
-    params: {},
-    context: {},
-  };
-
-  return pipeline.run(ctx, () => route(request, trie, config, ctx.context));
+  // The global pipeline is run once by buildFetchHandler around the whole
+  // dispatch (so it also covers /api, /_action, /_stream, /_image, static).
+  // We receive the shared, already-running `context` here and only run the
+  // per-route (nested) middleware chain — running the global pipeline again
+  // would double-invoke cors()/csp()/etc. for SSR documents.
+  return route(request, trie, config, context);
 }
 
 async function route(

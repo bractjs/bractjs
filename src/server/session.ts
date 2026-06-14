@@ -1,3 +1,5 @@
+import { hasForbiddenKey } from "./proto-guard.ts";
+
 export type SessionData = Record<string, unknown>;
 
 export interface Session {
@@ -37,7 +39,16 @@ function encode(data: SessionData): string {
 
 function decode(encoded: string): SessionData {
   const pad = "=".repeat((4 - (encoded.length % 4)) % 4);
-  return JSON.parse(atob(encoded.replace(/-/g, "+").replace(/_/g, "/") + pad)) as SessionData;
+  const parsed = JSON.parse(
+    atob(encoded.replace(/-/g, "+").replace(/_/g, "/") + pad),
+  ) as SessionData;
+  // Defense-in-depth: the payload is HMAC-verified before we get here, so this
+  // only matters if a signing secret leaks — but a session blob carrying a
+  // "__proto__" key must never pollute Object.prototype when read/spread.
+  if (hasForbiddenKey(parsed)) {
+    throw new Error("session: forbidden key in payload");
+  }
+  return parsed;
 }
 
 async function sign(data: string, secret: string): Promise<string> {
