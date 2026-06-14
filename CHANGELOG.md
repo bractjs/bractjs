@@ -33,6 +33,10 @@ All notable changes to Bract are documented here.
 - **`defineConfig()`** — identity helper for `bractjs.config.ts` (autocomplete + type-checking without annotating the full type). `hmrPort` is now a config field (and threaded to the HMR client, which previously hardcoded `3001`).
 - **Dev failure-mode DX** — boot prints a route table (pattern ← file, loader/action markers) + the HMR port; route modules are statically linted (warns on a route with no `default`/`loader`/`action`/`beforeLoad`, and on miscased exports like `Loader`/`fallback`); loader/action errors name the failing route file (in the log and the dev error overlay, which now has a producer); CSRF 403s explain the fix in dev (terse in prod); a port already in use prints a friendly message pointing at `port`/`hmrPort`.
 
+### Repository
+
+- **Converted to a pnpm workspace monorepo (no consumer impact).** The framework now lives in `packages/core` and is published unchanged as `@bractjs/bractjs` — same name, `exports`, types, and the `bractjs` CLI bin. The published tarball is identical in shape, so `bun add @bractjs/bractjs` / `bunx bractjs new` and every `import "@bractjs/bractjs"` work exactly as before; **existing users need to do nothing**. Internally: `src/`, `bin/`, `types/`, and `templates/` moved under `packages/core/`; the example apps under `examples/*` are now workspace packages linked via `workspace:*` instead of `file:../..`; **pnpm** manages dependencies (`pnpm-lock.yaml` is the source of truth, replacing `bun.lock`), while **Bun** remains the runtime, test runner, and bundler. Contributors now run `pnpm install` at the repo root.
+
 ### Deprecated
 
 - **`StreamFetcherResult.events`** — never emitted; use `connect(actionId)`. Removed in 0.2.
