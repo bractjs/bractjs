@@ -119,6 +119,8 @@ export { Image } from "./client/components/Image.tsx";
 export type { ImageProps, ImageFormat, ImageFit } from "./client/components/Image.tsx";
 export { ScrollRestoration } from "./client/components/ScrollRestoration.tsx";
 export type { ScrollRestorationProps } from "./client/components/ScrollRestoration.tsx";
+export { Toaster } from "./client/components/Toaster.tsx";
+export type { ToasterProps, ToastPosition } from "./client/components/Toaster.tsx";
 
 // Client hooks
 export { useLoaderData } from "./client/hooks/useLoaderData.ts";
@@ -140,6 +142,9 @@ export type { SearchParamsResult } from "./client/hooks/useSearchParams.ts";
 export { useSearch, useSetSearch } from "./client/hooks/useSearch.ts";
 export type { SetSearchFn, SetSearchOptions } from "./client/hooks/useSearch.ts";
 export { serializeSearch } from "./client/search-serializer.ts";
+export { useToast, useToasts } from "./client/hooks/useToast.ts";
+export { toast, toastStore } from "./client/toast-store.ts";
+export type { Toast, ToastEntry, ToastOptions, ToastType, ToastAction } from "./client/toast-store.ts";
 export { useBlocker } from "./client/hooks/useBlocker.ts";
 export { useLocale } from "./client/hooks/useLocale.ts";
 export { useLocalizedLink } from "./client/hooks/useLocalizedLink.ts";

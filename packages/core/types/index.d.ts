@@ -4,11 +4,12 @@ import type { ReactNode, Context, CSSProperties } from "react";
 export type {
   LoaderArgs, ActionArgs, MetaDescriptor, MetaArgs,
   LoaderFunction, ActionFunction, MetaFunction, RouteModule,
-  RouteFile, Segment, RouterLocation,
+  RouteFile, Segment, RouterLocation, RouteMatch,
   ShouldRevalidateArgs, ShouldRevalidateFunction,
+  HeadersFunction, HeadersArgs,
   LoaderData, ActionData,
 } from "./route.d.ts";
-import type { RouterLocation, LoaderData, ActionData, ActionArgs } from "./route.d.ts";
+import type { RouterLocation, LoaderData, ActionData, ActionArgs, RouteMatch } from "./route.d.ts";
 
 // ── Config + Server ───────────────────────────────────────────────────────
 export type { BractJSConfig, ServerManifest, BuildConfig } from "./config.d.ts";
@@ -259,6 +260,50 @@ export interface ScrollRestorationProps {
 /** Restores scroll on back/forward, scrolls to top (or `#hash`) on new navigations. Render once in root.tsx. */
 export declare function ScrollRestoration(props?: ScrollRestorationProps): null;
 
+export type ToastType = "success" | "error" | "info" | "warning" | "loading";
+export interface ToastAction { label: string; onClick: () => void }
+export interface ToastEntry {
+  id: string;
+  type: ToastType;
+  message: string;
+  description?: string;
+  duration: number;
+  action?: ToastAction;
+  createdAt: number;
+}
+export interface ToastOptions {
+  id?: string;
+  type?: ToastType;
+  description?: string;
+  duration?: number;
+  action?: ToastAction;
+}
+type ToastMsg<T> = string | ((value: T) => string);
+export interface Toast {
+  (message: string, opts?: ToastOptions): string;
+  success(message: string, opts?: Omit<ToastOptions, "type">): string;
+  error(message: string, opts?: Omit<ToastOptions, "type">): string;
+  info(message: string, opts?: Omit<ToastOptions, "type">): string;
+  warning(message: string, opts?: Omit<ToastOptions, "type">): string;
+  loading(message: string, opts?: Omit<ToastOptions, "type">): string;
+  dismiss(id?: string): void;
+  promise<T>(
+    promise: Promise<T>,
+    msgs: { loading: string; success: ToastMsg<T>; error: ToastMsg<unknown> },
+    opts?: Omit<ToastOptions, "type" | "id">,
+  ): Promise<T>;
+}
+export type ToastPosition =
+  | "top-left" | "top-center" | "top-right"
+  | "bottom-left" | "bottom-center" | "bottom-right";
+export interface ToasterProps {
+  position?: ToastPosition;
+  gap?: number;
+  renderToast?: (toast: ToastEntry, dismiss: () => void) => ReactNode;
+}
+/** Renders the active toast queue. Mount once in root.tsx, then call `toast.*` anywhere. */
+export declare function Toaster(props?: ToasterProps): ReactNode;
+
 export interface FormProps { method?: "post" | "put" | "delete"; action?: string; /** Renders a hidden `intent` input (pairs with defineActions()). */ intent?: string; children?: ReactNode; [key: string]: unknown; }
 export declare function Form(props: FormProps): ReactNode;
 
@@ -294,6 +339,8 @@ export declare function useLoaderData<T = unknown>(): LoaderData<T>;
 export declare function useActionData<T = unknown>(): ActionData<T> | null;
 /** The current location — reactive on the client, request-derived during SSR. */
 export declare function useLocation(): RouterLocation;
+/** The matched route chain (root → layouts → route); each entry has `{ id, pathname, params, data, handle }`. */
+export declare function useMatches(): RouteMatch[];
 export declare function useParams<TTo extends string>(): ParamsFor<TTo>;
 export declare function useParams<T extends Record<string, string> = Record<string, string>>(): T;
 export type NavigationState = "idle" | "loading" | "submitting";
@@ -392,6 +439,19 @@ export interface ContextFactory<T> {
 
 // ── beforeLoad / useBlocker ───────────────────────────────────────────────
 export declare function useBlocker(shouldBlock: () => boolean): void;
+
+// ── Toasts ────────────────────────────────────────────────────────────────
+/** The stable `toast` API — call from anywhere to flash status feedback. */
+export declare const toast: Toast;
+export declare const toastStore: {
+  add(message: string, opts?: ToastOptions): string;
+  dismiss(id: string): void;
+  clear(): void;
+  subscribe(listener: () => void): () => void;
+  getSnapshot(): ToastEntry[];
+};
+export declare function useToast(): Toast;
+export declare function useToasts(): ToastEntry[];
 
 // ── i18n routing (E2) ────────────────────────────────────────────────────
 export declare function useLocale(defaultLocale?: string): string;

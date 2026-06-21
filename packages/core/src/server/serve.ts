@@ -13,6 +13,7 @@ import { handleActionRequest } from "./action-handler.ts";
 import { BunAdapter, type BractAdapter } from "./adapter.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { resolve, join } from "node:path";
+import { error } from "./response.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import { installUseClientServerStub } from "./use-client-runtime.ts";
 
@@ -310,7 +311,22 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // only SSR documents. The per-route (nested) middleware chain still runs
     // inside handleRequest for SSR/_data, sharing this same `context` object.
     const ctx: MiddlewareContext = { request, params: {}, context: {} };
-    return pipeline.run(ctx, () => dispatch(request, ctx.context));
+    // SECURITY(high): adapter-agnostic catch-all. An uncaught throw from a
+    // global middleware or from dispatch itself (e.g. resolveRouteChain at
+    // import time) would otherwise reach the adapter's error handler — which on
+    // Bun leaks err.message and on Cloudflare/custom adapters isn't handled at
+    // all. Log, fire onError (so observability still sees it), and return a
+    // generic 500 with the message gated to dev — matching every other path.
+    try {
+      return await pipeline.run(ctx, () => dispatch(request, ctx.context));
+    } catch (err) {
+      console.error("[bract] unhandled request error:", err);
+      await fireOnError(onError, err, request);
+      return error(
+        isExplicitDev() ? (err instanceof Error ? err.message : String(err)) : "Internal Server Error",
+        500,
+      );
+    }
   };
 }
 

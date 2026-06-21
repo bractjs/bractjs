@@ -69,8 +69,10 @@ export function Image({
       height={height}
       loading={priority ? "eager" : "lazy"}
       decoding={priority ? "sync" : "async"}
-      // @ts-expect-error — fetchpriority is a valid HTML attribute in React 19
-      fetchpriority={priority ? "high" : "auto"}
+      // React 19 prop is camelCase `fetchPriority`; React emits the lowercase
+      // `fetchpriority` HTML attribute. Using the lowercase prop here triggers
+      // "Invalid DOM property `fetchpriority`" at hydration.
+      fetchPriority={priority ? "high" : "auto"}
       sizes={sizes}
       className={className}
       style={style}

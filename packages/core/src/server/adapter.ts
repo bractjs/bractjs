@@ -1,3 +1,5 @@
+import { isExplicitDev } from "./env.ts";
+
 // ── BractAdapter ──────────────────────────────────────────────────────────
 
 /**
@@ -59,7 +61,11 @@ export class BunAdapter implements BractAdapter {
       fetch: handler,
       error(err: Error) {
         console.error("[bractjs] unhandled server error:", err);
-        return new Response(JSON.stringify({ error: err.message }), {
+        // SECURITY(high): never leak internal error details in production. This
+        // is a last-resort backstop (buildFetchHandler already catches request
+        // errors) — mirror the isExplicitDev() gating used on every other path.
+        const message = isExplicitDev() ? err.message : "Internal Server Error";
+        return new Response(JSON.stringify({ error: message }), {
           status: 500,
           headers: { "Content-Type": "application/json; charset=utf-8" },
         });
