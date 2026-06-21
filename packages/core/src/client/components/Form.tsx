@@ -56,8 +56,12 @@ export function Form({ method = "post", action, intent, children, ...rest }: For
     await submit(url, { method, body: new FormData(target) });
   }
 
+  // Render `action` here too (SSR sets it on line 34): handleSubmit preventDefaults
+  // so it's never used for a native submit, but keeping it on the element makes
+  // the client markup match the server's and avoids a hydration mismatch for any
+  // <Form action="…"> (e.g. a logout form posting to a different route).
   return (
-    <form method={method} onSubmit={(e) => { void handleSubmit(e); }} {...rest}>
+    <form method={method} action={action} onSubmit={(e) => { void handleSubmit(e); }} {...rest}>
       {intentInput}
       {children}
     </form>

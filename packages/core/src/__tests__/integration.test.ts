@@ -183,6 +183,24 @@ test("/_data of a beforeLoad-gated route is blocked and never leaks loader data"
   expect(body).not.toContain("TOP-SECRET-LOADER-DATA");
 });
 
+// Regression: a redirect THROWN from a loader (the requireAdmin/auth-gate
+// pattern) must come back from /_data as a real 3xx, not a 500. The /_data
+// handler wraps loaders in `return await runRouteMiddleware(...)`; a bare
+// `return` would let the rejection escape its try/catch (which handles
+// isRedirect) to the top-level handler, which logs "unhandled request error"
+// and returns 500 — breaking soft-nav redirects for gated routes.
+test("full-page GET of a loader that throws redirect returns the 3xx", async () => {
+  const res = await fetch(`${BASE}/redirect-loader`, { redirect: "manual" });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("location")).toBe("/login");
+});
+
+test("/_data of a loader that throws redirect returns the 3xx (not 500)", async () => {
+  const res = await fetch(`${BASE}/_data?path=/redirect-loader`, { redirect: "manual" });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("location")).toBe("/login");
+});
+
 // ── Route headers / useMatches / nested middleware (Phases 1, 2, 4) ──────────
 
 test("route `headers` export sets Cache-Control on the document response", async () => {

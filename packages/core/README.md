@@ -26,7 +26,7 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 7. [Per-route context: `defineContext`](#7-per-route-context-definecontext)
 8. [Streaming data: `defer`, `Deferred`, `isDeferred`, `<Await>`](#8-streaming-data)
 9. [Client hooks](#9-client-hooks)
-10. [Client components: `<Outlet>`, `<Link>`, `<Form>`, `<Scripts>`, `<LiveReload>`, `<Image>`](#10-client-components)
+10. [Client components: `<Outlet>`, `<Link>`, `<Form>`, `<Scripts>`, `<LiveReload>`, `<Image>`, `<Toaster>`](#10-client-components)
 11. [Server Actions (`"use server"`) & client-only (`"use client"`)](#11-server-actions--client-components)
 12. [Typed API routes: `route` + `createClient`](#12-typed-api-routes)
 13. [Input validation: `validate`](#13-input-validation-validate)
@@ -564,6 +564,30 @@ Prompt before leaving when there are unsaved changes (intercepts back/forward an
 useBlocker(() => formIsDirty);
 ```
 
+### `useToast()` → `toast` and `useToasts()` → `ToastEntry[]`
+Flash status feedback ("Saved", "Delete completed", …) from anywhere. `useToast()` returns the stable `toast` API; you can also import `toast` directly to fire from non-React code (event handlers, fetcher callbacks). Render a single [`<Toaster />`](#10-client-components) in `root.tsx`. `useToasts()` exposes the live queue if you want to build a custom renderer.
+```ts
+import { toast, useToast } from "@bractjs/bractjs";
+
+toast.success("Saved successfully");
+toast.error("Delete failed", { description: "Try again." });
+toast.info("Heads up");           // also: .warning, .loading
+toast.dismiss(id);                // or toast.dismiss() to clear all
+
+// Wrap an async action: loading → success / error
+await toast.promise(savePost(data), {
+  loading: "Saving…",
+  success: "Saved successfully",
+  error: (e) => `Save failed: ${e}`,
+});
+
+// Optional action button (e.g. undo) + custom auto-dismiss
+toast.success("Delete completed", {
+  duration: 6000,                 // ms; Infinity/0 = sticky
+  action: { label: "Undo", onClick: () => restore(id) },
+});
+```
+
 ### `useLocale(defaultLocale?)` → `string` and `useLocalizedLink(defaultLocale?)` → `(path) => string`
 For i18n prefix routing (§19).
 ```ts
@@ -631,6 +655,17 @@ Markers used inside `root.tsx` (§3). `<Scripts />` is where the client bundle +
 
 ### `<Image />`
 Responsive, format-converted images via the built-in `/_image` endpoint — see §20.
+
+### `<Toaster position? gap? renderToast?>`
+Renders the toast queue fired by [`toast` / `useToast()`](#9-client-hooks). Mount it **once** in `app/root.tsx`, next to `<Scripts />`. Self-contained inline styles (no CSS import, CSP-safe — no injected `<style>`/nonce).
+```tsx
+<body>
+  <Outlet />
+  <Toaster position="top-right" />   {/* top|bottom + left|center|right */}
+  <Scripts />
+</body>
+```
+Style hooks: target `[data-bract-toaster]` / `[data-bract-toast="success|error|…"]` with your own CSS, or pass `renderToast={(t, dismiss) => <YourCard …/>}` to fully replace the card.
 
 ---
 
@@ -1353,9 +1388,11 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Sessions:** `createCookieSession`
 
-**Components:** `Outlet`, `Link`, `Form`, `Scripts`, `LiveReload`, `Await`, `Image`, `ScrollRestoration`
+**Components:** `Outlet`, `Link`, `Form`, `Scripts`, `LiveReload`, `Await`, `Image`, `ScrollRestoration`, `Toaster`
 
-**Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useMatches`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useLocale`, `useLocalizedLink`
+**Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useMatches`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useToast`, `useToasts`, `useLocale`, `useLocalizedLink`
+
+**Toasts:** `toast`, `toastStore`
 
 **Search serialization:** `serializeSearch`
 
@@ -1371,7 +1408,7 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
 
-**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `ApiRouteOptions`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
+**Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `ApiRouteOptions`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `ToasterProps`, `ToastPosition`, `Toast`, `ToastEntry`, `ToastOptions`, `ToastType`, `ToastAction`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 
 ---
 

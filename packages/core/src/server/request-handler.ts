@@ -101,7 +101,12 @@ async function route(
       // and leak loader data. Run the route middleware chain around the work,
       // sharing the same mutable `context` so a gate can set/clear fields.
       const mwCtx: MiddlewareContext = { request: loaderRequest, params: match.params, context };
-      return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
+      // `return await` (not bare `return`): a loader/gate inside the middleware
+      // work can throw a redirect (e.g. requireAdmin). Without awaiting here the
+      // returned promise rejects *after* this try block, so the catch below never
+      // runs isRedirect() and the redirect escapes to the top-level handler as a
+      // 500 instead of being returned as a 302 for the soft-nav client.
+      return await runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
         const routeContext = await runRouteContext(
           chain.route as Parameters<typeof runRouteContext>[0],
           loaderRequest,
