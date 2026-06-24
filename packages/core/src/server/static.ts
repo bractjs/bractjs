@@ -5,6 +5,11 @@ import { isDevRuntime } from "./env.ts";
 const IMMUTABLE = "public, max-age=31536000, immutable";
 const NO_CACHE = "no-cache";
 
+// Stop browsers from MIME-sniffing a static file into a more dangerous type
+// (e.g. treating an uploaded asset as HTML/JS). Cheap defense-in-depth on every
+// static response, including user-uploaded files served from public/.
+const NOSNIFF = "nosniff";
+
 // Hashed client chunks are safe to cache forever in production (a content change
 // yields a new filename). In DEV, however, the dev rebuilder can reuse a chunk
 // filename across rebuilds while its contents change, so marking them immutable
@@ -76,7 +81,9 @@ export async function serveStatic(
     if (!full) return null;
     const file = Bun.file(full);
     if (!(await file.exists())) return null;
-    return new Response(file, { headers: { "Cache-Control": clientAssetCacheControl() } });
+    return new Response(file, {
+      headers: { "Cache-Control": clientAssetCacheControl(), "X-Content-Type-Options": NOSNIFF },
+    });
   }
 
   if (pathname.startsWith("/public/")) {
@@ -86,7 +93,9 @@ export async function serveStatic(
     if (!full) return null;
     const file = Bun.file(full);
     if (!(await file.exists())) return null;
-    return new Response(file, { headers: { "Cache-Control": NO_CACHE } });
+    return new Response(file, {
+      headers: { "Cache-Control": NO_CACHE, "X-Content-Type-Options": NOSNIFF },
+    });
   }
 
   return null;
