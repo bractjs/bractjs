@@ -106,6 +106,15 @@ export declare function requestLogger(): MiddlewareFn;
 export declare function cors(options: CorsOptions): MiddlewareFn;
 export declare function authGuard(options: AuthGuardOptions): MiddlewareFn;
 
+export interface CspOptions {
+  directives?: Record<string, string | null>;
+  reportOnly?: boolean;
+  strict?: boolean;
+}
+export declare const CSP_NONCE_KEY: string;
+export declare function getCspNonce(context: Record<string, unknown>): string | undefined;
+export declare function csp(options?: CspOptions): MiddlewareFn;
+
 // ── API routes (C1) ───────────────────────────────────────────────────────
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface ApiRouteOptions {
