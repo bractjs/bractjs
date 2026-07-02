@@ -48,20 +48,19 @@ export interface CommitOptions {
 
 // Internal brand for accessing session data without exposing it on the public interface
 const DATA = Symbol("bract.session.data");
-interface InternalSession extends Session { [DATA]: SessionData }
+interface InternalSession extends Session {
+  [DATA]: SessionData;
+}
 
 // ── Private helpers ─────────────────────────────────────────────────────────
 
 function encode(data: SessionData): string {
-  return btoa(JSON.stringify(data))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(JSON.stringify(data)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function decode(encoded: string): SessionData {
   const pad = "=".repeat((4 - (encoded.length % 4)) % 4);
-  const parsed = JSON.parse(
-    atob(encoded.replace(/-/g, "+").replace(/_/g, "/") + pad),
-  ) as SessionData;
+  const parsed = JSON.parse(atob(encoded.replace(/-/g, "+").replace(/_/g, "/") + pad)) as SessionData;
   // Defense-in-depth: the payload is HMAC-verified before we get here, so this
   // only matters if a signing secret leaks — but a session blob carrying a
   // "__proto__" key must never pollute Object.prototype when read/spread.
@@ -74,12 +73,17 @@ function decode(encoded: string): SessionData {
 async function sign(data: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
-    "raw", enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
   );
   const buf = await crypto.subtle.sign("HMAC", key, enc.encode(data));
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 async function verify(data: string, sig: string, secrets: string[]): Promise<boolean> {
@@ -103,8 +107,12 @@ function makeSession(data: SessionData): InternalSession {
   return {
     [DATA]: data,
     get: (key) => data[key],
-    set: (key, val) => { data[key] = val; },
-    delete: (key) => { delete data[key]; },
+    set: (key, val) => {
+      data[key] = val;
+    },
+    delete: (key) => {
+      delete data[key];
+    },
     has: (key) => key in data,
   };
 }
@@ -138,7 +146,10 @@ export function createCookieSession(options: CookieSessionOptions): SessionStora
   return {
     async getSession(cookie?: string | null): Promise<Session> {
       if (!cookie) return makeSession({});
-      const pair = cookie.split(";").map((s) => s.trim()).find((p) => p.startsWith(`${name}=`));
+      const pair = cookie
+        .split(";")
+        .map((s) => s.trim())
+        .find((p) => p.startsWith(`${name}=`));
       if (!pair) return makeSession({});
 
       const value = pair.slice(name.length + 1);
@@ -149,8 +160,11 @@ export function createCookieSession(options: CookieSessionOptions): SessionStora
       const sig = value.slice(dot + 1);
       if (!(await verify(encoded, sig, secrets))) return makeSession({});
 
-      try { return makeSession(decode(encoded)); }
-      catch { return makeSession({}); }
+      try {
+        return makeSession(decode(encoded));
+      } catch {
+        return makeSession({});
+      }
     },
 
     async commitSession(session: Session, opts?: CommitOptions): Promise<string> {

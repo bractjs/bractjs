@@ -6,12 +6,20 @@
 // server-rendered controls in CustomFields — only the repeater needs JS.
 
 import { useEffect, useState } from "react";
-import { input as inputCls, select as selectCls, ghostButton } from "../ui.tsx";
+import { ghostButton, input as inputCls, select as selectCls } from "../ui.tsx";
 
 type Opt = { id: string; label: string };
 
-export function FieldRepeater({ fieldKey, kind, options, defaultValues }: {
-  fieldKey: string; kind: string; options: Opt[]; defaultValues: string[];
+export function FieldRepeater({
+  fieldKey,
+  kind,
+  options,
+  defaultValues,
+}: {
+  fieldKey: string;
+  kind: string;
+  options: Opt[];
+  defaultValues: string[];
 }) {
   const [rows, setRows] = useState<string[]>(defaultValues.length ? defaultValues : [""]);
   const [mounted, setMounted] = useState(false);
@@ -24,17 +32,42 @@ export function FieldRepeater({ fieldKey, kind, options, defaultValues }: {
       {rows.map((row, i) => (
         <div key={i} style={{ display: "flex", gap: ".4rem" }}>
           {kind === "text" ? (
-            <input name={fieldKey} value={row} onChange={(e) => set(i, e.target.value)} className={inputCls} />
+            <input
+              name={fieldKey}
+              value={row}
+              onChange={(e) => set(i, e.target.value)}
+              className={inputCls}
+            />
           ) : (
-            <select name={fieldKey} value={row} onChange={(e) => set(i, e.target.value)} className={selectCls}>
+            <select
+              name={fieldKey}
+              value={row}
+              onChange={(e) => set(i, e.target.value)}
+              className={selectCls}
+            >
               <option value="">— none —</option>
-              {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
             </select>
           )}
-          <button type="button" onClick={() => setRows(rows.length > 1 ? rows.filter((_, j) => j !== i) : [""])} className={ghostButton} aria-label="Remove row">✕</button>
+          <button
+            type="button"
+            onClick={() => setRows(rows.length > 1 ? rows.filter((_, j) => j !== i) : [""])}
+            className={ghostButton}
+            aria-label="Remove row"
+          >
+            ✕
+          </button>
         </div>
       ))}
-      <div><button type="button" onClick={() => setRows([...rows, ""])} className={ghostButton}>+ Add row</button></div>
+      <div>
+        <button type="button" onClick={() => setRows([...rows, ""])} className={ghostButton}>
+          + Add row
+        </button>
+      </div>
     </div>
   );
 }

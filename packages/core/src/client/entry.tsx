@@ -1,10 +1,10 @@
+import type { ComponentType, ReactElement } from "react";
 import { hydrateRoot } from "react-dom/client";
-import { type ReactElement, type ComponentType } from "react";
 import { ClientRouter } from "./ClientRouter.tsx";
 import { Outlet } from "./components/Outlet.tsx";
 import { matchPatternForPath } from "./nav-utils.ts";
-import type { BractJSClientData } from "./types.ts";
 import type { RouteModuleClient } from "./router.tsx";
+import type { BractJSClientData } from "./types.ts";
 
 // ── Fallback App shell (used when rootChunk is missing) ────────────────────
 
@@ -25,9 +25,14 @@ function FallbackApp(): ReactElement {
   // into each loader slot; this is the overlay's producer (the overlay script
   // installs a __BRACTJS_ERROR__ setter but nothing assigned it before).
   if ((window as unknown as { __BRACT_DEV__?: boolean }).__BRACT_DEV__) {
-    const slots = [data.loaderData?.root, data.loaderData?.route, ...((data.loaderData?.layouts as unknown[]) ?? [])];
+    const slots = [
+      data.loaderData?.root,
+      data.loaderData?.route,
+      ...((data.loaderData?.layouts as unknown[]) ?? []),
+    ];
     for (const slot of slots) {
-      const e = (slot as { __error?: { message?: string; stack?: string; routeFile?: string } } | null)?.__error;
+      const e = (slot as { __error?: { message?: string; stack?: string; routeFile?: string } } | null)
+        ?.__error;
       if (e) {
         const where = e.routeFile ? ` in ${e.routeFile}` : "";
         (window as unknown as { __BRACTJS_ERROR__?: unknown }).__BRACTJS_ERROR__ = {
@@ -77,7 +82,12 @@ function FallbackApp(): ReactElement {
   hydrateRoot(
     document,
     <ClientRouter
-      initialData={{ ...data, location: initialLocation, search: data.search ?? {}, matches: data.matches ?? [] }}
+      initialData={{
+        ...data,
+        location: initialLocation,
+        search: data.search ?? {},
+        matches: data.matches ?? [],
+      }}
       initialModule={initialModule}
     >
       <RootComponent />

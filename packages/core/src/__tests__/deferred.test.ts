@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { Deferred, defer, isDeferred, stripDeferred, promisesOf } from "../shared/deferred.ts";
+import { describe, expect, test } from "bun:test";
+import { Deferred, defer, isDeferred, promisesOf, stripDeferred } from "../shared/deferred.ts";
 
 describe("Deferred", () => {
   test("holds a promise", () => {

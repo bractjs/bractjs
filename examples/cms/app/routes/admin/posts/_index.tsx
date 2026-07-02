@@ -1,10 +1,10 @@
-import { json, Link, useFetcher, useFetchers, useLoaderData, useSetSearch } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
+import { json, Link, useFetcher, useFetchers, useLoaderData, useSetSearch } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
 import { flashCookie } from "../../../flash.server.ts";
+import type { FormState } from "../../../form.ts";
 import { deletePost, listPosts, type Post, type PostStatus } from "../../../models/posts.server.ts";
 import { Badge, dangerButton, EmptyState, ghostButton, primaryButton } from "../../../ui.tsx";
-import type { FormState } from "../../../form.ts";
 
 type StatusFilter = PostStatus | "all";
 type Data = { posts: Post[]; status: StatusFilter };
@@ -59,16 +59,28 @@ function PostRow({ post }: { post: Post }) {
       <td>
         {/* prefetch="viewport": rows visible on screen warm their edit page's
             chunk + loader data, so clicking commits instantly. */}
-        <Link to={`/admin/posts/${post.id}`} prefetch="viewport" style={{ fontWeight: 600, textDecoration: "none" }}>
+        <Link
+          to={`/admin/posts/${post.id}`}
+          prefetch="viewport"
+          style={{ fontWeight: 600, textDecoration: "none" }}
+        >
           {post.title}
         </Link>
-        <div style={{ color: "var(--muted)", fontSize: ".78rem" }}><code>/posts/{post.slug}</code></div>
+        <div style={{ color: "var(--muted)", fontSize: ".78rem" }}>
+          <code>/posts/{post.slug}</code>
+        </div>
       </td>
-      <td><Badge tone={post.status === "published" ? "published" : "draft"}>{post.status}</Badge></td>
-      <td style={{ color: "var(--muted)", fontSize: ".85rem" }}>{new Date(post.updatedAt).toLocaleDateString()}</td>
+      <td>
+        <Badge tone={post.status === "published" ? "published" : "draft"}>{post.status}</Badge>
+      </td>
+      <td style={{ color: "var(--muted)", fontSize: ".85rem" }}>
+        {new Date(post.updatedAt).toLocaleDateString()}
+      </td>
       <td>
         <div className="toolbar">
-          <Link to={`/admin/posts/${post.id}`} prefetch="viewport" className={ghostButton}>Edit</Link>
+          <Link to={`/admin/posts/${post.id}`} prefetch="viewport" className={ghostButton}>
+            Edit
+          </Link>
           {/* fetcher.Form: submits without navigating; loaders revalidate after. */}
           <fetcher.Form method="post" style={{ margin: 0 }}>
             <input type="hidden" name="intent" value="delete" />
@@ -98,11 +110,11 @@ export default function Posts() {
       <div className="admin-bar">
         <h1 style={{ margin: 0 }}>Posts</h1>
         {pendingDeletes > 0 ? (
-          <span style={{ color: "var(--muted)", fontSize: ".85rem" }}>
-            Deleting {pendingDeletes}…
-          </span>
+          <span style={{ color: "var(--muted)", fontSize: ".85rem" }}>Deleting {pendingDeletes}…</span>
         ) : null}
-        <Link to="/admin/posts/new" className={primaryButton}>New post</Link>
+        <Link to="/admin/posts/new" className={primaryButton}>
+          New post
+        </Link>
       </div>
 
       <div className="toolbar" style={{ marginBottom: "1rem" }}>
@@ -120,14 +132,23 @@ export default function Posts() {
       </div>
 
       {posts.length === 0 ? (
-        <EmptyState>No posts. <Link to="/admin/posts/new">Write one →</Link></EmptyState>
+        <EmptyState>
+          No posts. <Link to="/admin/posts/new">Write one →</Link>
+        </EmptyState>
       ) : (
         <table className="admin-table">
           <thead>
-            <tr><th>Title</th><th>Status</th><th>Updated</th><th style={{ width: "1%" }}></th></tr>
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th style={{ width: "1%" }}></th>
+            </tr>
           </thead>
           <tbody>
-            {posts.map((p) => <PostRow key={p.id} post={p} />)}
+            {posts.map((p) => (
+              <PostRow key={p.id} post={p} />
+            ))}
           </tbody>
         </table>
       )}

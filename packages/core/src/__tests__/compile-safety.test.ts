@@ -24,7 +24,7 @@
  * never ships in a production/compiled server (all dev endpoints are gated by
  * `isExplicitDev()` and dev modules are loaded via string-literal imports).
  */
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 
 const SERVER_DIR = resolve(import.meta.dir, "../server");
@@ -91,7 +91,10 @@ function codeLines(src: string): string[] {
       continue;
     }
     // Whole-line block comment open without close on the same line.
-    if (trimmed.startsWith("/*") && !trimmed.includes("*/")) { inBlock = true; continue; }
+    if (trimmed.startsWith("/*") && !trimmed.includes("*/")) {
+      inBlock = true;
+      continue;
+    }
     if (trimmed.startsWith("*") || trimmed.startsWith("//")) continue;
     out.push(line);
   }

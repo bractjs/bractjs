@@ -1,11 +1,17 @@
-import { Link, useLoaderData } from "@bractjs/bractjs";
 import type { LoaderArgs } from "@bractjs/bractjs";
+import { Link, useLoaderData } from "@bractjs/bractjs";
 import { requireAdmin } from "../../auth.server.ts";
 import { db } from "../../db.server.ts";
 
 type Stats = {
-  posts: number; published: number; drafts: number;
-  pages: number; categories: number; media: number; menus: number; users: number;
+  posts: number;
+  published: number;
+  drafts: number;
+  pages: number;
+  categories: number;
+  media: number;
+  menus: number;
+  users: number;
 };
 
 function count(sql: string): number {
@@ -58,9 +64,21 @@ export default function Dashboard() {
       <p style={{ color: "var(--admin-muted)", margin: "0 0 .4rem" }}>
         {stats.published} published · {stats.drafts} draft{stats.drafts === 1 ? "" : "s"}
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: ".9rem", marginTop: "1rem" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+          gap: ".9rem",
+          marginTop: "1rem",
+        }}
+      >
         {TILES.map((t) => (
-          <Link key={t.key} to={t.to} className="admin-panel" style={{ textDecoration: "none", display: "grid", gap: ".2rem" }}>
+          <Link
+            key={t.key}
+            to={t.to}
+            className="admin-panel"
+            style={{ textDecoration: "none", display: "grid", gap: ".2rem" }}
+          >
             <span style={{ fontSize: "2rem", fontWeight: 800 }}>{stats[t.key]}</span>
             <span style={{ color: "var(--muted)", fontWeight: 600 }}>{t.label}</span>
           </Link>

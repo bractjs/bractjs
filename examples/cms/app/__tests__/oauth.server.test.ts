@@ -1,10 +1,5 @@
-import { test, expect, afterEach } from "bun:test";
-import {
-  authorizeUrl,
-  exchangeCode,
-  isProviderConfigured,
-  configuredProviders,
-} from "../oauth.server.ts";
+import { afterEach, expect, test } from "bun:test";
+import { authorizeUrl, configuredProviders, exchangeCode, isProviderConfigured } from "../oauth.server.ts";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {

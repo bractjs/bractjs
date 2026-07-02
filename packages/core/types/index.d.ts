@@ -1,21 +1,38 @@
-import type { ReactNode, Context, CSSProperties } from "react";
+import type { Context, CSSProperties, ReactNode } from "react";
 
 // ── Route types ───────────────────────────────────────────────────────────
 export type {
-  LoaderArgs, ActionArgs, MetaDescriptor, MetaArgs,
-  LoaderFunction, ActionFunction, MetaFunction, RouteModule,
-  RouteFile, Segment, RouterLocation, RouteMatch, RouteDefinition,
-  ShouldRevalidateArgs, ShouldRevalidateFunction,
-  HeadersFunction, HeadersArgs,
-  RouteMiddlewareFunction, ClientLoaderFunction, ClientActionFunction,
-  LoaderData, ActionData,
+  ActionArgs,
+  ActionData,
+  ActionFunction,
+  ClientActionFunction,
+  ClientLoaderFunction,
+  HeadersArgs,
+  HeadersFunction,
+  LoaderArgs,
+  LoaderData,
+  LoaderFunction,
+  MetaArgs,
+  MetaDescriptor,
+  MetaFunction,
+  RouteDefinition,
+  RouteFile,
+  RouteMatch,
+  RouteMiddlewareFunction,
+  RouteModule,
+  RouterLocation,
+  Segment,
+  ShouldRevalidateArgs,
+  ShouldRevalidateFunction,
 } from "./route.d.ts";
-import type { RouterLocation, LoaderData, ActionData, ActionArgs, RouteMatch, RouteFile } from "./route.d.ts";
+
+import type { ActionArgs, ActionData, LoaderData, RouteFile, RouteMatch, RouterLocation } from "./route.d.ts";
 
 // ── Config + Server ───────────────────────────────────────────────────────
-export type { BractJSConfig, ServerManifest, BuildConfig } from "./config.d.ts";
-import type { MetaDescriptor } from "./route.d.ts";
+export type { BractJSConfig, BuildConfig, ServerManifest } from "./config.d.ts";
+
 import type { BractJSConfig, ServerManifest } from "./config.d.ts";
+import type { MetaDescriptor } from "./route.d.ts";
 
 export interface RenderOptions {
   shell: ReactNode;
@@ -45,13 +62,22 @@ export interface LifecycleHooks {
 export declare function defineLifecycle(hooks: LifecycleHooks): LifecycleHooks;
 export declare function createServer(config?: Partial<BractJSConfig>): { stop(): void };
 export declare function renderRoute(options: RenderOptions): Promise<Response>;
-export interface RedirectOptions { allowExternal?: boolean; }
-export declare function redirect(url: string, status?: number, headers?: HeadersInit, options?: RedirectOptions): Response;
+export interface RedirectOptions {
+  allowExternal?: boolean;
+}
+export declare function redirect(
+  url: string,
+  status?: number,
+  headers?: HeadersInit,
+  options?: RedirectOptions,
+): Response;
 export declare function json<T>(data: T, init?: ResponseInit): Response;
 export declare function error(message: string, status?: number): Response;
 
 // ── Errors ────────────────────────────────────────────────────────────────
-export declare class BractJSError extends Error { readonly status: number; }
+export declare class BractJSError extends Error {
+  readonly status: number;
+}
 export declare class HttpError extends BractJSError {
   constructor(status: number, message?: string);
 }
@@ -60,7 +86,9 @@ export declare function isHttpError(value: unknown): value is HttpError;
 export declare function isBractJSError(value: unknown): value is BractJSError;
 
 // ── Deferred ──────────────────────────────────────────────────────────────
-export declare class Deferred<T> { readonly promise: Promise<T>; }
+export declare class Deferred<T> {
+  readonly promise: Promise<T>;
+}
 export declare function defer<T>(data: Record<string, T | Promise<T>>): unknown;
 export declare function isDeferred(value: unknown): boolean;
 
@@ -81,17 +109,28 @@ export interface BractJSContextValue {
   search?: Record<string, unknown>;
 }
 export declare const BractJSContext: Context<BractJSContextValue>;
-export declare function BractJSProvider(props: { value: BractJSContextValue; children: ReactNode }): ReactNode;
+export declare function BractJSProvider(props: {
+  value: BractJSContextValue;
+  children: ReactNode;
+}): ReactNode;
 export declare function useBractJSContext(): BractJSContextValue;
 
 // ── Session ───────────────────────────────────────────────────────────────
-export type { SessionData, Session, CommitOptions, SessionStorage, CookieSessionOptions } from "./session.d.ts";
-import type { SessionStorage, CookieSessionOptions } from "./session.d.ts";
+export type {
+  CommitOptions,
+  CookieSessionOptions,
+  Session,
+  SessionData,
+  SessionStorage,
+} from "./session.d.ts";
+
+import type { CookieSessionOptions, SessionStorage } from "./session.d.ts";
 export declare function createCookieSession(options: CookieSessionOptions): SessionStorage;
 
 // ── Middleware ────────────────────────────────────────────────────────────
 export type { MiddlewareContext, MiddlewareFn } from "./middleware.d.ts";
-import type { MiddlewareFn, MiddlewareContext } from "./middleware.d.ts";
+
+import type { MiddlewareContext, MiddlewareFn } from "./middleware.d.ts";
 
 export declare class MiddlewarePipeline {
   use(fn: MiddlewareFn): this;
@@ -115,11 +154,21 @@ export declare function collectRouteMiddleware(chain: {
   route: { middleware?: unknown };
 }): RouteMiddleware[];
 
-export interface CorsOptions { origin: string | string[]; methods?: string[]; }
+export interface CorsOptions {
+  origin: string | string[];
+  methods?: string[];
+}
 /** Minimal read-only session, as exposed by {@link authGuard}. */
-export interface SessionLike { get(key: string): unknown; }
-export interface SessionStorageLike { getSession(cookie?: string | null): Promise<SessionLike>; }
-export interface AuthGuardOptions { session: SessionStorageLike; required?: boolean; }
+export interface SessionLike {
+  get(key: string): unknown;
+}
+export interface SessionStorageLike {
+  getSession(cookie?: string | null): Promise<SessionLike>;
+}
+export interface AuthGuardOptions {
+  session: SessionStorageLike;
+  required?: boolean;
+}
 export declare function requestLogger(): MiddlewareFn;
 export declare function cors(options: CorsOptions): MiddlewareFn;
 export declare function authGuard(options: AuthGuardOptions): MiddlewareFn;
@@ -169,7 +218,9 @@ export declare function createClient<
 >(baseUrl?: string): ApiClient<TRoutes>;
 
 // ── Validate (C2) ────────────────────────────────────────────────────────
-export interface FieldErrors { [field: string]: string[] }
+export interface FieldErrors {
+  [field: string]: string[];
+}
 export declare class ValidationError extends Error {
   readonly status: 400;
   readonly fieldErrors: FieldErrors;
@@ -235,26 +286,33 @@ export interface RouteContextMap {}
 // Infer each member directly (NOT `infer R extends RouteRegistry` — a constrained
 // infer fails to match the generated registry and falls back to loose). Keep in
 // sync with src/client/registry.ts.
-export type RegisteredRoutes =
-  Register extends { routes: { routes: infer R } } ? R : string;
-export type RegisteredParamsMap =
-  Register extends { routes: { params: infer P } } ? P : Record<string, Record<string, string>>;
-export type RegisteredSearchMap =
-  Register extends { routes: { search: infer S } } ? S : Record<string, Record<string, string>>;
-export type RegisteredSearchOutputMap =
-  Register extends { routes: { searchOutput: infer S } } ? S : Record<string, Record<string, unknown>>;
-export type ParamsFor<TTo> =
-  TTo extends keyof RegisteredParamsMap ? RegisteredParamsMap[TTo] : Record<string, string>;
-export type SearchFor<TTo> =
-  TTo extends keyof RegisteredSearchMap ? RegisteredSearchMap[TTo] : Record<string, string>;
+export type RegisteredRoutes = Register extends { routes: { routes: infer R } } ? R : string;
+export type RegisteredParamsMap = Register extends { routes: { params: infer P } }
+  ? P
+  : Record<string, Record<string, string>>;
+export type RegisteredSearchMap = Register extends { routes: { search: infer S } }
+  ? S
+  : Record<string, Record<string, string>>;
+export type RegisteredSearchOutputMap = Register extends { routes: { searchOutput: infer S } }
+  ? S
+  : Record<string, Record<string, unknown>>;
+export type ParamsFor<TTo> = TTo extends keyof RegisteredParamsMap
+  ? RegisteredParamsMap[TTo]
+  : Record<string, string>;
+export type SearchFor<TTo> = TTo extends keyof RegisteredSearchMap
+  ? RegisteredSearchMap[TTo]
+  : Record<string, string>;
 /** Validated (schema-output) search object for a specific route literal. */
-export type SearchOutputFor<TTo> =
-  TTo extends keyof RegisteredSearchOutputMap ? RegisteredSearchOutputMap[TTo] : Record<string, unknown>;
+export type SearchOutputFor<TTo> = TTo extends keyof RegisteredSearchOutputMap
+  ? RegisteredSearchOutputMap[TTo]
+  : Record<string, unknown>;
 /** Infer the output type of a Zod/Valibot-compatible schema (duck-typed z.infer). */
-export type InferSchemaOutput<S> =
-  S extends { parse(input: unknown): infer T } ? T :
-  S extends { safeParse(input: unknown): infer R }
-    ? (Awaited<R> extends { data?: infer T } ? NonNullable<T> : Record<string, unknown>)
+export type InferSchemaOutput<S> = S extends { parse(input: unknown): infer T }
+  ? T
+  : S extends { safeParse(input: unknown): infer R }
+    ? Awaited<R> extends { data?: infer T }
+      ? NonNullable<T>
+      : Record<string, unknown>
     : Record<string, unknown>;
 export declare function buildPath(pattern: string, params: Record<string, string | number>): string;
 
@@ -277,7 +335,9 @@ export type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = {
   className?: string;
   [key: string]: unknown;
 };
-export declare function Link<TTo extends RegisteredRoutes = RegisteredRoutes>(props: LinkProps<TTo>): ReactNode;
+export declare function Link<TTo extends RegisteredRoutes = RegisteredRoutes>(
+  props: LinkProps<TTo>,
+): ReactNode;
 
 export interface ScrollRestorationProps {
   /** Derive the storage key for a location. Default: `location.key`. */
@@ -288,7 +348,10 @@ export interface ScrollRestorationProps {
 export declare function ScrollRestoration(props?: ScrollRestorationProps): null;
 
 export type ToastType = "success" | "error" | "info" | "warning" | "loading";
-export interface ToastAction { label: string; onClick: () => void }
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 export interface ToastEntry {
   id: string;
   type: ToastType;
@@ -321,8 +384,12 @@ export interface Toast {
   ): Promise<T>;
 }
 export type ToastPosition =
-  | "top-left" | "top-center" | "top-right"
-  | "bottom-left" | "bottom-center" | "bottom-right";
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
 export interface ToasterProps {
   position?: ToastPosition;
   gap?: number;
@@ -331,7 +398,13 @@ export interface ToasterProps {
 /** Renders the active toast queue. Mount once in root.tsx, then call `toast.*` anywhere. */
 export declare function Toaster(props?: ToasterProps): ReactNode;
 
-export interface FormProps { method?: "post" | "put" | "delete"; action?: string; /** Renders a hidden `intent` input (pairs with defineActions()). */ intent?: string; children?: ReactNode; [key: string]: unknown; }
+export interface FormProps {
+  method?: "post" | "put" | "delete";
+  action?: string /** Renders a hidden `intent` input (pairs with defineActions()). */;
+  intent?: string;
+  children?: ReactNode;
+  [key: string]: unknown;
+}
 export declare function Form(props: FormProps): ReactNode;
 
 // ── defineActions (intent dispatch) ───────────────────────────────────────
@@ -340,7 +413,11 @@ export declare function defineActions<M extends Record<string, (args: ActionArgs
   handlers: M,
 ): (args: ActionArgs) => Promise<Awaited<ReturnType<M[keyof M]>> | Response>;
 
-export interface AwaitProps<T> { resolve: Promise<T> | Deferred<T>; fallback: ReactNode; children: (data: T) => ReactNode; }
+export interface AwaitProps<T> {
+  resolve: Promise<T> | Deferred<T>;
+  fallback: ReactNode;
+  children: (data: T) => ReactNode;
+}
 export declare function Await<T>(props: AwaitProps<T>): ReactNode;
 
 export type ImageFormat = "webp" | "avif" | "jpeg" | "png";
@@ -382,9 +459,10 @@ export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes
   /** Arbitrary history state, readable via `useLocation().state` after navigating. */
   state?: unknown;
 }
-export interface NavigateFn {
-  <TTo extends RegisteredRoutes>(to: TTo | (string & {}), options?: NavigateOptions<TTo>): Promise<void>;
-}
+export type NavigateFn = <TTo extends RegisteredRoutes>(
+  to: TTo | (string & {}),
+  options?: NavigateOptions<TTo>,
+) => Promise<void>;
 export declare function useNavigate(): NavigateFn;
 
 // ── Fetchers ──────────────────────────────────────────────────────────────
@@ -421,7 +499,10 @@ export interface StreamFetcherResult<T = unknown> {
   events: AsyncGenerator<T>;
   connect(actionId: string): AsyncGenerator<T>;
 }
-export interface UseFetcherOptions { key?: string; stream?: boolean }
+export interface UseFetcherOptions {
+  key?: string;
+  stream?: boolean;
+}
 export declare function useFetcher(opts?: { key?: string }): FetcherResult;
 export declare function useFetcher<T>(opts: { stream: true }): StreamFetcherResult<T>;
 /** Every active fetcher — the cross-component view for optimistic UI. */
@@ -439,7 +520,9 @@ export declare function useRevalidator(): Revalidator;
 /** The current route's VALIDATED search params (its `searchSchema` output). */
 export declare function useSearch<TTo extends string>(): SearchOutputFor<TTo>;
 export declare function useSearch<T extends Record<string, unknown>>(): T;
-export interface SetSearchOptions { replace?: boolean }
+export interface SetSearchOptions {
+  replace?: boolean;
+}
 export type SetSearchFn<T extends Record<string, unknown>> = (
   updater: Partial<T> | ((prev: T) => Partial<T>),
   options?: SetSearchOptions,
@@ -454,11 +537,13 @@ export interface SearchParamsResult<T extends Record<string, string> = Record<st
   setSearchParams(updater: Record<string, string> | ((prev: URLSearchParams) => URLSearchParams)): void;
 }
 export declare function useSearchParams<TTo extends string>(): SearchParamsResult<SearchFor<TTo>>;
-export declare function useSearchParams<T extends Record<string, string> = Record<string, string>>(): SearchParamsResult<T>;
+export declare function useSearchParams<
+  T extends Record<string, string> = Record<string, string>,
+>(): SearchParamsResult<T>;
 
 // ── Typed route context ───────────────────────────────────────────────────
 export declare function defineContext<T>(
-  factory: (args: { request: Request; params: Record<string, string> }) => T | Promise<T>
+  factory: (args: { request: Request; params: Record<string, string> }) => T | Promise<T>,
 ): ContextFactory<T>;
 export interface ContextFactory<T> {
   _factory: (args: { request: Request; params: Record<string, string> }) => T | Promise<T>;
@@ -483,7 +568,10 @@ export declare function useToasts(): ToastEntry[];
 // ── i18n routing (E2) ────────────────────────────────────────────────────
 export declare function useLocale(defaultLocale?: string): string;
 export declare function useLocalizedLink(defaultLocale?: string): (path: string) => string;
-export interface I18nConfig { locales: string[]; defaultLocale: string; }
+export interface I18nConfig {
+  locales: string[];
+  defaultLocale: string;
+}
 /** Duplicate each route under `/:locale/...` prefixes (server-side route-table helper). */
 export declare function wrapRoutesWithLocale(routes: RouteFile[], i18n: I18nConfig): RouteFile[];
 /** Split a pathname into its leading locale (if any) and the locale-free remainder. */
@@ -510,13 +598,15 @@ export declare class BunAdapter implements BractAdapter {
 export declare function createCloudflareAdapter(
   handler: (request: Request) => Promise<Response>,
 ): BractAdapter & { fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response> };
-export declare function makeCloudflareHandler(
-  handler: (request: Request) => Promise<Response>,
-): { fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response> };
+export declare function makeCloudflareHandler(handler: (request: Request) => Promise<Response>): {
+  fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response>;
+};
 
 // ── CSS Modules (D3) ─────────────────────────────────────────────────────
 export declare const cssModulesPlugin: unknown; // BunPlugin
-export declare function transformCssModule(filePath: string): Promise<{ map: Record<string, string>; css: string }>;
+export declare function transformCssModule(
+  filePath: string,
+): Promise<{ map: Record<string, string>; css: string }>;
 
 // ── Build plugins (required for native `bun build --compile` workflow) ───
 //
@@ -533,10 +623,7 @@ export declare const useServerProxyPlugin: unknown; // BunPlugin (legacy — use
 export declare const serverModuleStubPlugin: unknown; // BunPlugin
 /** Client bundle (legacy, opt-in): the stricter predecessor that hard-fails any `*.server.ts` import. */
 export declare const serverOnlyPlugin: unknown; // BunPlugin
-export declare function clientEnvPlugin(
-  allowedKeys: string[],
-  envValues: Record<string, string>,
-): unknown; // BunPlugin
+export declare function clientEnvPlugin(allowedKeys: string[], envValues: Record<string, string>): unknown; // BunPlugin
 
 // ── Module-registry codegen (drives `bun build --compile`) ────────────────
 export interface CodegenResult {
@@ -555,10 +642,7 @@ export declare function generateRouteRegistry(input: {
   hasRoot: boolean;
 }): string;
 /** Render the static-import `"use server"` action registry module (`_generated/actions.ts`) as source text. */
-export declare function generateActionRegistry(input: {
-  appDir: string;
-  actionRelPaths: string[];
-}): string;
+export declare function generateActionRegistry(input: { appDir: string; actionRelPaths: string[] }): string;
 /** Render `_generated/manifest.ts` (an inline ServerManifest constant) from the on-disk manifest JSON. */
 export declare function generateManifestModule(disk: {
   version?: number;
@@ -578,7 +662,9 @@ export declare function explainStaleness(oldSrc: string | null, patterns: string
 export type ModuleRegistry = Record<string, import("./route.d.ts").RouteModule | Record<string, unknown>>;
 
 // ── buildFetchHandler (D1) ───────────────────────────────────────────────
-export declare function buildFetchHandler(config: Partial<import("./config.d.ts").BractJSConfig>): (request: Request) => Promise<Response>;
+export declare function buildFetchHandler(
+  config: Partial<import("./config.d.ts").BractJSConfig>,
+): (request: Request) => Promise<Response>;
 
 // ── Programmatic API ─────────────────────────────────────────────────────
 export declare function runBuild(config: import("./config.d.ts").BuildConfig): Promise<void>;
@@ -607,7 +693,9 @@ export interface PrerenderOptions {
   buildDir?: string;
   manifest?: ServerManifest;
 }
-export interface PrerenderResult { written: string[] }
+export interface PrerenderResult {
+  written: string[];
+}
 /** Build-time prerendering (SSG): write HTML + /_data payloads under `<buildDir>/client/_prerender/`. */
 export declare function runPrerender(options: PrerenderOptions): Promise<PrerenderResult>;
 /** Render the SPA-mode document shell (config `ssr: false`). */

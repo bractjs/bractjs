@@ -5,10 +5,7 @@ export interface MiddlewareContext {
   context: Record<string, unknown>;
 }
 
-export type MiddlewareFn = (
-  ctx: MiddlewareContext,
-  next: () => Promise<Response>,
-) => Promise<Response>;
+export type MiddlewareFn = (ctx: MiddlewareContext, next: () => Promise<Response>) => Promise<Response>;
 
 export declare class MiddlewarePipeline {
   use(fn: MiddlewareFn): this;

@@ -219,7 +219,10 @@ db.run(`
 // ones that are actually missing.
 {
   const cols = new Set(
-    db.query<{ name: string }, []>("PRAGMA table_info(users)").all().map((c) => c.name),
+    db
+      .query<{ name: string }, []>("PRAGMA table_info(users)")
+      .all()
+      .map((c) => c.name),
   );
   if (!cols.has("email")) db.run("ALTER TABLE users ADD COLUMN email TEXT");
   if (!cols.has("provider")) db.run("ALTER TABLE users ADD COLUMN provider TEXT NOT NULL DEFAULT 'password'");
@@ -228,7 +231,12 @@ db.run(`
 // SEO / metadata columns (added after launch). Idempotent per column.
 {
   const addColumn = (table: string, col: string, decl: string): void => {
-    const cols = new Set(db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+    const cols = new Set(
+      db
+        .query<{ name: string }, []>(`PRAGMA table_info(${table})`)
+        .all()
+        .map((c) => c.name),
+    );
     if (!cols.has(col)) db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
   };
   const TEXT = "TEXT NOT NULL DEFAULT ''";
@@ -276,59 +284,131 @@ async function seed() {
   const catWorld = newId();
   const catEurope = newId();
   db.run("INSERT INTO categories (id, name, slug, description, parentId, createdAt) VALUES (?,?,?,?,?,?)", [
-    catNews, "News", "news", "Latest dispatches.", null, now,
+    catNews,
+    "News",
+    "news",
+    "Latest dispatches.",
+    null,
+    now,
   ]);
   db.run("INSERT INTO categories (id, name, slug, description, parentId, createdAt) VALUES (?,?,?,?,?,?)", [
-    catWorld, "World", "world", "Around the globe.", null, now,
+    catWorld,
+    "World",
+    "world",
+    "Around the globe.",
+    null,
+    now,
   ]);
   db.run("INSERT INTO categories (id, name, slug, description, parentId, createdAt) VALUES (?,?,?,?,?,?)", [
-    catEurope, "Europe", "europe", "European desk.", catWorld, now,
+    catEurope,
+    "Europe",
+    "europe",
+    "European desk.",
+    catWorld,
+    now,
   ]);
 
   const posts: Array<[string, string, string, string, string, string | null, number]> = [
-    ["Welcome to the Bract Gazette", "welcome-to-the-bract-gazette",
+    [
+      "Welcome to the Bract Gazette",
+      "welcome-to-the-bract-gazette",
       "<h2>Hello, world</h2><p>This is a published post rendered from stored HTML. Edit it in the admin.</p>",
-      "Our first dispatch from the BractJS newsroom.", "published", catNews, now - 5000],
-    ["The framework beat", "the-framework-beat",
+      "Our first dispatch from the BractJS newsroom.",
+      "published",
+      catNews,
+      now - 5000,
+    ],
+    [
+      "The framework beat",
+      "the-framework-beat",
       "<p>A look at file-based routing, loaders, and actions — the BractJS way.</p>",
-      "Notes from the framework desk.", "published", catWorld, now - 3000],
-    ["Draft: upcoming features", "draft-upcoming-features",
+      "Notes from the framework desk.",
+      "published",
+      catWorld,
+      now - 3000,
+    ],
+    [
+      "Draft: upcoming features",
+      "draft-upcoming-features",
       "<p>This one is still a draft, so it should not appear on the public site.</p>",
-      "Work in progress.", "draft", catNews, now - 1000],
+      "Work in progress.",
+      "draft",
+      catNews,
+      now - 1000,
+    ],
   ];
   for (const [title, slug, body, excerpt, status, categoryId, createdAt] of posts) {
     db.run(
       "INSERT INTO posts (id, title, slug, body, excerpt, status, categoryId, featuredMediaId, authorId, createdAt, updatedAt, publishedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-      [newId(), title, slug, body, excerpt, status, categoryId, null, adminId, createdAt, createdAt,
-        status === "published" ? createdAt : null],
+      [
+        newId(),
+        title,
+        slug,
+        body,
+        excerpt,
+        status,
+        categoryId,
+        null,
+        adminId,
+        createdAt,
+        createdAt,
+        status === "published" ? createdAt : null,
+      ],
     );
   }
 
   const aboutId = newId();
-  db.run("INSERT INTO pages (id, title, slug, body, status, parentId, featuredMediaId, menuOrder, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)", [
-    aboutId, "About", "about", "<p>About this publication.</p>", "published", null, null, 0, now, now,
-  ]);
-  db.run("INSERT INTO pages (id, title, slug, body, status, parentId, featuredMediaId, menuOrder, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)", [
-    newId(), "The Team", "team", "<p>Meet the (fictional) team.</p>", "published", aboutId, null, 0, now, now,
-  ]);
+  db.run(
+    "INSERT INTO pages (id, title, slug, body, status, parentId, featuredMediaId, menuOrder, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    [aboutId, "About", "about", "<p>About this publication.</p>", "published", null, null, 0, now, now],
+  );
+  db.run(
+    "INSERT INTO pages (id, title, slug, body, status, parentId, featuredMediaId, menuOrder, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    [
+      newId(),
+      "The Team",
+      "team",
+      "<p>Meet the (fictional) team.</p>",
+      "published",
+      aboutId,
+      null,
+      0,
+      now,
+      now,
+    ],
+  );
 
   const menuId = newId();
-  db.run("INSERT INTO menus (id, name, location, createdAt) VALUES (?,?,?,?)", [menuId, "Primary", "header", now]);
-  db.run("INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)", [
-    newId(), menuId, "All Posts", "custom", null, null, "/posts", 0,
+  db.run("INSERT INTO menus (id, name, location, createdAt) VALUES (?,?,?,?)", [
+    menuId,
+    "Primary",
+    "header",
+    now,
   ]);
-  db.run("INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)", [
-    newId(), menuId, "News", "category", null, catNews, null, 1,
-  ]);
-  db.run("INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)", [
-    newId(), menuId, "About", "page", aboutId, null, null, 2,
-  ]);
+  db.run(
+    "INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)",
+    [newId(), menuId, "All Posts", "custom", null, null, "/posts", 0],
+  );
+  db.run(
+    "INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)",
+    [newId(), menuId, "News", "category", null, catNews, null, 1],
+  );
+  db.run(
+    "INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)",
+    [newId(), menuId, "About", "page", aboutId, null, null, 2],
+  );
 
   const footerId = newId();
-  db.run("INSERT INTO menus (id, name, location, createdAt) VALUES (?,?,?,?)", [footerId, "Footer", "footer", now]);
-  db.run("INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)", [
-    newId(), footerId, "About", "page", aboutId, null, null, 0,
+  db.run("INSERT INTO menus (id, name, location, createdAt) VALUES (?,?,?,?)", [
+    footerId,
+    "Footer",
+    "footer",
+    now,
   ]);
+  db.run(
+    "INSERT INTO menu_items (id, menuId, label, type, pageId, categoryId, url, position) VALUES (?,?,?,?,?,?,?,?)",
+    [newId(), footerId, "About", "page", aboutId, null, null, 0],
+  );
 }
 
 await seed();
@@ -342,19 +422,33 @@ await seed();
     const row = db.query<{ id: string }, [string]>("SELECT id FROM roles WHERE name = ?").get(name);
     if (row) return row.id;
     const id = newId();
-    db.run("INSERT INTO roles (id, name, description, isSystem, createdAt) VALUES (?,?,?,?,?)", [id, name, description, isSystem ? 1 : 0, nowTs()]);
+    db.run("INSERT INTO roles (id, name, description, isSystem, createdAt) VALUES (?,?,?,?,?)", [
+      id,
+      name,
+      description,
+      isSystem ? 1 : 0,
+      nowTs(),
+    ]);
     return id;
   };
   const adminRoleId = ensureRole("Administrator", "Full access to everything.", true);
-  for (const p of ALL_PERMISSIONS) db.run("INSERT OR IGNORE INTO role_permissions (roleId, permission) VALUES (?,?)", [adminRoleId, p]);
+  for (const p of ALL_PERMISSIONS)
+    db.run("INSERT OR IGNORE INTO role_permissions (roleId, permission) VALUES (?,?)", [adminRoleId, p]);
   const editorExisted = !!db.query("SELECT 1 FROM roles WHERE name = 'Editor'").get();
   const editorRoleId = ensureRole("Editor", "Manage content, but not users or settings.", false);
-  if (!editorExisted) for (const p of EDITOR_PERMISSIONS) db.run("INSERT OR IGNORE INTO role_permissions (roleId, permission) VALUES (?,?)", [editorRoleId, p]);
+  if (!editorExisted)
+    for (const p of EDITOR_PERMISSIONS)
+      db.run("INSERT OR IGNORE INTO role_permissions (roleId, permission) VALUES (?,?)", [editorRoleId, p]);
 
-  const orphans = db.query<{ id: string; role: string }, []>(
-    "SELECT u.id, u.role FROM users u WHERE NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.userId = u.id)",
-  ).all();
+  const orphans = db
+    .query<{ id: string; role: string }, []>(
+      "SELECT u.id, u.role FROM users u WHERE NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.userId = u.id)",
+    )
+    .all();
   for (const u of orphans) {
-    db.run("INSERT OR IGNORE INTO user_roles (userId, roleId) VALUES (?,?)", [u.id, u.role === "editor" ? editorRoleId : adminRoleId]);
+    db.run("INSERT OR IGNORE INTO user_roles (userId, roleId) VALUES (?,?)", [
+      u.id,
+      u.role === "editor" ? editorRoleId : adminRoleId,
+    ]);
   }
 }

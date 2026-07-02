@@ -1,24 +1,30 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   authenticatePassword,
+  beginPendingMfa,
+  clearPendingMfa,
+  getAdmin,
+  getPendingUserId,
   loginCookie,
   logoutCookie,
-  getAdmin,
-  requireAdmin,
-  beginPendingMfa,
-  getPendingUserId,
-  clearPendingMfa,
-  setOAuthState,
   readOAuthState,
+  requireAdmin,
+  setOAuthState,
 } from "../auth.server.ts";
 import { createUser } from "../models/users.server.ts";
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
 const make = () =>
-  createUser({ username: `a-${rnd()}`, password: "secret123", displayName: "A", email: `${rnd()}@example.com` });
+  createUser({
+    username: `a-${rnd()}`,
+    password: "secret123",
+    displayName: "A",
+    email: `${rnd()}@example.com`,
+  });
 /** A Cookie header value is just the `name=value` first segment of Set-Cookie. */
 const cookieHeader = (setCookie: string) => setCookie.split(";")[0]!;
-const reqWith = (setCookie: string) => new Request("http://x/", { headers: { cookie: cookieHeader(setCookie) } });
+const reqWith = (setCookie: string) =>
+  new Request("http://x/", { headers: { cookie: cookieHeader(setCookie) } });
 
 test("authenticatePassword: correct password returns the user without the hash", async () => {
   const u = (await make()).user!;
@@ -46,7 +52,9 @@ test("session round-trip: loginCookie → getAdmin resolves the user; logout cle
 
 test("getAdmin returns null with no/garbage cookie", async () => {
   expect(await getAdmin(new Request("http://x/"))).toBeNull();
-  expect(await getAdmin(new Request("http://x/", { headers: { cookie: "cms_session=tampered.sig" } }))).toBeNull();
+  expect(
+    await getAdmin(new Request("http://x/", { headers: { cookie: "cms_session=tampered.sig" } })),
+  ).toBeNull();
 });
 
 test("requireAdmin throws a 302 redirect to /admin/login when unauthenticated", async () => {

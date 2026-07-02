@@ -15,13 +15,8 @@ export function formatRouteTable(rows: RouteTableRow[]): string {
   const sorted = [...rows].sort((a, b) => a.pattern.localeCompare(b.pattern));
   const patternWidth = Math.max(7, ...sorted.map((r) => r.pattern.length));
   const lines = sorted.map((r) => {
-    const markers = [r.hasLoader ? "loader" : "", r.hasAction ? "action" : ""]
-      .filter(Boolean)
-      .join(" ");
+    const markers = [r.hasLoader ? "loader" : "", r.hasAction ? "action" : ""].filter(Boolean).join(" ");
     return `  ${r.pattern.padEnd(patternWidth)}  ${markers.padEnd(13)} ${r.file}`;
   });
-  return [
-    `[bractjs] ${rows.length} route${rows.length === 1 ? "" : "s"}:`,
-    ...lines,
-  ].join("\n");
+  return [`[bractjs] ${rows.length} route${rows.length === 1 ? "" : "s"}:`, ...lines].join("\n");
 }

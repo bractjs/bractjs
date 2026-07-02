@@ -4,13 +4,25 @@
 // throws `HttpError(404)` for an unknown id (rendered by the ErrorBoundary
 // below), and the action handles rename / toggle / delete.
 
-import { Form, Link, useActionData, useLoaderData, useNavigate, useNavigation, useParams, useRevalidator } from "@bractjs/bractjs";
-import { HttpError, redirect, defineActions, safeValidate } from "@bractjs/bractjs";
 import type { LoaderArgs, MetaArgs } from "@bractjs/bractjs";
+import {
+  defineActions,
+  Form,
+  HttpError,
+  Link,
+  redirect,
+  safeValidate,
+  useActionData,
+  useLoaderData,
+  useNavigate,
+  useNavigation,
+  useParams,
+  useRevalidator,
+} from "@bractjs/bractjs";
 
 import { deleteTodo, getTodo, renameTodo, toggleTodo } from "../todos.server.ts";
-import { TodoTitleSchema, type TodoInput } from "../validation.ts";
 import { card, dangerButton, ErrorNote, ghostButton, input, primaryButton, useActionToast } from "../ui.tsx";
+import { type TodoInput, TodoTitleSchema } from "../validation.ts";
 
 export async function loader({ params }: LoaderArgs) {
   const todo = getTodo(params.id);
@@ -33,9 +45,15 @@ export const action = defineActions({
     renameTodo(params.id, result.data.title);
     return { ok: "Task renamed" };
   },
-  toggle: ({ params }) => { toggleTodo(params.id); return { ok: "Task updated" }; },
+  toggle: ({ params }) => {
+    toggleTodo(params.id);
+    return { ok: "Task updated" };
+  },
   // Redirects back to the board; the toast there is fired by the board's delete.
-  delete: ({ params }) => { deleteTodo(params.id); return redirect("/"); },
+  delete: ({ params }) => {
+    deleteTodo(params.id);
+    return redirect("/");
+  },
 });
 
 export function ErrorBoundary({ error }: { error: unknown }) {
@@ -71,17 +89,27 @@ export default function TodoDetail() {
     <main style={{ display: "grid", gap: "1rem" }}>
       <p style={{ margin: 0, display: "flex", gap: "1rem", alignItems: "baseline", flexWrap: "wrap" }}>
         {/* Plain-string `to` — still valid (backwards compatible). */}
-        <Link to="/" prefetch="hover" style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>
+        <Link
+          to="/"
+          prefetch="hover"
+          style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}
+        >
           ← Back to the board
         </Link>
         {/* Typed dynamic `to` with checked `params` — autocompletes "/:id". */}
-        <Link to="/:id" params={{ id }} style={{ color: "var(--muted)", fontSize: ".82rem", textDecoration: "none" }}>
+        <Link
+          to="/:id"
+          params={{ id }}
+          style={{ color: "var(--muted)", fontSize: ".82rem", textDecoration: "none" }}
+        >
           Permalink
         </Link>
         {/* Manual revalidation via useRevalidator. */}
         <button
           type="button"
-          onClick={() => { void revalidate(); }}
+          onClick={() => {
+            void revalidate();
+          }}
           disabled={revalidating === "loading"}
           style={{ ...ghostButton, padding: ".3rem .7rem", fontSize: ".82rem", marginLeft: "auto" }}
         >
@@ -90,7 +118,9 @@ export default function TodoDetail() {
         {/* Imperative typed navigation via useNavigate. */}
         <button
           type="button"
-          onClick={() => { void navigate("/"); }}
+          onClick={() => {
+            void navigate("/");
+          }}
           style={{ ...ghostButton, padding: ".3rem .7rem", fontSize: ".82rem" }}
         >
           Done editing →

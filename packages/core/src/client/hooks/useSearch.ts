@@ -1,8 +1,8 @@
-import { useContext, useCallback } from "react";
-import { RouterContext, NavigationContext } from "../router.tsx";
+import { useCallback, useContext } from "react";
 import { BractJSContext } from "../../shared/context.ts";
-import { serializeSearch } from "../search-serializer.ts";
 import type { SearchOutputFor } from "../registry.ts";
+import { NavigationContext, RouterContext } from "../router.tsx";
+import { serializeSearch } from "../search-serializer.ts";
 
 // ── useSearch ──────────────────────────────────────────────────────────────
 

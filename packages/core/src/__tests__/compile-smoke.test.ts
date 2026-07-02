@@ -21,14 +21,11 @@
  * The whole suite is skipped gracefully if `bun build --compile` isn't usable
  * in the current environment (it is intentionally heavyweight).
  */
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { resolve, join } from "node:path";
-import {
-  writeModuleRegistries,
-  writeManifestModule,
-} from "../codegen/module-registry.ts";
+import { join, resolve } from "node:path";
 import { runBuild } from "../build/bundler.ts";
+import { writeManifestModule, writeModuleRegistries } from "../codegen/module-registry.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../..");
 // Inside the repo tree so the app's `@bractjs/bractjs` import resolves to the
@@ -199,15 +196,7 @@ beforeAll(async () => {
     // D) bun build --compile (mirror bin/cli.ts: dev NODE_ENV avoids the React
     // TSX jsxDEV miscompile; --compile-autoload-tsconfig keeps JSX settings).
     const compile = Bun.spawn(
-      [
-        "bun",
-        "build",
-        "--compile",
-        "--compile-autoload-tsconfig",
-        "app/server.ts",
-        "--outfile",
-        BIN,
-      ],
+      ["bun", "build", "--compile", "--compile-autoload-tsconfig", "app/server.ts", "--outfile", BIN],
       {
         cwd: TMP,
         env: { ...process.env, NODE_ENV: "development" },
@@ -240,7 +229,11 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  try { serverProc?.kill(); } catch { /* already dead */ }
+  try {
+    serverProc?.kill();
+  } catch {
+    /* already dead */
+  }
   process.chdir(originalCwd);
   await rm(TMP, { recursive: true, force: true });
 });

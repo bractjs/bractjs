@@ -1,7 +1,7 @@
 import { useContext } from "react";
-import { RouterContext } from "../router.tsx";
 import { BractJSContext } from "../../shared/context.ts";
 import type { ActionData } from "../../shared/route-types.ts";
+import { RouterContext } from "../router.tsx";
 
 /**
  * Returns the current route's action data, or null until an action has run.

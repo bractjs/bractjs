@@ -4,21 +4,39 @@
 // Data lives in `todos.server.ts` (SQLite); this file only orchestrates
 // loader → action → <Form> revalidation.
 
-import { Form, Link, useActionData, useLoaderData, useNavigation, useSearch } from "@bractjs/bractjs";
-import { defineActions, safeValidate, formText } from "@bractjs/bractjs";
 import type { LoaderArgs } from "@bractjs/bractjs";
+import {
+  defineActions,
+  Form,
+  formText,
+  Link,
+  safeValidate,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSearch,
+} from "@bractjs/bractjs";
 
 import {
   addTodo,
   clearCompleted,
   deleteTodo,
+  type Filter,
   getStats,
   listTodos,
   toggleTodo,
-  type Filter,
 } from "../todos.server.ts";
-import { TodoTitleSchema, BoardSearchSchema, type BoardSearch, type TodoInput } from "../validation.ts";
-import { card, dangerButton, ErrorNote, ghostButton, input, primaryButton, StatPill, useActionToast } from "../ui.tsx";
+import {
+  card,
+  dangerButton,
+  ErrorNote,
+  ghostButton,
+  input,
+  primaryButton,
+  StatPill,
+  useActionToast,
+} from "../ui.tsx";
+import { type BoardSearch, BoardSearchSchema, type TodoInput, TodoTitleSchema } from "../validation.ts";
 
 const FILTERS: Filter[] = ["all", "active", "completed"];
 
@@ -31,7 +49,8 @@ export function meta() {
     { title: "Todo Board | BractJS" },
     {
       name: "description",
-      content: "A multi-route BractJS demo: SQLite-backed loaders, actions, validation, and <Form> revalidation.",
+      content:
+        "A multi-route BractJS demo: SQLite-backed loaders, actions, validation, and <Form> revalidation.",
     },
   ];
 }
@@ -53,9 +72,18 @@ export const action = defineActions({
     addTodo(result.data.title);
     return { ok: "Task added" };
   },
-  toggle: ({ formData }) => { toggleTodo(formText(formData, "id")); return { ok: "Task updated" }; },
-  delete: ({ formData }) => { deleteTodo(formText(formData, "id")); return { ok: "Task deleted" }; },
-  "clear-completed": () => { clearCompleted(); return { ok: "Completed tasks cleared" }; },
+  toggle: ({ formData }) => {
+    toggleTodo(formText(formData, "id"));
+    return { ok: "Task updated" };
+  },
+  delete: ({ formData }) => {
+    deleteTodo(formText(formData, "id"));
+    return { ok: "Task deleted" };
+  },
+  "clear-completed": () => {
+    clearCompleted();
+    return { ok: "Completed tasks cleared" };
+  },
 });
 
 export default function IndexPage() {
@@ -83,8 +111,8 @@ export default function IndexPage() {
         </p>
         <h1 style={{ margin: ".45rem 0 .6rem", fontSize: "clamp(1.6rem, 3vw, 2.2rem)" }}>Todo Board</h1>
         <p style={{ margin: 0, color: "var(--muted)" }}>
-          Backed by a <code>bun:sqlite</code> store in a <code>*.server.ts</code> module. Tap a task to open its{" "}
-          detail page, or use the filters below.
+          Backed by a <code>bun:sqlite</code> store in a <code>*.server.ts</code> module. Tap a task to open
+          its detail page, or use the filters below.
         </p>
       </section>
 

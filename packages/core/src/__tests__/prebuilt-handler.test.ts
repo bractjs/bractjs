@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { buildFetchHandler } from "../server/serve.ts";
 import type { RouteModule } from "../shared/route-types.ts";
 
@@ -39,16 +39,12 @@ const fetchHandler = buildFetchHandler({
   publicDir: NON_EXISTENT_DIR,
   buildDir: NON_EXISTENT_DIR,
   manifest: { clientEntry: "/build/client/client.js", routes: {} },
-  routeFiles: [
-    { filePath: "routes/_index.tsx", urlPattern: "", segments: [] },
-  ],
+  routeFiles: [{ filePath: "routes/_index.tsx", urlPattern: "", segments: [] }],
   moduleRegistry: {
     "root.tsx": rootModule,
     "routes/_index.tsx": indexRouteModule,
   },
-  actionModules: [
-    { relPath: "actions.server.ts", mod: sendActionMod },
-  ],
+  actionModules: [{ relPath: "actions.server.ts", mod: sendActionMod }],
 });
 
 describe("buildFetchHandler — pre-built (compiled-binary) path", () => {

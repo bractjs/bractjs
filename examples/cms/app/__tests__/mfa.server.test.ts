@@ -1,14 +1,21 @@
-import { test, expect, beforeEach } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { db } from "../db.server.ts";
+import { _resetRateLimits, issueLoginCode, verifyLoginCode } from "../mfa.server.ts";
 import { createUser } from "../models/users.server.ts";
-import { issueLoginCode, verifyLoginCode, _resetRateLimits } from "../mfa.server.ts";
 
 beforeEach(() => _resetRateLimits());
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
 const sha256 = (s: string) => new Bun.CryptoHasher("sha256").update(s).digest("hex");
 async function freshUser() {
-  return (await createUser({ username: `m-${rnd()}`, password: "secret123", displayName: "M", email: `${rnd()}@example.com` })).user!;
+  return (
+    await createUser({
+      username: `m-${rnd()}`,
+      password: "secret123",
+      displayName: "M",
+      email: `${rnd()}@example.com`,
+    })
+  ).user!;
 }
 function plantCode(userId: string, code: string, opts: { expiresAt?: number; attempts?: number } = {}) {
   db.run(
@@ -24,9 +31,11 @@ test("issueLoginCode stores a fresh, unexpired code row for the user", async () 
   const u = await freshUser();
   const res = await issueLoginCode(u, `ip-${u.id}`);
   expect(res.ok).toBe(true);
-  const row = db.query<{ expiresAt: number; attempts: number }, [string]>(
-    "SELECT expiresAt, attempts FROM login_codes WHERE userId = ?",
-  ).get(u.id);
+  const row = db
+    .query<{ expiresAt: number; attempts: number }, [string]>(
+      "SELECT expiresAt, attempts FROM login_codes WHERE userId = ?",
+    )
+    .get(u.id);
   expect(row).not.toBeNull();
   expect(row!.attempts).toBe(0);
   expect(row!.expiresAt).toBeGreaterThan(Date.now());

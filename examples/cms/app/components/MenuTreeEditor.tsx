@@ -1,4 +1,5 @@
 "use client";
+
 // Nested, drag/drop menu editor. Drag a row onto the TOP of another to drop it
 // as a sibling before, the BOTTOM for after, or the MIDDLE to nest it as a child
 // (unlimited depth). Inline-edit each item's label + CSS class, remove items, then
@@ -6,13 +7,19 @@
 // cssClass}) to the route action. "use client" → SSR-stubbed, so it renders null
 // until mounted (no hydration mismatch); the admin requires JS, like RichEditor.
 
-import { useEffect, useRef, useState } from "react";
 import { Form } from "@bractjs/bractjs";
+import { useEffect, useRef, useState } from "react";
 import { ghostButton, input, primaryButton } from "../ui.tsx";
 
 const ids = (ns: EditorNode[]): string[] => ns.flatMap((n) => [n.id, ...ids(n.children)]);
 
-export type EditorNode = { id: string; label: string; badge: string; cssClass: string; children: EditorNode[] };
+export type EditorNode = {
+  id: string;
+  label: string;
+  badge: string;
+  cssClass: string;
+  children: EditorNode[];
+};
 type Zone = "before" | "after" | "inside";
 
 const clone = (ns: EditorNode[]): EditorNode[] => ns.map((n) => ({ ...n, children: clone(n.children) }));
@@ -38,13 +45,23 @@ function put(ns: EditorNode[], targetId: string, zone: Zone, node: EditorNode): 
 }
 function patch(ns: EditorNode[], id: string, p: Partial<EditorNode>): boolean {
   for (const n of ns) {
-    if (n.id === id) { Object.assign(n, p); return true; }
+    if (n.id === id) {
+      Object.assign(n, p);
+      return true;
+    }
     if (patch(n.children, id, p)) return true;
   }
   return false;
 }
-function flatten(ns: EditorNode[], parentId: string | null = null, out: Array<{ id: string; parentId: string | null; position: number; label: string; cssClass: string }> = []) {
-  ns.forEach((n, i) => { out.push({ id: n.id, parentId, position: i, label: n.label, cssClass: n.cssClass }); flatten(n.children, n.id, out); });
+function flatten(
+  ns: EditorNode[],
+  parentId: string | null = null,
+  out: Array<{ id: string; parentId: string | null; position: number; label: string; cssClass: string }> = [],
+) {
+  ns.forEach((n, i) => {
+    out.push({ id: n.id, parentId, position: i, label: n.label, cssClass: n.cssClass });
+    flatten(n.children, n.id, out);
+  });
   return out;
 }
 
@@ -58,7 +75,9 @@ export function MenuTreeEditor({ items }: { items: EditorNode[] }) {
   // loader), keyed on ids — so a local drag/edit (no server change) is never clobbered.
   const sig = ids(items).join(",");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setTree(items); }, [sig]);
+  useEffect(() => {
+    setTree(items);
+  }, [sig]);
   if (!mounted) return null;
 
   const zoneOf = (e: React.DragEvent): Zone => {
@@ -67,15 +86,27 @@ export function MenuTreeEditor({ items }: { items: EditorNode[] }) {
     return y < 0.3 ? "before" : y > 0.7 ? "after" : "inside";
   };
   const commit = (targetId: string, zone: Zone) => {
-    const id = dragId.current; dragId.current = null; setOver(null);
+    const id = dragId.current;
+    dragId.current = null;
+    setOver(null);
     if (!id || id === targetId) return;
     const next = clone(tree);
     const node = take(next, id);
     if (!node || has(node, targetId)) return; // can't nest into itself/descendant
     if (put(next, targetId, zone, node)) setTree(next);
   };
-  const edit = (id: string, p: Partial<EditorNode>) => setTree((t) => { const n = clone(t); patch(n, id, p); return n; });
-  const remove = (id: string) => setTree((t) => { const n = clone(t); take(n, id); return n; });
+  const edit = (id: string, p: Partial<EditorNode>) =>
+    setTree((t) => {
+      const n = clone(t);
+      patch(n, id, p);
+      return n;
+    });
+  const remove = (id: string) =>
+    setTree((t) => {
+      const n = clone(t);
+      take(n, id);
+      return n;
+    });
 
   // Plain recursive function (NOT a component): returns host <li>/<ul> keyed by id,
   // so re-renders reconcile in place and never destroy the node being dragged.
@@ -86,11 +117,25 @@ export function MenuTreeEditor({ items }: { items: EditorNode[] }) {
         return (
           <li key={node.id}>
             <div
-              onDragOver={(e) => { if (!dragId.current) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; const z = zoneOf(e); setOver((p) => (p?.id === node.id && p.zone === z ? p : { id: node.id, zone: z })); }}
-              onDrop={(e) => { e.preventDefault(); commit(node.id, zoneOf(e)); }}
+              onDragOver={(e) => {
+                if (!dragId.current) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                const z = zoneOf(e);
+                setOver((p) => (p?.id === node.id && p.zone === z ? p : { id: node.id, zone: z }));
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                commit(node.id, zoneOf(e));
+              }}
               style={{
-                display: "flex", alignItems: "center", gap: ".5rem", padding: ".45rem .6rem", marginBottom: ".4rem",
-                borderRadius: "8px", background: ind === "inside" ? "var(--admin-accent-soft)" : "#fff",
+                display: "flex",
+                alignItems: "center",
+                gap: ".5rem",
+                padding: ".45rem .6rem",
+                marginBottom: ".4rem",
+                borderRadius: "8px",
+                background: ind === "inside" ? "var(--admin-accent-soft)" : "#fff",
                 border: "1px solid var(--admin-line)",
                 borderTop: `2px solid ${ind === "before" ? "var(--admin-accent)" : "transparent"}`,
                 borderBottom: `2px solid ${ind === "after" ? "var(--admin-accent)" : "transparent"}`,
@@ -98,15 +143,53 @@ export function MenuTreeEditor({ items }: { items: EditorNode[] }) {
             >
               <span
                 draggable
-                onDragStart={(e) => { dragId.current = node.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", node.id); const row = e.currentTarget.parentElement; if (row) e.dataTransfer.setDragImage(row, 12, 12); }}
-                onDragEnd={() => { dragId.current = null; setOver(null); }}
-                style={{ cursor: "grab", color: "var(--admin-muted)", userSelect: "none", padding: "0 .2rem" }}
+                onDragStart={(e) => {
+                  dragId.current = node.id;
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", node.id);
+                  const row = e.currentTarget.parentElement;
+                  if (row) e.dataTransfer.setDragImage(row, 12, 12);
+                }}
+                onDragEnd={() => {
+                  dragId.current = null;
+                  setOver(null);
+                }}
+                style={{
+                  cursor: "grab",
+                  color: "var(--admin-muted)",
+                  userSelect: "none",
+                  padding: "0 .2rem",
+                }}
                 aria-label="Drag to reorder"
-              >⠿</span>
-              <input value={node.label} onChange={(e) => edit(node.id, { label: e.target.value })} className={input} style={{ flex: 1 }} aria-label="Label" />
-              <input value={node.cssClass} onChange={(e) => edit(node.id, { cssClass: e.target.value })} className={input} style={{ width: "10rem" }} placeholder="css class" aria-label="CSS class" />
-              <span style={{ color: "var(--admin-muted)", fontSize: ".75rem", whiteSpace: "nowrap" }}>{node.badge}</span>
-              <button type="button" onClick={() => remove(node.id)} className={ghostButton} aria-label="Remove">✕</button>
+              >
+                ⠿
+              </span>
+              <input
+                value={node.label}
+                onChange={(e) => edit(node.id, { label: e.target.value })}
+                className={input}
+                style={{ flex: 1 }}
+                aria-label="Label"
+              />
+              <input
+                value={node.cssClass}
+                onChange={(e) => edit(node.id, { cssClass: e.target.value })}
+                className={input}
+                style={{ width: "10rem" }}
+                placeholder="css class"
+                aria-label="CSS class"
+              />
+              <span style={{ color: "var(--admin-muted)", fontSize: ".75rem", whiteSpace: "nowrap" }}>
+                {node.badge}
+              </span>
+              <button
+                type="button"
+                onClick={() => remove(node.id)}
+                className={ghostButton}
+                aria-label="Remove"
+              >
+                ✕
+              </button>
             </div>
             {node.children.length > 0 ? rows(node.children, depth + 1) : null}
           </li>
@@ -120,10 +203,19 @@ export function MenuTreeEditor({ items }: { items: EditorNode[] }) {
       <input type="hidden" name="intent" value="reorder" />
       <input type="hidden" name="layout" value={JSON.stringify(flatten(tree))} />
       <p style={{ margin: "0 0 .6rem", color: "var(--admin-muted)", fontSize: ".82rem" }}>
-        Drag the ⠿ handle — top/bottom edge to reorder, middle to nest. Edit labels &amp; CSS classes inline, then Save.
+        Drag the ⠿ handle — top/bottom edge to reorder, middle to nest. Edit labels &amp; CSS classes inline,
+        then Save.
       </p>
-      {tree.length === 0 ? <p style={{ color: "var(--admin-muted)" }}>No items yet — add one on the right.</p> : rows(tree)}
-      <div style={{ marginTop: ".8rem" }}><button type="submit" className={primaryButton}>Save layout</button></div>
+      {tree.length === 0 ? (
+        <p style={{ color: "var(--admin-muted)" }}>No items yet — add one on the right.</p>
+      ) : (
+        rows(tree)
+      )}
+      <div style={{ marginTop: ".8rem" }}>
+        <button type="submit" className={primaryButton}>
+          Save layout
+        </button>
+      </div>
     </Form>
   );
 }

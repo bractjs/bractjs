@@ -1,6 +1,6 @@
+import type { HeadersFunction } from "../shared/route-types.ts";
 import type { LayoutChain } from "./layout.ts";
 import type { LoaderResults } from "./loader.ts";
-import type { HeadersFunction } from "../shared/route-types.ts";
 
 type Params = Record<string, string>;
 

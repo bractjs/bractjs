@@ -6,10 +6,7 @@ export interface MiddlewareContext {
   context: Record<string, unknown>;
 }
 
-export type MiddlewareFn = (
-  ctx: MiddlewareContext,
-  next: () => Promise<Response>,
-) => Promise<Response>;
+export type MiddlewareFn = (ctx: MiddlewareContext, next: () => Promise<Response>) => Promise<Response>;
 
 // ── Pipeline ───────────────────────────────────────────────────────────────
 
@@ -33,10 +30,7 @@ export class MiddlewarePipeline {
    * Compose all registered middleware into a single chain and execute it.
    * Each fn calls `next()` to invoke the next fn; the last `next()` calls `handler`.
    */
-  run(
-    ctx: MiddlewareContext,
-    handler: () => Promise<Response>,
-  ): Promise<Response> {
+  run(ctx: MiddlewareContext, handler: () => Promise<Response>): Promise<Response> {
     const fns = this.fns;
     let lastCalled = -1;
 

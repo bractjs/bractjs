@@ -19,9 +19,8 @@ export function wrapRoutesWithLocale(routes: RouteFile[], i18n: I18nConfig): Rou
   const localized: RouteFile[] = [];
   for (const route of routes) {
     // Prepend the locale param segment to the URL pattern.
-    const localizedPattern = route.urlPattern === "" || route.urlPattern === "/"
-      ? `[locale]`
-      : `[locale]/${route.urlPattern}`;
+    const localizedPattern =
+      route.urlPattern === "" || route.urlPattern === "/" ? `[locale]` : `[locale]/${route.urlPattern}`;
 
     localized.push({
       ...route,

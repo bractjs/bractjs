@@ -1,23 +1,17 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mergeMeta, renderMetaTags } from "../server/meta.ts";
 import type { MetaDescriptor } from "../shared/route-types.ts";
 
 describe("mergeMeta", () => {
   test("keeps single descriptors unchanged", () => {
-    const input: MetaDescriptor[] = [
-      { title: "Home" },
-      { name: "description", content: "A site" },
-    ];
+    const input: MetaDescriptor[] = [{ title: "Home" }, { name: "description", content: "A site" }];
     const result = mergeMeta(input);
     expect(result.some((d) => "title" in d && (d as { title: string }).title === "Home")).toBe(true);
     expect(result.some((d) => "name" in d && (d as { name: string }).name === "description")).toBe(true);
   });
 
   test("last title wins (dedup)", () => {
-    const input: MetaDescriptor[] = [
-      { title: "First" },
-      { title: "Last" },
-    ];
+    const input: MetaDescriptor[] = [{ title: "First" }, { title: "Last" }];
     const result = mergeMeta(input);
     const titles = result.filter((d) => "title" in d);
     expect(titles.length).toBe(1);

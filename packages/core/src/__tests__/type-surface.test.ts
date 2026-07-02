@@ -59,9 +59,7 @@ describe("type surface (types/*.d.ts vs src/index.ts)", () => {
     // Only index.d.ts value declarations are the public entry's surface; the
     // sibling .d.ts files also back re-exports, so index.d.ts is the contract.
     const indexDecls = readFileSync(join(typesDir, "index.d.ts"), "utf8");
-    const phantom = [...declaredValueNames(indexDecls)].filter(
-      (name) => !(name in api),
-    );
+    const phantom = [...declaredValueNames(indexDecls)].filter((name) => !(name in api));
     expect(phantom).toEqual([]);
   });
 });

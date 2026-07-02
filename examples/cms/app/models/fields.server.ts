@@ -14,8 +14,22 @@ export type FieldType = "text" | "image" | "post" | "page" | "category";
 export const FIELD_TYPES: FieldType[] = ["text", "image", "post", "page", "category"];
 export const ENTITY_TYPES: EntityType[] = ["post", "page", "category"];
 
-export type FieldGroup = { id: string; name: string; target: EntityType; position: number; createdAt: number };
-export type Field = { id: string; groupId: string; label: string; name: string; type: FieldType; repeatable: boolean; position: number };
+export type FieldGroup = {
+  id: string;
+  name: string;
+  target: EntityType;
+  position: number;
+  createdAt: number;
+};
+export type Field = {
+  id: string;
+  groupId: string;
+  label: string;
+  name: string;
+  type: FieldType;
+  repeatable: boolean;
+  position: number;
+};
 type FieldRow = Omit<Field, "repeatable"> & { repeatable: number };
 const toField = (r: FieldRow): Field => ({ ...r, repeatable: !!r.repeatable });
 
@@ -27,16 +41,29 @@ export function getGroup(id: string): FieldGroup | null {
   return db.query<FieldGroup, [string]>("SELECT * FROM field_groups WHERE id = ?").get(id) ?? null;
 }
 export function groupsForTarget(target: EntityType): FieldGroup[] {
-  return db.query<FieldGroup, [string]>("SELECT * FROM field_groups WHERE target = ? ORDER BY position ASC, createdAt ASC").all(target);
+  return db
+    .query<FieldGroup, [string]>(
+      "SELECT * FROM field_groups WHERE target = ? ORDER BY position ASC, createdAt ASC",
+    )
+    .all(target);
 }
 export function createGroup(input: { name: string; target: EntityType }): { ok: boolean; id?: string } {
   const id = newId();
   const max = db.query<{ m: number | null }, []>("SELECT MAX(position) AS m FROM field_groups").get()?.m;
-  db.run("INSERT INTO field_groups (id, name, target, position, createdAt) VALUES (?,?,?,?,?)", [id, input.name, input.target, (max ?? -1) + 1, nowTs()]);
+  db.run("INSERT INTO field_groups (id, name, target, position, createdAt) VALUES (?,?,?,?,?)", [
+    id,
+    input.name,
+    input.target,
+    (max ?? -1) + 1,
+    nowTs(),
+  ]);
   return { ok: true, id };
 }
 export function updateGroup(id: string, input: { name: string; target: EntityType }): boolean {
-  return db.run("UPDATE field_groups SET name = ?, target = ? WHERE id = ?", [input.name, input.target, id]).changes > 0;
+  return (
+    db.run("UPDATE field_groups SET name = ?, target = ? WHERE id = ?", [input.name, input.target, id])
+      .changes > 0
+  );
 }
 export function deleteGroup(id: string): boolean {
   return db.run("DELETE FROM field_groups WHERE id = ?", [id]).changes > 0;
@@ -44,15 +71,29 @@ export function deleteGroup(id: string): boolean {
 
 // ── Fields ───────────────────────────────────────────────────────────────────
 export function listFields(groupId: string): Field[] {
-  return db.query<FieldRow, [string]>("SELECT * FROM fields WHERE groupId = ? ORDER BY position ASC").all(groupId).map(toField);
+  return db
+    .query<FieldRow, [string]>("SELECT * FROM fields WHERE groupId = ? ORDER BY position ASC")
+    .all(groupId)
+    .map(toField);
 }
-export function addField(groupId: string, input: { label: string; name: string; type: FieldType; repeatable: boolean }): { ok: boolean; reason?: string } {
+export function addField(
+  groupId: string,
+  input: { label: string; name: string; type: FieldType; repeatable: boolean },
+): { ok: boolean; reason?: string } {
   if (db.query("SELECT 1 FROM fields WHERE groupId = ? AND name = ?").get(groupId, input.name)) {
     return { ok: false, reason: `A field named "${input.name}" already exists in this group.` };
   }
-  const max = db.query<{ m: number | null }, [string]>("SELECT MAX(position) AS m FROM fields WHERE groupId = ?").get(groupId)?.m;
+  const max = db
+    .query<{ m: number | null }, [string]>("SELECT MAX(position) AS m FROM fields WHERE groupId = ?")
+    .get(groupId)?.m;
   db.run("INSERT INTO fields (id, groupId, label, name, type, repeatable, position) VALUES (?,?,?,?,?,?,?)", [
-    newId(), groupId, input.label, input.name, input.type, input.repeatable ? 1 : 0, (max ?? -1) + 1,
+    newId(),
+    groupId,
+    input.label,
+    input.name,
+    input.type,
+    input.repeatable ? 1 : 0,
+    (max ?? -1) + 1,
   ]);
   return { ok: true };
 }
@@ -64,7 +105,11 @@ export function moveField(fieldId: string, dir: "up" | "down"): boolean {
   if (!f) return false;
   const op = dir === "up" ? "<" : ">";
   const order = dir === "up" ? "DESC" : "ASC";
-  const n = db.query<FieldRow, [string, number]>(`SELECT * FROM fields WHERE groupId = ? AND position ${op} ? ORDER BY position ${order} LIMIT 1`).get(f.groupId, f.position);
+  const n = db
+    .query<FieldRow, [string, number]>(
+      `SELECT * FROM fields WHERE groupId = ? AND position ${op} ? ORDER BY position ${order} LIMIT 1`,
+    )
+    .get(f.groupId, f.position);
   if (!n) return false;
   tx(() => {
     db.run("UPDATE fields SET position = ? WHERE id = ?", [n.position, f.id]);
@@ -77,9 +122,18 @@ export function moveField(fieldId: string, dir: "up" | "down"): boolean {
 function isEmpty(v: string | string[]): boolean {
   return Array.isArray(v) ? v.length === 0 : v.trim() === "";
 }
-export function setFieldValue(entityType: EntityType, entityId: string, fieldId: string, value: string | string[]): void {
+export function setFieldValue(
+  entityType: EntityType,
+  entityId: string,
+  fieldId: string,
+  value: string | string[],
+): void {
   if (isEmpty(value)) {
-    db.run("DELETE FROM field_values WHERE entityType = ? AND entityId = ? AND fieldId = ?", [entityType, entityId, fieldId]);
+    db.run("DELETE FROM field_values WHERE entityType = ? AND entityId = ? AND fieldId = ?", [
+      entityType,
+      entityId,
+      fieldId,
+    ]);
     return;
   }
   db.run(
@@ -90,10 +144,18 @@ export function setFieldValue(entityType: EntityType, entityId: string, fieldId:
 }
 /** Raw stored values for an entity, keyed by fieldId. */
 export function getFieldValues(entityType: EntityType, entityId: string): Record<string, string | string[]> {
-  const rows = db.query<{ fieldId: string; value: string }, [string, string]>("SELECT fieldId, value FROM field_values WHERE entityType = ? AND entityId = ?").all(entityType, entityId);
+  const rows = db
+    .query<{ fieldId: string; value: string }, [string, string]>(
+      "SELECT fieldId, value FROM field_values WHERE entityType = ? AND entityId = ?",
+    )
+    .all(entityType, entityId);
   const out: Record<string, string | string[]> = {};
   for (const r of rows) {
-    try { out[r.fieldId] = JSON.parse(r.value) as string | string[]; } catch { /* skip corrupt */ }
+    try {
+      out[r.fieldId] = JSON.parse(r.value) as string | string[];
+    } catch {
+      /* skip corrupt */
+    }
   }
   return out;
 }
@@ -131,7 +193,10 @@ export function saveEntityFields(target: EntityType, entityId: string, formData:
     for (const f of listFields(g.id)) {
       const key = `cf:${f.id}`;
       const value = f.repeatable
-        ? formData.getAll(key).map(String).filter((s) => s.trim() !== "")
+        ? formData
+            .getAll(key)
+            .map(String)
+            .filter((s) => s.trim() !== "")
         : String(formData.get(key) ?? "");
       setFieldValue(target, entityId, f.id, value);
     }
@@ -146,28 +211,39 @@ export type ResolvedValue =
 export type ResolvedField = { field: Field; values: ResolvedValue[] };
 
 function pagePath(pageId: string): string | null {
-  const q = db.query<{ slug: string; parentId: string | null }, [string]>("SELECT slug, parentId FROM pages WHERE id = ?");
+  const q = db.query<{ slug: string; parentId: string | null }, [string]>(
+    "SELECT slug, parentId FROM pages WHERE id = ?",
+  );
   const slugs: string[] = [];
   let cur = q.get(pageId) ?? null;
   let guard = 0;
-  while (cur && guard++ < 50) { slugs.unshift(cur.slug); cur = cur.parentId ? q.get(cur.parentId) ?? null : null; }
+  while (cur && guard++ < 50) {
+    slugs.unshift(cur.slug);
+    cur = cur.parentId ? (q.get(cur.parentId) ?? null) : null;
+  }
   return slugs.length ? `/${slugs.join("/")}` : null;
 }
 function resolveOne(type: FieldType, raw: string): ResolvedValue | null {
   if (type === "text") return raw ? { type: "text", text: raw } : null;
   if (type === "image") {
-    const m = db.query<{ url: string; alt: string }, [string]>("SELECT url, alt FROM media WHERE id = ?").get(raw);
+    const m = db
+      .query<{ url: string; alt: string }, [string]>("SELECT url, alt FROM media WHERE id = ?")
+      .get(raw);
     return m ? { type: "image", url: m.url, alt: m.alt } : null;
   }
   if (type === "post") {
-    const p = db.query<{ title: string; slug: string }, [string]>("SELECT title, slug FROM posts WHERE id = ?").get(raw);
+    const p = db
+      .query<{ title: string; slug: string }, [string]>("SELECT title, slug FROM posts WHERE id = ?")
+      .get(raw);
     return p ? { type: "post", title: p.title, url: `/posts/${p.slug}` } : null;
   }
   if (type === "page") {
     const p = db.query<{ title: string }, [string]>("SELECT title FROM pages WHERE id = ?").get(raw);
     return p ? { type: "page", title: p.title, url: pagePath(raw) } : null;
   }
-  const c = db.query<{ name: string; slug: string }, [string]>("SELECT name, slug FROM categories WHERE id = ?").get(raw);
+  const c = db
+    .query<{ name: string; slug: string }, [string]>("SELECT name, slug FROM categories WHERE id = ?")
+    .get(raw);
   return c ? { type: "category", title: c.name, url: `/category/${c.slug}` } : null;
 }
 /** Resolved, render-ready custom fields for an entity (skips empty/dangling refs). */

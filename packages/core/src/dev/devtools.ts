@@ -28,13 +28,15 @@ const PANEL_ID = "bractjs-devtools-panel";
 const REFRESH_MS = 1000;
 
 function readState(): DevtoolsState {
-  return window.__BRACTJS_DEVTOOLS__ ?? {
-    route: null,
-    loaderData: {},
-    navState: "idle",
-    cacheEntries: [],
-    beforeLoadTrace: [],
-  };
+  return (
+    window.__BRACTJS_DEVTOOLS__ ?? {
+      route: null,
+      loaderData: {},
+      navState: "idle",
+      cacheEntries: [],
+      beforeLoadTrace: [],
+    }
+  );
 }
 
 class BractJSDevtools extends HTMLElement {

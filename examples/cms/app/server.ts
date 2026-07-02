@@ -1,7 +1,7 @@
-import { createServer, pipeline, csp } from "@bractjs/bractjs";
-import { routeFiles, moduleRegistry } from "./_generated/routes.ts";
+import { createServer, csp, pipeline } from "@bractjs/bractjs";
 import { actionModules } from "./_generated/actions.ts";
 import { manifest } from "./_generated/manifest.ts";
+import { moduleRegistry, routeFiles } from "./_generated/routes.ts";
 
 // Defense-in-depth behind the HTML sanitizer: a nonce-based Content-Security-
 // Policy so injected <script> can't execute and forms can't post off-origin,

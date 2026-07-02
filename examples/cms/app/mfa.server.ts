@@ -19,9 +19,7 @@ const issuePerUser = createRateLimiter(5, HOUR); // codes per user / hour
 const issuePerIp = createRateLimiter(20, HOUR); // code requests per IP / hour
 const verifyPerIp = createRateLimiter(50, HOUR); // verify attempts per IP / hour
 
-export type MfaResult =
-  | { ok: true }
-  | { ok: false; reason: string; status: number; retryAfterMs?: number };
+export type MfaResult = { ok: true } | { ok: false; reason: string; status: number; retryAfterMs?: number };
 
 function sha256(input: string): string {
   return new Bun.CryptoHasher("sha256").update(input).digest("hex");

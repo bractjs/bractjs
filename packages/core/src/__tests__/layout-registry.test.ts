@@ -1,11 +1,7 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { resolve, join } from "node:path";
-import {
-  resolveRouteChain,
-  resolveLayoutChainFromRegistry,
-  type ModuleRegistry,
-} from "../server/layout.ts";
+import { join, resolve } from "node:path";
+import { type ModuleRegistry, resolveLayoutChainFromRegistry, resolveRouteChain } from "../server/layout.ts";
 
 const TMP = resolve(import.meta.dir, ".tmp-layout-registry");
 
@@ -44,7 +40,11 @@ afterAll(async () => {
 describe("resolveLayoutChainFromRegistry", () => {
   test("includes root + ancestor layouts in order", () => {
     const r = resolveLayoutChainFromRegistry(
-      { filePath: "routes/blog/[slug].tsx", urlPattern: "blog/[slug]", segments: ["blog", { param: "slug" }] },
+      {
+        filePath: "routes/blog/[slug].tsx",
+        urlPattern: "blog/[slug]",
+        segments: ["blog", { param: "slug" }],
+      },
       registry,
     );
     expect(r.layoutFiles).toEqual(["root.tsx", "routes/blog/layout.tsx"]);
@@ -75,7 +75,11 @@ describe("resolveLayoutChainFromRegistry", () => {
 describe("resolveRouteChain — registry mode", () => {
   test("returns the pre-loaded route module without touching disk", async () => {
     const chain = await resolveRouteChain(
-      { filePath: "routes/blog/[slug].tsx", urlPattern: "blog/[slug]", segments: ["blog", { param: "slug" }] },
+      {
+        filePath: "routes/blog/[slug].tsx",
+        urlPattern: "blog/[slug]",
+        segments: ["blog", { param: "slug" }],
+      },
       // appDir intentionally points at a path that does NOT exist — registry mode
       // must skip every fs check.
       "/nonexistent/appdir",
@@ -100,7 +104,11 @@ describe("resolveRouteChain — registry mode", () => {
 
   test("forward-slash normalisation: filePath with backslashes resolves the same key", async () => {
     const chain = await resolveRouteChain(
-      { filePath: "routes\\blog\\[slug].tsx", urlPattern: "blog/[slug]", segments: ["blog", { param: "slug" }] },
+      {
+        filePath: "routes\\blog\\[slug].tsx",
+        urlPattern: "blog/[slug]",
+        segments: ["blog", { param: "slug" }],
+      },
       "/nonexistent",
       registry,
     );

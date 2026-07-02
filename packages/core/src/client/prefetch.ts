@@ -1,6 +1,6 @@
 import type { ServerManifest } from "../server/render.ts";
+import { cacheKey, loaderCache } from "./cache.ts";
 import { matchPatternForPath, parseTo } from "./nav-utils.ts";
-import { loaderCache, cacheKey } from "./cache.ts";
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -36,8 +36,12 @@ export function prefetchRoute(path: string, manifest: ServerManifest): Promise<v
   if (existing) return existing;
 
   const task = doPrefetch(path, manifest)
-    .catch(() => { /* prefetch is best-effort — never surface errors */ })
-    .finally(() => { inflight.delete(path); });
+    .catch(() => {
+      /* prefetch is best-effort — never surface errors */
+    })
+    .finally(() => {
+      inflight.delete(path);
+    });
   inflight.set(path, task);
   return task;
 }
@@ -60,7 +64,7 @@ async function doPrefetch(path: string, manifest: ServerManifest): Promise<void>
   //    config/loaderDeps, which the router uses to key the cache — without the
   //    module we fall back to the path-keyed default, matching loadRoute.
   const mod = chunk
-    ? (await import(/* @vite-ignore */ chunk).catch(() => null)) as Record<string, unknown> | null
+    ? ((await import(/* @vite-ignore */ chunk).catch(() => null)) as Record<string, unknown> | null)
     : null;
   const routeConfig = mod?.config as { staleTime?: number; gcTime?: number } | undefined;
   const loaderDepsFn = mod?.loaderDeps as

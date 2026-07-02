@@ -8,13 +8,13 @@
   "files": {
     "includes": [
       "**",
-      "!**/node_modules/**",
-      "!**/build/**",
-      "!**/_generated/**",
+      "!**/node_modules",
+      "!**/build",
+      "!**/_generated",
       "!**/route-types.gen.ts",
       "!pnpm-lock.yaml",
-      "!**/.tmp-*/**",
-      "!examples/*/src/client/**",
+      "!**/.tmp-*",
+      "!examples/*/src/client",
       "!examples/cms/app/styles.css"
     ]
   },

@@ -1,13 +1,13 @@
 // Runs against an in-memory SQLite DB (db.server.ts uses :memory: when
 // NODE_ENV=test, which `bun test` sets). Tests use random usernames/emails so
 // they don't collide with the seed admin or each other in the shared process.
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   createUser,
-  updateUser,
   findUserByEmail,
-  upsertOAuthUser,
   normalizeEmail,
+  updateUser,
+  upsertOAuthUser,
 } from "../models/users.server.ts";
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
@@ -60,7 +60,12 @@ test("updateUser refuses an email already taken by another user", async () => {
 
 test("upsertOAuthUser signs in an existing account and records the provider", async () => {
   const u = (await make()).user!;
-  const updated = upsertOAuthUser({ email: u.email!.toUpperCase(), name: "From Google", avatarUrl: "http://x/a.png", provider: "google" });
+  const updated = upsertOAuthUser({
+    email: u.email!.toUpperCase(),
+    name: "From Google",
+    avatarUrl: "http://x/a.png",
+    provider: "google",
+  });
   expect(updated?.id).toBe(u.id);
   expect(updated?.provider).toBe("google");
   expect(updated?.displayName).toBe("From Google");
@@ -68,6 +73,11 @@ test("upsertOAuthUser signs in an existing account and records the provider", as
 });
 
 test("upsertOAuthUser never auto-provisions an unknown email", () => {
-  const res = upsertOAuthUser({ email: `nope-${rnd()}@example.com`, name: "X", avatarUrl: null, provider: "microsoft" });
+  const res = upsertOAuthUser({
+    email: `nope-${rnd()}@example.com`,
+    name: "X",
+    avatarUrl: null,
+    provider: "microsoft",
+  });
   expect(res).toBeNull();
 });

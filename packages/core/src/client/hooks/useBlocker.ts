@@ -11,7 +11,9 @@ import { useEffect, useRef } from "react";
 export function useBlocker(shouldBlock: () => boolean): void {
   // Keep a stable ref so listeners always call the latest version.
   const shouldBlockRef = useRef(shouldBlock);
-  useEffect(() => { shouldBlockRef.current = shouldBlock; });
+  useEffect(() => {
+    shouldBlockRef.current = shouldBlock;
+  });
 
   // Intercept popstate (browser back/forward).
   useEffect(() => {
@@ -39,6 +41,8 @@ export function useBlocker(shouldBlock: () => boolean): void {
       }
       original(state, title, url);
     };
-    return () => { history.pushState = original; };
+    return () => {
+      history.pushState = original;
+    };
   }, []);
 }

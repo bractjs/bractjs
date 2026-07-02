@@ -9,10 +9,7 @@ import "./api/auth.ts"; // Google / Microsoft OAuth start + callback
 import "./api/media.ts"; // multipart upload endpoint for the drag/drop dropzone
 
 export function meta() {
-  return [
-    { title: "BractJS CMS" },
-    { name: "viewport", content: "width=device-width, initial-scale=1" },
-  ];
+  return [{ title: "BractJS CMS" }, { name: "viewport", content: "width=device-width, initial-scale=1" }];
 }
 
 // Sign-in screens render their own full-page AuthShell, so they're excluded
@@ -35,7 +32,13 @@ export default function Root() {
         <link rel="stylesheet" href="/public/styles.css" />
       </head>
       <body>
-        {adminChrome ? <AdminShell><Outlet /></AdminShell> : <Outlet />}
+        {adminChrome ? (
+          <AdminShell>
+            <Outlet />
+          </AdminShell>
+        ) : (
+          <Outlet />
+        )}
         <Toaster position="top-right" />
         <ScrollRestoration />
         <Scripts />

@@ -5,7 +5,7 @@
 // provider; the user table itself is the allowlist (see upsertOAuthUser), so an
 // arbitrary Google account can't become a CMS admin.
 
-import { google, microsoft, redirectUri, type OAuthProvider } from "./env.server.ts";
+import { google, microsoft, type OAuthProvider, redirectUri } from "./env.server.ts";
 
 export type { OAuthProvider } from "./env.server.ts";
 
@@ -88,21 +88,18 @@ async function exchangeGoogle(code: string): Promise<OAuthProfile> {
 }
 
 async function exchangeMicrosoft(code: string): Promise<OAuthProfile> {
-  const tokenRes = await fetch(
-    `https://login.microsoftonline.com/${microsoft.tenant}/oauth2/v2.0/token`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: microsoft.clientId!,
-        client_secret: microsoft.clientSecret!,
-        redirect_uri: redirectUri("microsoft"),
-        grant_type: "authorization_code",
-        scope: "openid email profile User.Read",
-      }),
-    },
-  );
+  const tokenRes = await fetch(`https://login.microsoftonline.com/${microsoft.tenant}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: microsoft.clientId!,
+      client_secret: microsoft.clientSecret!,
+      redirect_uri: redirectUri("microsoft"),
+      grant_type: "authorization_code",
+      scope: "openid email profile User.Read",
+    }),
+  });
   if (!tokenRes.ok) throw new Error(`Microsoft token exchange failed: ${await tokenRes.text()}`);
   const { access_token } = (await tokenRes.json()) as { access_token: string };
 

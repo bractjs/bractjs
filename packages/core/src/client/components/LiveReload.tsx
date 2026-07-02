@@ -1,4 +1,4 @@
-import { type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { hmrClientScript } from "../../dev/hmr-client.ts";
 import { isDevRuntime } from "../../server/env.ts";
 
@@ -21,9 +21,5 @@ export function LiveReload(): ReactElement | null {
   // build-time constant string with no user input. The NODE_ENV gate above
   // ensures this is never rendered in production. If hmrClientScript ever
   // accepts dynamic content, audit for XSS.
-  return (
-    <script
-      dangerouslySetInnerHTML={{ __html: hmrClientScript }}
-    />
-  );
+  return <script dangerouslySetInnerHTML={{ __html: hmrClientScript }} />;
 }

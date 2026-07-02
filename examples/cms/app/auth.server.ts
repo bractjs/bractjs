@@ -12,13 +12,19 @@
 // the second factor (or a successful OAuth sign-in). All three cookies are
 // HMAC-signed by createCookieSession, so a client can't forge the pending state.
 
-import { createCookieSession, redirect, HttpError } from "@bractjs/bractjs";
-import { findUserByUsername, getUserById, getUserSessionEpoch, verifyPassword, type User } from "./models/users.server.ts";
-import { userPermissions, userRoleNames } from "./models/rbac.server.ts";
+import { createCookieSession, HttpError, redirect } from "@bractjs/bractjs";
 import { IS_PROD, SESSION_SECRET } from "./env.server.ts";
-import { createRateLimiter } from "./ratelimit.server.ts";
-import type { Permission } from "./permissions.ts";
+import { userPermissions, userRoleNames } from "./models/rbac.server.ts";
+import {
+  findUserByUsername,
+  getUserById,
+  getUserSessionEpoch,
+  type User,
+  verifyPassword,
+} from "./models/users.server.ts";
 import type { OAuthProvider } from "./oauth.server.ts";
+import type { Permission } from "./permissions.ts";
+import { createRateLimiter } from "./ratelimit.server.ts";
 
 // SESSION_SECRET is validated in env.server.ts (boot fails in prod if it's weak).
 const secrets = [SESSION_SECRET];
@@ -36,7 +42,8 @@ const oauthState = createCookieSession({ name: "cms_oauth", maxAge: 10 * 60, ...
 // effect on the next request without re-login.
 export type AdminUser = User & { permissions: Permission[]; roleNames: string[] };
 
-export const can = (user: AdminUser, permission: Permission): boolean => user.permissions.includes(permission);
+export const can = (user: AdminUser, permission: Permission): boolean =>
+  user.permissions.includes(permission);
 
 /** Whether to show the seeded demo credentials on the login screen (dev only). */
 export const showSeedCredentials = (): boolean => !IS_PROD;

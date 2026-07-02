@@ -35,8 +35,8 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     title: "Loaders & actions",
     body: (
       <>
-        Each route's <code>loader</code> runs on GET; <code>action</code> handles POST and re-runs the
-        loader. <code>&lt;Form&gt;</code> wires the two together without a client fetch.
+        Each route's <code>loader</code> runs on GET; <code>action</code> handles POST and re-runs the loader.{" "}
+        <code>&lt;Form&gt;</code> wires the two together without a client fetch.
       </>
     ),
   },
@@ -44,8 +44,8 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     title: "Server-only data",
     body: (
       <>
-        The <code>bun:sqlite</code> store lives in <code>todos.server.ts</code>. The{" "}
-        <code>.server.ts</code> suffix makes importing it from client code a hard build error.
+        The <code>bun:sqlite</code> store lives in <code>todos.server.ts</code>. The <code>.server.ts</code>{" "}
+        suffix makes importing it from client code a hard build error.
       </>
     ),
   },
@@ -71,10 +71,9 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     title: "Typed API routes",
     body: (
       <>
-        <code>app/api/stats.ts</code> registers <code>GET /api/stats</code> with{" "}
-        <code>route()</code> — a typed JSON endpoint. Try{" "}
-        <code>curl localhost:3000/api/stats</code>. Mutating routes are CSRF-protected by default,
-        just like <code>&lt;Form&gt;</code>.
+        <code>app/api/stats.ts</code> registers <code>GET /api/stats</code> with <code>route()</code> — a
+        typed JSON endpoint. Try <code>curl localhost:3000/api/stats</code>. Mutating routes are
+        CSRF-protected by default, just like <code>&lt;Form&gt;</code>.
       </>
     ),
   },
@@ -82,9 +81,8 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     title: "Response headers",
     body: (
       <>
-        This page exports <code>headers()</code> to send{" "}
-        <code>Cache-Control: public, max-age=3600</code> — per-route control over caching, ETags, and
-        CDN hints.
+        This page exports <code>headers()</code> to send <code>Cache-Control: public, max-age=3600</code> —
+        per-route control over caching, ETags, and CDN hints.
       </>
     ),
   },
@@ -92,8 +90,8 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     title: "Single-binary deploy",
     body: (
       <>
-        <code>bun run compile</code> produces <code>./bin/todo-app</code>, a self-contained executable
-        via <code>bun build --compile</code>.
+        <code>bun run compile</code> produces <code>./bin/todo-app</code>, a self-contained executable via{" "}
+        <code>bun build --compile</code>.
       </>
     ),
   },
@@ -103,7 +101,11 @@ export default function About() {
   return (
     <main style={{ display: "grid", gap: "1rem" }}>
       <p style={{ margin: 0 }}>
-        <Link to="/" prefetch="hover" style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>
+        <Link
+          to="/"
+          prefetch="hover"
+          style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}
+        >
           ← Back to the board
         </Link>
       </p>

@@ -9,10 +9,10 @@
 // Authorization is the user table: upsertOAuthUser only signs in an account that
 // already exists with the provider's verified email — never auto-provisions one.
 
-import { route, redirect } from "@bractjs/bractjs";
-import { authorizeUrl, exchangeCode, isProviderConfigured, type OAuthProvider } from "../oauth.server.ts";
+import { redirect, route } from "@bractjs/bractjs";
+import { clearOAuthState, loginCookie, readOAuthState, setOAuthState } from "../auth.server.ts";
 import { upsertOAuthUser } from "../models/users.server.ts";
-import { loginCookie, setOAuthState, readOAuthState, clearOAuthState } from "../auth.server.ts";
+import { authorizeUrl, exchangeCode, isProviderConfigured, type OAuthProvider } from "../oauth.server.ts";
 
 async function start(provider: OAuthProvider): Promise<Response> {
   if (!isProviderConfigured(provider)) {
@@ -56,4 +56,6 @@ async function callback(provider: OAuthProvider, request: Request): Promise<Resp
 export const googleStart = route("GET", "/api/auth/google/start", () => start("google"));
 export const googleCallback = route("GET", "/api/auth/google/callback", (_i, req) => callback("google", req));
 export const microsoftStart = route("GET", "/api/auth/microsoft/start", () => start("microsoft"));
-export const microsoftCallback = route("GET", "/api/auth/microsoft/callback", (_i, req) => callback("microsoft", req));
+export const microsoftCallback = route("GET", "/api/auth/microsoft/callback", (_i, req) =>
+  callback("microsoft", req),
+);

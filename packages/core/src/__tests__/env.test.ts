@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { safeStringify, requireEnv } from "../server/env.ts";
+import { describe, expect, test } from "bun:test";
+import { requireEnv, safeStringify } from "../server/env.ts";
 
 describe("safeStringify", () => {
   test("serializes plain objects", () => {

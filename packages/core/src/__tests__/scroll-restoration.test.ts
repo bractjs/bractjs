@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  savePosition,
-  serializePositions,
   deserializePositions,
   MAX_SCROLL_ENTRIES,
+  savePosition,
+  serializePositions,
 } from "../client/scroll-restoration.ts";
 
 describe("savePosition", () => {
@@ -44,7 +44,10 @@ describe("savePosition", () => {
 
 describe("serialize/deserialize", () => {
   test("roundtrips entries", () => {
-    const map = new Map<string, number>([["a", 0], ["b", 1234.5]]);
+    const map = new Map<string, number>([
+      ["a", 0],
+      ["b", 1234.5],
+    ]);
     const restored = deserializePositions(serializePositions(map));
     expect(restored.get("a")).toBe(0);
     expect(restored.get("b")).toBe(1234.5);

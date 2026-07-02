@@ -6,13 +6,22 @@
 
 import { createCookieSession, json, redirect } from "@bractjs/bractjs";
 import { IS_PROD, SESSION_SECRET } from "./env.server.ts";
-import { firstMessage, type FormState } from "./form.ts";
+import { type FormState, firstMessage } from "./form.ts";
 
 export type FlashType = "success" | "error" | "info" | "warning";
-export interface Flash { type: FlashType; message: string }
+export interface Flash {
+  type: FlashType;
+  message: string;
+}
 
 const secrets = [SESSION_SECRET];
-const flash = createCookieSession({ name: "cms_flash", maxAge: 60, secrets, secure: IS_PROD, sameSite: "Lax" });
+const flash = createCookieSession({
+  name: "cms_flash",
+  maxAge: 60,
+  secrets,
+  secure: IS_PROD,
+  sameSite: "Lax",
+});
 
 /** Set-Cookie carrying a one-shot toast to the next page — attach it to a redirect. */
 export async function flashCookie(message: string, type: FlashType = "success"): Promise<string> {
@@ -34,7 +43,11 @@ export async function readFlash(request: Request): Promise<Flash | null> {
 export const FLASH_CLEAR = "cms_flash=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
 
 /** Redirect after a successful mutation, popping a one-shot success toast. */
-export async function flashRedirect(to: string, message: string, type: FlashType = "success"): Promise<Response> {
+export async function flashRedirect(
+  to: string,
+  message: string,
+  type: FlashType = "success",
+): Promise<Response> {
   return redirect(to, 303, { "Set-Cookie": await flashCookie(message, type) });
 }
 
@@ -46,7 +59,11 @@ export async function flashRedirect(to: string, message: string, type: FlashType
  * instead make the client follow it into a full-document GET, whose layout
  * `headers()` clears the flash before the soft-nav revalidation can read it.
  */
-export async function flashStay(message: string, type: FlashType = "success", data: unknown = {}): Promise<Response> {
+export async function flashStay(
+  message: string,
+  type: FlashType = "success",
+  data: unknown = {},
+): Promise<Response> {
   return json(data, { headers: { "Set-Cookie": await flashCookie(message, type) } });
 }
 

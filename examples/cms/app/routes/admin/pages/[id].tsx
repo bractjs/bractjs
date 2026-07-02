@@ -1,21 +1,36 @@
-import { Form, Link, useActionData, useLoaderData } from "@bractjs/bractjs";
-import { HttpError, validate } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
+import { Form, HttpError, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
-import { deletePage, getPage, pageDescendantIds, pageFullPath, pageTreeFlat, updatePage, type Page, type PageNode } from "../../../models/pages.server.ts";
-import { listMedia, type Media } from "../../../models/media.server.ts";
-import { loadEntityFields, saveEntityFields, type EntityFieldsData } from "../../../models/fields.server.ts";
-import { sanitizeHtml } from "../../../sanitize.ts";
-import { PageSchema, type PageInput } from "../../../validation.ts";
-import { fromValidationError, type FormState } from "../../../form.ts";
-import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { PageForm } from "../../../components/PageForm.tsx";
+import { flashFail, flashRedirect } from "../../../flash.server.ts";
+import { type FormState, fromValidationError } from "../../../form.ts";
+import { type EntityFieldsData, loadEntityFields, saveEntityFields } from "../../../models/fields.server.ts";
+import { listMedia, type Media } from "../../../models/media.server.ts";
+import {
+  deletePage,
+  getPage,
+  type Page,
+  type PageNode,
+  pageDescendantIds,
+  pageFullPath,
+  pageTreeFlat,
+  updatePage,
+} from "../../../models/pages.server.ts";
+import { sanitizeHtml } from "../../../sanitize.ts";
 import { Badge, dangerButton, ghostButton } from "../../../ui.tsx";
+import { type PageInput, PageSchema } from "../../../validation.ts";
 
 // `blocked` is an ARRAY, not a Set: loader data is JSON-serialized into the
 // client bootstrap, and a Set serializes to `{}` (so `.has` is undefined and the
 // component crashes on hydration). Arrays round-trip; use `.includes()`.
-type Data = { page: Page; parents: PageNode[]; blocked: string[]; media: Media[]; fullPath: string; customFields: EntityFieldsData };
+type Data = {
+  page: Page;
+  parents: PageNode[];
+  blocked: string[];
+  media: Media[];
+  fullPath: string;
+  customFields: EntityFieldsData;
+};
 
 export async function loader({ request, params }: LoaderArgs): Promise<Data> {
   await requirePermission(request, "pages.manage");
@@ -58,7 +73,9 @@ export function ErrorBoundary({ error }: { error: unknown }) {
     <div className="admin-panel">
       <h1 style={{ marginTop: 0 }}>Page not found</h1>
       <p style={{ color: "var(--muted)" }}>{msg}</p>
-      <Link to="/admin/pages" style={{ color: "var(--accent)", fontWeight: 600 }}>← Back to pages</Link>
+      <Link to="/admin/pages" style={{ color: "var(--accent)", fontWeight: 600 }}>
+        ← Back to pages
+      </Link>
     </div>
   );
 }
@@ -78,8 +95,17 @@ export default function EditPage() {
           <Badge tone={page.status === "published" ? "published" : "draft"}>{page.status}</Badge>
         </div>
         <div className="toolbar">
-          {page.status === "published" ? <Link to={fullPath} className={ghostButton}>View ↗</Link> : null}
-          <Link to="/admin/pages" style={{ color: "var(--accent)", textDecoration: "none", alignSelf: "center" }}>← All pages</Link>
+          {page.status === "published" ? (
+            <Link to={fullPath} className={ghostButton}>
+              View ↗
+            </Link>
+          ) : null}
+          <Link
+            to="/admin/pages"
+            style={{ color: "var(--accent)", textDecoration: "none", alignSelf: "center" }}
+          >
+            ← All pages
+          </Link>
         </div>
       </div>
       <PageForm
@@ -92,7 +118,9 @@ export default function EditPage() {
       />
       <Form method="post" style={{ marginTop: "1rem" }}>
         <input type="hidden" name="intent" value="delete" />
-        <button type="submit" className={dangerButton}>Delete page</button>
+        <button type="submit" className={dangerButton}>
+          Delete page
+        </button>
       </Form>
     </>
   );

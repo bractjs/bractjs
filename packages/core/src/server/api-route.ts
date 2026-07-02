@@ -1,5 +1,5 @@
+import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
 import { isExplicitDev } from "./env.ts";
-import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
 import { hasForbiddenKey } from "./proto-guard.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -31,12 +31,7 @@ export interface ApiRouteOptions {
   csrf?: boolean;
 }
 
-export interface ApiRouteDefinition<
-  TMethod extends HttpMethod,
-  TPath extends string,
-  TInput,
-  TOutput,
-> {
+export interface ApiRouteDefinition<TMethod extends HttpMethod, TPath extends string, TInput, TOutput> {
   method: TMethod;
   path: TPath;
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>;
@@ -69,12 +64,7 @@ export function clearApiRoutes(): void {
  * credential-free endpoint (e.g. a webhook):
  *   bract.route("POST", "/api/webhook", handler, { csrf: false });
  */
-export function route<
-  TMethod extends HttpMethod,
-  TPath extends string,
-  TInput,
-  TOutput,
->(
+export function route<TMethod extends HttpMethod, TPath extends string, TInput, TOutput>(
   method: TMethod,
   path: TPath,
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>,
@@ -112,7 +102,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       return csrfForbiddenResponse();
     }
 
-    let input: unknown = undefined;
+    let input: unknown;
     if (request.method !== "GET" && request.method !== "DELETE") {
       // Trust an advertised Content-Length up front so oversized payloads
       // are rejected before we buffer them.
@@ -156,7 +146,9 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       // Dev mode keeps the message for DX; prod returns a generic 500.
       console.error("[bractjs] api route error:", err);
       const msg = isExplicitDev()
-        ? (err instanceof Error ? err.message : String(err))
+        ? err instanceof Error
+          ? err.message
+          : String(err)
         : "Internal Server Error";
       return Response.json({ error: msg }, { status: 500 });
     }
@@ -178,6 +170,7 @@ function pathMatches(pattern: string, pathname: string): boolean {
 // ── AppRoutes type extraction ─────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AppApiRoutes = (typeof routeRegistry)[number] extends ApiRouteDefinition<infer M, infer P, infer I, infer O>
-  ? { method: M; path: P; input: I; output: O }
-  : never;
+export type AppApiRoutes =
+  (typeof routeRegistry)[number] extends ApiRouteDefinition<infer M, infer P, infer I, infer O>
+    ? { method: M; path: P; input: I; output: O }
+    : never;

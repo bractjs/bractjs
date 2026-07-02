@@ -52,7 +52,9 @@ const forbidden = [...files].filter(
   (f) => f.includes("_generated/") || f.includes("__tests__/") || f.endsWith(".env"),
 );
 if (forbidden.length > 0) {
-  console.error(`[verify-pack] tarball contains files that must not publish:\n  - ${forbidden.join("\n  - ")}`);
+  console.error(
+    `[verify-pack] tarball contains files that must not publish:\n  - ${forbidden.join("\n  - ")}`,
+  );
   process.exit(1);
 }
 

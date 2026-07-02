@@ -1,9 +1,8 @@
-import { Image, Link, useLoaderData } from "@bractjs/bractjs";
-import { HttpError } from "@bractjs/bractjs";
 import type { LoaderArgs, MetaArgs } from "@bractjs/bractjs";
-import { childPages, getPageByPath, pageAncestors, pageFullPath, type Page } from "../models/pages.server.ts";
+import { HttpError, Image, Link, useLoaderData } from "@bractjs/bractjs";
 import { getMedia, type Media } from "../models/media.server.ts";
-import { resolvedMenu, type ResolvedMenu } from "../models/menus.server.ts";
+import { type ResolvedMenu, resolvedMenu } from "../models/menus.server.ts";
+import { childPages, getPageByPath, type Page, pageAncestors, pageFullPath } from "../models/pages.server.ts";
 import { Breadcrumb, SiteFrame } from "../ui.tsx";
 
 type Crumb = { label: string; href: string };
@@ -45,7 +44,11 @@ export function ErrorBoundary({ error }: { error: unknown }) {
     <SiteFrame>
       <h1 className="prose">Page not found</h1>
       <p style={{ color: "var(--muted)" }}>{msg}</p>
-      <p><Link to="/" style={{ color: "var(--accent)" }}>← Home</Link></p>
+      <p>
+        <Link to="/" style={{ color: "var(--accent)" }}>
+          ← Home
+        </Link>
+      </p>
     </SiteFrame>
   );
 }
@@ -54,19 +57,53 @@ export default function PageView() {
   const { page, featured, crumbs = [], children = [], header, footer } = useLoaderData<Data>();
   return (
     <SiteFrame header={header} footer={footer}>
-      <Breadcrumb items={[{ label: "Home", to: "/" }, ...crumbs.map((c) => ({ label: c.label, to: c.href })), { label: page.title }]} />
+      <Breadcrumb
+        items={[
+          { label: "Home", to: "/" },
+          ...crumbs.map((c) => ({ label: c.label, to: c.href })),
+          { label: page.title },
+        ]}
+      />
       <article>
-        <h1 style={{ fontFamily: "var(--display)", fontSize: "clamp(2rem, 4vw, 2.8rem)", lineHeight: 1.1, margin: "0 0 1rem" }}>{page.title}</h1>
+        <h1
+          style={{
+            fontFamily: "var(--display)",
+            fontSize: "clamp(2rem, 4vw, 2.8rem)",
+            lineHeight: 1.1,
+            margin: "0 0 1rem",
+          }}
+        >
+          {page.title}
+        </h1>
         {featured ? (
-          <Image src={featured.url} alt={featured.alt} width={900} height={420} priority style={{ width: "100%", height: "auto", borderRadius: "12px", marginBottom: "1.4rem", objectFit: "cover" }} />
+          <Image
+            src={featured.url}
+            alt={featured.alt}
+            width={900}
+            height={420}
+            priority
+            style={{
+              width: "100%",
+              height: "auto",
+              borderRadius: "12px",
+              marginBottom: "1.4rem",
+              objectFit: "cover",
+            }}
+          />
         ) : null}
         <div className="prose" dangerouslySetInnerHTML={{ __html: page.body }} />
         {children.length > 0 ? (
           <nav style={{ marginTop: "2rem", borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
-            <h2 className="prose" style={{ fontSize: "1.1rem" }}>In this section</h2>
+            <h2 className="prose" style={{ fontSize: "1.1rem" }}>
+              In this section
+            </h2>
             <ul>
               {children.map((c) => (
-                <li key={c.href}><Link to={c.href} style={{ color: "var(--accent)" }}>{c.title}</Link></li>
+                <li key={c.href}>
+                  <Link to={c.href} style={{ color: "var(--accent)" }}>
+                    {c.title}
+                  </Link>
+                </li>
               ))}
             </ul>
           </nav>

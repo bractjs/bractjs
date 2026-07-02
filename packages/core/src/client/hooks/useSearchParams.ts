@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useRef, startTransition } from "react";
-import { NavigationContext } from "../router.tsx";
-import { useContext } from "react";
+import { startTransition, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { SearchFor } from "../registry.ts";
+import { NavigationContext } from "../router.tsx";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,7 +36,9 @@ export interface SearchParamsResult<T extends Record<string, string>> {
 // Overload 1: a route literal → search shape resolved from the registry.
 export function useSearchParams<TTo extends string>(): SearchParamsResult<SearchFor<TTo>>;
 // Overload 2: an explicit object shape (back-compat with the old generic form).
-export function useSearchParams<T extends Record<string, string> = Record<string, string>>(): SearchParamsResult<T>;
+export function useSearchParams<
+  T extends Record<string, string> = Record<string, string>,
+>(): SearchParamsResult<T>;
 export function useSearchParams(): SearchParamsResult<Record<string, string>> {
   const navCtx = useContext(NavigationContext);
 
@@ -60,30 +61,36 @@ export function useSearchParams(): SearchParamsResult<Record<string, string>> {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const setSearchParams: SetSearchParams = useCallback((updater) => {
-    const next =
-      typeof updater === "function"
-        ? updater(new URLSearchParams(window.location.search))
-        : new URLSearchParams(updater);
+  const setSearchParams: SetSearchParams = useCallback(
+    (updater) => {
+      const next =
+        typeof updater === "function"
+          ? updater(new URLSearchParams(window.location.search))
+          : new URLSearchParams(updater);
 
-    const newSearch = next.toString();
-    const newUrl = window.location.pathname + (newSearch ? "?" + newSearch : "") + window.location.hash;
+      const newSearch = next.toString();
+      const newUrl = window.location.pathname + (newSearch ? "?" + newSearch : "") + window.location.hash;
 
-    // Update browser URL without pushing a new history entry if only params changed.
-    history.pushState({}, "", newUrl);
-    selfTriggerRef.current = true;
-    startTransition(() => setSearchParamsState(next));
+      // Update browser URL without pushing a new history entry if only params changed.
+      history.pushState({}, "", newUrl);
+      selfTriggerRef.current = true;
+      startTransition(() => setSearchParamsState(next));
 
-    // Trigger a loader re-run via the NavigationContext navigate so the full
-    // soft-nav fetch path is exercised (meta update, module swap, etc.).
-    if (navCtx) {
-      void navCtx.navigate(window.location.pathname + (newSearch ? "?" + newSearch : ""));
-    }
-  }, [navCtx]);
+      // Trigger a loader re-run via the NavigationContext navigate so the full
+      // soft-nav fetch path is exercised (meta update, module swap, etc.).
+      if (navCtx) {
+        void navCtx.navigate(window.location.pathname + (newSearch ? "?" + newSearch : ""));
+      }
+    },
+    [navCtx],
+  );
 
-  const getParam = useCallback((key: string): string | null => {
-    return searchParams.get(key);
-  }, [searchParams]);
+  const getParam = useCallback(
+    (key: string): string | null => {
+      return searchParams.get(key);
+    },
+    [searchParams],
+  );
 
   return { searchParams, getParam, setSearchParams };
 }

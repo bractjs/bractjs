@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { hasClientDirective, extractExports } from "../build/directives.ts";
+import { extractExports, hasClientDirective } from "../build/directives.ts";
 
 /**
  * Runtime stubbing of `"use client"` modules during SSR, for the source-import
@@ -43,7 +43,13 @@ export function installUseClientServerStub(appDir = "./app"): void {
     setup(build) {
       build.onLoad({ filter }, async ({ path }) => {
         const src = await Bun.file(path).text();
-        const loader = path.endsWith(".tsx") ? "tsx" : path.endsWith(".jsx") ? "jsx" : path.endsWith(".ts") ? "ts" : "js";
+        const loader = path.endsWith(".tsx")
+          ? "tsx"
+          : path.endsWith(".jsx")
+            ? "jsx"
+            : path.endsWith(".ts")
+              ? "ts"
+              : "js";
         if (!hasClientDirective(src)) {
           // Runtime onLoad must return an object; pass app source through. Bun
           // transpiles app TS/TSX anyway, so this is a no-op in practice.

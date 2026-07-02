@@ -4,9 +4,7 @@
 // BractJS's validate() accepts. In a real app you'd swap in Zod.
 
 export type Issue = { path: string[]; message: string };
-export type SafeParseResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: { issues: Issue[] } };
+export type SafeParseResult<T> = { success: true; data: T } | { success: false; error: { issues: Issue[] } };
 
 export interface SchemaLike<T> {
   safeParse(input: unknown): SafeParseResult<T>;
@@ -26,7 +24,16 @@ export function slugify(s: string): string {
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const RESERVED_SLUGS = new Set([
-  "posts", "category", "admin", "api", "_data", "_action", "_image", "_stream", "public", "build",
+  "posts",
+  "category",
+  "admin",
+  "api",
+  "_data",
+  "_action",
+  "_image",
+  "_stream",
+  "public",
+  "build",
 ]);
 
 type R = Record<string, unknown>;
@@ -39,13 +46,15 @@ function parseSeo(o: R, issues: Issue[]): SeoFields {
   const seoTitle = trimmed(o, "seoTitle");
   const seoDescription = trimmed(o, "seoDescription");
   if (seoTitle.length > 70) issues.push({ path: ["seoTitle"], message: "SEO title is too long (max 70)." });
-  if (seoDescription.length > 200) issues.push({ path: ["seoDescription"], message: "SEO description is too long (max 200)." });
+  if (seoDescription.length > 200)
+    issues.push({ path: ["seoDescription"], message: "SEO description is too long (max 200)." });
   return { seoTitle, seoDescription };
 }
 
 function makeSlugIssue(value: string, field = "slug"): Issue | null {
   if (value.length === 0) return { path: [field], message: "Slug is required." };
-  if (!SLUG_RE.test(value)) return { path: [field], message: "Use lowercase letters, numbers and hyphens only." };
+  if (!SLUG_RE.test(value))
+    return { path: [field], message: "Use lowercase letters, numbers and hyphens only." };
   if (RESERVED_SLUGS.has(value)) return { path: [field], message: `"${value}" is reserved.` };
   return null;
 }
@@ -63,7 +72,9 @@ export const LoginSchema: SchemaLike<LoginInput> = {
     const password = str(o, "password");
     if (!username) issues.push({ path: ["username"], message: "Username is required." });
     if (!password) issues.push({ path: ["password"], message: "Password is required." });
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { username, password } };
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { username, password } };
   },
 };
 
@@ -79,7 +90,12 @@ export const CodeSchema: SchemaLike<CodeInput> = {
   },
 };
 
-export type CategoryInput = { name: string; slug: string; description: string; parentId: string | null } & SeoFields;
+export type CategoryInput = {
+  name: string;
+  slug: string;
+  description: string;
+  parentId: string | null;
+} & SeoFields;
 export const CategorySchema: SchemaLike<CategoryInput> = {
   safeParse(input) {
     const o = (input ?? {}) as R;
@@ -94,13 +110,20 @@ export const CategorySchema: SchemaLike<CategoryInput> = {
     if (s) issues.push(s);
     if (description.length > 500) issues.push({ path: ["description"], message: "Description is too long." });
     const seo = parseSeo(o, issues);
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { name, slug, description, parentId, ...seo } };
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { name, slug, description, parentId, ...seo } };
   },
 };
 
 export type PostInput = {
-  title: string; slug: string; body: string; excerpt: string;
-  status: "draft" | "published"; categoryId: string | null; featuredMediaId: string | null;
+  title: string;
+  slug: string;
+  body: string;
+  excerpt: string;
+  status: "draft" | "published";
+  categoryId: string | null;
+  featuredMediaId: string | null;
 } & SeoFields;
 export const PostSchema: SchemaLike<PostInput> = {
   safeParse(input) {
@@ -126,8 +149,13 @@ export const PostSchema: SchemaLike<PostInput> = {
 };
 
 export type PageInput = {
-  title: string; slug: string; body: string; status: "draft" | "published";
-  parentId: string | null; featuredMediaId: string | null; menuOrder: number;
+  title: string;
+  slug: string;
+  body: string;
+  status: "draft" | "published";
+  parentId: string | null;
+  featuredMediaId: string | null;
+  menuOrder: number;
 } & SeoFields;
 export const PageSchema: SchemaLike<PageInput> = {
   safeParse(input) {
@@ -164,7 +192,9 @@ export const MediaSchema: SchemaLike<MediaInput> = {
     if (title.length > 200) issues.push({ path: ["title"], message: "Title is too long." });
     if (caption.length > 300) issues.push({ path: ["caption"], message: "Caption is too long." });
     if (description.length > 500) issues.push({ path: ["description"], message: "Description is too long." });
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { alt, title, caption, description } };
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { alt, title, caption, description } };
   },
 };
 
@@ -177,13 +207,18 @@ export const MenuSchema: SchemaLike<MenuInput> = {
     const location = str(o, "location") === "footer" ? "footer" : "header";
     if (!name) issues.push({ path: ["name"], message: "Name is required." });
     if (name.length > 80) issues.push({ path: ["name"], message: "Name is too long." });
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { name, location } };
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { name, location } };
   },
 };
 
 export type MenuItemInput = {
-  label: string; type: "page" | "category" | "custom";
-  pageId: string | null; categoryId: string | null; url: string | null;
+  label: string;
+  type: "page" | "category" | "custom";
+  pageId: string | null;
+  categoryId: string | null;
+  url: string | null;
 };
 export const MenuItemSchema: SchemaLike<MenuItemInput> = {
   safeParse(input) {
@@ -197,9 +232,12 @@ export const MenuItemSchema: SchemaLike<MenuItemInput> = {
     const url = trimmed(o, "url") || null;
     if (!label) issues.push({ path: ["label"], message: "Label is required." });
     if (type === "page" && !pageId) issues.push({ path: ["pageId"], message: "Pick a page." });
-    if (type === "category" && !categoryId) issues.push({ path: ["categoryId"], message: "Pick a category." });
+    if (type === "category" && !categoryId)
+      issues.push({ path: ["categoryId"], message: "Pick a category." });
     if (type === "custom" && !url) issues.push({ path: ["url"], message: "Enter a URL." });
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { label, type, pageId, categoryId, url } };
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { label, type, pageId, categoryId, url } };
   },
 };
 
@@ -217,25 +255,40 @@ export const FieldGroupSchema: SchemaLike<FieldGroupInput> = {
     const o = (input ?? {}) as R;
     const issues: Issue[] = [];
     const name = trimmed(o, "name");
-    const target = FIELD_TARGETS.includes(str(o, "target") as never) ? (str(o, "target") as FieldGroupInput["target"]) : "post";
+    const target = FIELD_TARGETS.includes(str(o, "target") as never)
+      ? (str(o, "target") as FieldGroupInput["target"])
+      : "post";
     if (!name) issues.push({ path: ["name"], message: "Name is required." });
     if (name.length > 80) issues.push({ path: ["name"], message: "Name is too long." });
     return issues.length ? { success: false, error: { issues } } : { success: true, data: { name, target } };
   },
 };
 
-export type FieldInput = { label: string; name: string; type: (typeof FIELD_KINDS)[number]; repeatable: boolean };
+export type FieldInput = {
+  label: string;
+  name: string;
+  type: (typeof FIELD_KINDS)[number];
+  repeatable: boolean;
+};
 export const FieldSchema: SchemaLike<FieldInput> = {
   safeParse(input) {
     const o = (input ?? {}) as R;
     const issues: Issue[] = [];
     const label = trimmed(o, "label");
     const name = (trimmed(o, "name") || slugify(label)).replace(/-/g, "_");
-    const type = FIELD_KINDS.includes(str(o, "type") as never) ? (str(o, "type") as FieldInput["type"]) : "text";
+    const type = FIELD_KINDS.includes(str(o, "type") as never)
+      ? (str(o, "type") as FieldInput["type"])
+      : "text";
     const repeatable = str(o, "repeatable") === "on" || str(o, "repeatable") === "true";
     if (!label) issues.push({ path: ["label"], message: "Label is required." });
-    if (!KEY_RE.test(name)) issues.push({ path: ["name"], message: "Key must start with a letter; use lowercase letters, numbers, underscores." });
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { label, name, type, repeatable } };
+    if (!KEY_RE.test(name))
+      issues.push({
+        path: ["name"],
+        message: "Key must start with a letter; use lowercase letters, numbers, underscores.",
+      });
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { label, name, type, repeatable } };
   },
 };
 
@@ -249,14 +302,22 @@ function namedSchema(maxName = 80): SchemaLike<NamedInput> {
       const description = trimmed(o, "description");
       if (!name) issues.push({ path: ["name"], message: "Name is required." });
       if (name.length > maxName) issues.push({ path: ["name"], message: "Name is too long." });
-      return issues.length ? { success: false, error: { issues } } : { success: true, data: { name, description } };
+      return issues.length
+        ? { success: false, error: { issues } }
+        : { success: true, data: { name, description } };
     },
   };
 }
 export const RoleSchema = namedSchema();
 export const GroupSchema = namedSchema();
 
-export type UserInput = { username: string; displayName: string; email: string; role: string; password: string };
+export type UserInput = {
+  username: string;
+  displayName: string;
+  email: string;
+  role: string;
+  password: string;
+};
 export const UserCreateSchema: SchemaLike<UserInput> = {
   safeParse(input) {
     const o = (input ?? {}) as R;
@@ -268,9 +329,13 @@ export const UserCreateSchema: SchemaLike<UserInput> = {
     const password = str(o, "password");
     if (!username) issues.push({ path: ["username"], message: "Username is required." });
     if (username.length > 64) issues.push({ path: ["username"], message: "Username is too long." });
-    if (!EMAIL_RE.test(email)) issues.push({ path: ["email"], message: "Enter a valid email (used for the 2FA code)." });
-    if (password.length < 6) issues.push({ path: ["password"], message: "Password must be at least 6 characters." });
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { username, displayName, email, role, password } };
+    if (!EMAIL_RE.test(email))
+      issues.push({ path: ["email"], message: "Enter a valid email (used for the 2FA code)." });
+    if (password.length < 6)
+      issues.push({ path: ["password"], message: "Password must be at least 6 characters." });
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { username, displayName, email, role, password } };
   },
 };
 
@@ -283,8 +348,12 @@ export const UserEditSchema: SchemaLike<UserEditInput> = {
     const email = trimmed(o, "email").toLowerCase();
     const password = str(o, "password");
     if (!displayName) issues.push({ path: ["displayName"], message: "Display name is required." });
-    if (!EMAIL_RE.test(email)) issues.push({ path: ["email"], message: "Enter a valid email (used for the 2FA code)." });
-    if (password.length > 0 && password.length < 6) issues.push({ path: ["password"], message: "Password must be at least 6 characters." });
-    return issues.length ? { success: false, error: { issues } } : { success: true, data: { displayName, email, password } };
+    if (!EMAIL_RE.test(email))
+      issues.push({ path: ["email"], message: "Enter a valid email (used for the 2FA code)." });
+    if (password.length > 0 && password.length < 6)
+      issues.push({ path: ["password"], message: "Password must be at least 6 characters." });
+    return issues.length
+      ? { success: false, error: { issues } }
+      : { success: true, data: { displayName, email, password } };
   },
 };

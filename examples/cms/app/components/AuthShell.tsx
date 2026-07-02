@@ -1,8 +1,16 @@
-import type { ReactNode } from "react";
 import { Newspaper } from "lucide-react";
+import type { ReactNode } from "react";
 
 /** Centered card chrome shared by the two sign-in steps. */
-export function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+export function AuthShell({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
   return (
     <div className="grid min-h-screen place-items-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">

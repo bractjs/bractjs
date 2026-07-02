@@ -38,10 +38,19 @@ export function insertMedia(input: {
   return getMedia(id)!;
 }
 
-export function updateMedia(id: string, input: { alt: string; title: string; caption: string; description: string }): boolean {
-  return db.run("UPDATE media SET alt = ?, title = ?, caption = ?, description = ? WHERE id = ?", [
-    input.alt, input.title, input.caption, input.description, id,
-  ]).changes > 0;
+export function updateMedia(
+  id: string,
+  input: { alt: string; title: string; caption: string; description: string },
+): boolean {
+  return (
+    db.run("UPDATE media SET alt = ?, title = ?, caption = ?, description = ? WHERE id = ?", [
+      input.alt,
+      input.title,
+      input.caption,
+      input.description,
+      id,
+    ]).changes > 0
+  );
 }
 
 export type MediaRefs = { posts: number; pages: number; menuItems: number; total: number };

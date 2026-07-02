@@ -1,7 +1,7 @@
-import { test, expect, describe } from "bun:test";
-import { buildMatches } from "../server/matches.ts";
+import { describe, expect, test } from "bun:test";
 import type { LayoutChain } from "../server/layout.ts";
 import type { LoaderResults } from "../server/loader.ts";
+import { buildMatches } from "../server/matches.ts";
 
 describe("buildMatches", () => {
   test("returns root → layouts → route in order with ids and data", () => {
@@ -15,11 +15,7 @@ describe("buildMatches", () => {
 
     const matches = buildMatches(chain, data, { id: "7" }, "/blog/7");
 
-    expect(matches.map((m) => m.id)).toEqual([
-      "root.tsx",
-      "routes/blog/layout.tsx",
-      "routes/blog/[id].tsx",
-    ]);
+    expect(matches.map((m) => m.id)).toEqual(["root.tsx", "routes/blog/layout.tsx", "routes/blog/[id].tsx"]);
     expect(matches.map((m) => m.handle?.breadcrumb)).toEqual(["Home", "Blog", "Post"]);
     expect(matches[2].data).toEqual({ id: "7" });
     expect(matches[1].data).toEqual({ posts: 2 });

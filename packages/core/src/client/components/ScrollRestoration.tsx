@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { useLocation } from "../hooks/useLocation.ts";
 import type { RouterLocation } from "../../shared/route-types.ts";
+import { useLocation } from "../hooks/useLocation.ts";
 import {
+  deserializePositions,
   SCROLL_STORAGE_KEY,
   savePosition,
   serializePositions,
-  deserializePositions,
 } from "../scroll-restoration.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -41,7 +41,9 @@ export function ScrollRestoration({ getKey, storageKey = SCROLL_STORAGE_KEY }: S
   const location = useLocation();
 
   const getKeyRef = useRef(getKey);
-  useEffect(() => { getKeyRef.current = getKey; });
+  useEffect(() => {
+    getKeyRef.current = getKey;
+  });
 
   // Lazily hydrated from sessionStorage on first access — the restore layout
   // effect runs before mount effects, so eager hydration would come too late.

@@ -1,9 +1,17 @@
 import {
-  createElement, useCallback, useEffect, useId, useMemo, useSyncExternalStore,
-  type FormEvent, type FormHTMLAttributes, type FunctionComponent, type ReactNode,
+  createElement,
+  type FormEvent,
+  type FormHTMLAttributes,
+  type FunctionComponent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useSyncExternalStore,
 } from "react";
+import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
 import { toSamePath } from "../nav-utils.ts";
-import { fetcherStore, type FetcherState } from "../fetcher-store.ts";
 import { triggerRevalidation } from "../revalidation.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -120,77 +128,90 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
     return () => fetcherStore.remove(key);
   }, [key, isKeyed]);
 
-  const load = useCallback(async (path: string): Promise<void> => {
-    fetcherStore.update(key, { state: "loading" });
-    try {
-      const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
-      const json = (await res.json()) as { route?: unknown };
-      fetcherStore.update(key, { data: json.route });
-    } finally {
-      fetcherStore.update(key, { state: "idle" });
-    }
-  }, [key]);
-
-  const submit = useCallback(async (path: string, submitOpts: SubmitOptions): Promise<void> => {
-    const body =
-      submitOpts.body instanceof FormData
-        ? submitOpts.body
-        : new URLSearchParams(submitOpts.body as Record<string, string>);
-    const formMethod = submitOpts.method.toUpperCase();
-    // Expose the submission BEFORE the fetch — this is what optimistic UI
-    // renders while the mutation is in flight.
-    fetcherStore.update(key, {
-      state: "submitting",
-      formData: submitOpts.body instanceof FormData ? submitOpts.body : undefined,
-      formMethod,
-    });
-    try {
-      // Send the custom header so the server's CSRF gate accepts this
-      // same-origin mutation (browsers block it cross-origin without a CORS
-      // preflight). Without it every fetcher submit 403s.
-      const res = await fetch(path, {
-        method: formMethod,
-        body,
-        headers: { "X-BractJS-Action": "1" },
-      });
-      // If the action redirected, do a real navigation rather than parsing the
-      // redirect target as JSON. Off-origin targets get a full-page nav so we
-      // never follow an attacker-controlled Location inside the SPA.
-      if (res.redirected) {
-        const to = toSamePath(res.url);
-        window.location.assign(to ?? res.url);
-        return;
-      }
-      fetcherStore.update(key, { data: await res.json() });
-      // Mutations invalidate loader data — re-run the active route's loaders
-      // (gated by its shouldRevalidate) so the page reflects the change.
+  const load = useCallback(
+    async (path: string): Promise<void> => {
       fetcherStore.update(key, { state: "loading" });
-      await triggerRevalidation({ formMethod, actionStatus: res.status });
-    } finally {
-      fetcherStore.update(key, { state: "idle", formData: undefined });
-    }
-  }, [key]);
+      try {
+        const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+        const json = (await res.json()) as { route?: unknown };
+        fetcherStore.update(key, { data: json.route });
+      } finally {
+        fetcherStore.update(key, { state: "idle" });
+      }
+    },
+    [key],
+  );
+
+  const submit = useCallback(
+    async (path: string, submitOpts: SubmitOptions): Promise<void> => {
+      const body =
+        submitOpts.body instanceof FormData
+          ? submitOpts.body
+          : new URLSearchParams(submitOpts.body as Record<string, string>);
+      const formMethod = submitOpts.method.toUpperCase();
+      // Expose the submission BEFORE the fetch — this is what optimistic UI
+      // renders while the mutation is in flight.
+      fetcherStore.update(key, {
+        state: "submitting",
+        formData: submitOpts.body instanceof FormData ? submitOpts.body : undefined,
+        formMethod,
+      });
+      try {
+        // Send the custom header so the server's CSRF gate accepts this
+        // same-origin mutation (browsers block it cross-origin without a CORS
+        // preflight). Without it every fetcher submit 403s.
+        const res = await fetch(path, {
+          method: formMethod,
+          body,
+          headers: { "X-BractJS-Action": "1" },
+        });
+        // If the action redirected, do a real navigation rather than parsing the
+        // redirect target as JSON. Off-origin targets get a full-page nav so we
+        // never follow an attacker-controlled Location inside the SPA.
+        if (res.redirected) {
+          const to = toSamePath(res.url);
+          window.location.assign(to ?? res.url);
+          return;
+        }
+        fetcherStore.update(key, { data: await res.json() });
+        // Mutations invalidate loader data — re-run the active route's loaders
+        // (gated by its shouldRevalidate) so the page reflects the change.
+        fetcherStore.update(key, { state: "loading" });
+        await triggerRevalidation({ formMethod, actionStatus: res.status });
+      } finally {
+        fetcherStore.update(key, { state: "idle", formData: undefined });
+      }
+    },
+    [key],
+  );
 
   // Stable component identity across renders (remounting a form on every
   // render would drop focus/IME state).
   const FetcherForm = useMemo<FunctionComponent<FetcherFormProps>>(() => {
-    return function FetcherFormImpl({ method = "post", action, intent, children, ...rest }: FetcherFormProps) {
+    return function FetcherFormImpl({
+      method = "post",
+      action,
+      intent,
+      children,
+      ...rest
+    }: FetcherFormProps) {
       function handleSubmit(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
         const target = e.currentTarget;
         const url = action ?? window.location.pathname + window.location.search;
         void submit(url, { method, body: new FormData(target) });
       }
-      const intentInput = intent !== undefined
-        ? createElement("input", { key: "__bract_intent", type: "hidden", name: "intent", value: intent })
-        : null;
+      const intentInput =
+        intent !== undefined
+          ? createElement("input", { key: "__bract_intent", type: "hidden", name: "intent", value: intent })
+          : null;
       return createElement("form", { method, onSubmit: handleSubmit, ...rest }, intentInput, children);
     };
   }, [submit]);
 
   if (opts?.stream) {
     return {
-      events: (null as unknown) as AsyncGenerator<T>,
+      events: null as unknown as AsyncGenerator<T>,
       connect(actionId: string): AsyncGenerator<T> {
         return sseStream<T>(actionId);
       },

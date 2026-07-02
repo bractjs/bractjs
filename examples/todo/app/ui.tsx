@@ -4,10 +4,13 @@
 // single self-contained file. The design tokens live as CSS variables in
 // `root.tsx`; these helpers just reference them.
 
-import { useEffect, useRef, type CSSProperties } from "react";
 import { toast } from "@bractjs/bractjs";
+import { type CSSProperties, useEffect, useRef } from "react";
 
-export interface ActionResult { ok?: string; error?: string }
+export interface ActionResult {
+  ok?: string;
+  error?: string;
+}
 
 // Flash a toast whenever a `<Form>` action settles with `{ ok }` / `{ error }`.
 // Keyed on the actionData identity so it fires once per submission, not on

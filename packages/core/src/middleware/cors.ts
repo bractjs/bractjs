@@ -32,7 +32,7 @@ export function cors(options: CorsOptions): MiddlewareFn {
     const corsHeaders: Record<string, string> = {
       "Access-Control-Allow-Methods": allowedMethods,
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Vary": "Origin",
+      Vary: "Origin",
     };
     if (wildcard) {
       corsHeaders["Access-Control-Allow-Origin"] = "*";

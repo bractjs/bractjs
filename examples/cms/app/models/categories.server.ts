@@ -87,17 +87,37 @@ export function categoryDescendantIds(id: string): Set<string> {
 }
 
 export function hasChildCategories(id: string): boolean {
-  return (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM categories WHERE parentId = ?").get(id)?.n ?? 0) > 0;
+  return (
+    (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM categories WHERE parentId = ?").get(id)
+      ?.n ?? 0) > 0
+  );
 }
 
-type WriteInput = { name: string; slug: string; description: string; parentId: string | null; seoTitle: string; seoDescription: string };
+type WriteInput = {
+  name: string;
+  slug: string;
+  description: string;
+  parentId: string | null;
+  seoTitle: string;
+  seoDescription: string;
+};
 
 export function createCategory(input: WriteInput): { ok: boolean; reason?: string; id?: string } {
   if (getCategoryBySlug(input.slug)) return { ok: false, reason: "That slug is already in use." };
   const id = newId();
-  db.run("INSERT INTO categories (id, name, slug, description, parentId, seoTitle, seoDescription, createdAt) VALUES (?,?,?,?,?,?,?,?)", [
-    id, input.name, input.slug, input.description, input.parentId, input.seoTitle, input.seoDescription, nowTs(),
-  ]);
+  db.run(
+    "INSERT INTO categories (id, name, slug, description, parentId, seoTitle, seoDescription, createdAt) VALUES (?,?,?,?,?,?,?,?)",
+    [
+      id,
+      input.name,
+      input.slug,
+      input.description,
+      input.parentId,
+      input.seoTitle,
+      input.seoDescription,
+      nowTs(),
+    ],
+  );
   return { ok: true, id };
 }
 
@@ -107,9 +127,10 @@ export function updateCategory(id: string, input: WriteInput): { ok: boolean; re
   if (input.parentId && categoryDescendantIds(id).has(input.parentId)) {
     return { ok: false, reason: "A category cannot be nested under itself or its own descendant." };
   }
-  db.run("UPDATE categories SET name = ?, slug = ?, description = ?, parentId = ?, seoTitle = ?, seoDescription = ? WHERE id = ?", [
-    input.name, input.slug, input.description, input.parentId, input.seoTitle, input.seoDescription, id,
-  ]);
+  db.run(
+    "UPDATE categories SET name = ?, slug = ?, description = ?, parentId = ?, seoTitle = ?, seoDescription = ? WHERE id = ?",
+    [input.name, input.slug, input.description, input.parentId, input.seoTitle, input.seoDescription, id],
+  );
   return { ok: true };
 }
 

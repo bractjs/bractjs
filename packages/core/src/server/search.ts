@@ -37,10 +37,7 @@ export function searchParamsToObject(sp: URLSearchParams): Record<string, string
  *   URLs that must tolerate junk).
  * - Success → the parsed, coerced object (numbers/booleans/arrays/defaults).
  */
-export async function validateSearch(
-  schema: unknown,
-  url: URL,
-): Promise<Record<string, unknown>> {
+export async function validateSearch(schema: unknown, url: URL): Promise<Record<string, unknown>> {
   const raw = searchParamsToObject(url.searchParams);
   if (!schema) return raw;
   return await runSchema(schema as Schema<Record<string, unknown>>, raw);

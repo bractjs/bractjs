@@ -1,17 +1,17 @@
-import { createServer } from "../server/serve.ts";
-import { setRuntimeMode, setDevHmrPort } from "../server/env.ts";
-import { createHmrServer } from "./hmr-server.ts";
-import { watchApp } from "./watcher.ts";
-import { rebuildClient } from "./rebuilder.ts";
-import { filePathToPattern, scanRoutes } from "../server/scanner.ts";
-import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
 import { basename, extname, join, resolve } from "node:path";
-import type { LifecycleHooks } from "../server/lifecycle.ts";
-import { loadUserConfig } from "../config/load.ts";
-import type { BractJSConfig } from "../server/serve.ts";
-import { writeRouteTypes, explainStalenessForApp } from "../codegen/route-codegen.ts";
 import { lintRouteModuleSource } from "../build/route-lint.ts";
+import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
+import { loadUserConfig } from "../config/load.ts";
+import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
+import { setDevHmrPort, setRuntimeMode } from "../server/env.ts";
+import type { LifecycleHooks } from "../server/lifecycle.ts";
+import { filePathToPattern, scanRoutes } from "../server/scanner.ts";
+import type { BractJSConfig } from "../server/serve.ts";
+import { createServer } from "../server/serve.ts";
+import { createHmrServer } from "./hmr-server.ts";
+import { rebuildClient } from "./rebuilder.ts";
 import { formatRouteTable, type RouteTableRow } from "./route-table.ts";
+import { watchApp } from "./watcher.ts";
 
 // Warn-once across HMR rebuilds so the same lint message doesn't spam the log.
 const warnedRouteIssues = new Set<string>();
@@ -88,7 +88,10 @@ export interface DevServer {
  * `process.exit()` itself.
  */
 export class DevServerError extends Error {
-  constructor(message: string, readonly code?: string) {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
     super(message);
     this.name = "DevServerError";
   }
@@ -192,10 +195,7 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
     // Route files (not layout): do a fine-grained module swap without full reload.
     // Root, layouts, and other files: fall back to full page reload.
-    const isRoute =
-      file.startsWith("routes/") &&
-      !file.endsWith("layout.tsx") &&
-      !file.endsWith("layout.ts");
+    const isRoute = file.startsWith("routes/") && !file.endsWith("layout.tsx") && !file.endsWith("layout.ts");
 
     if (isRoute) {
       const pattern = filePathToPattern(file);

@@ -56,10 +56,7 @@ function toPlainObject(input: FormData | Record<string, unknown>): Record<string
  * params). Throws a 400 `Response` with `{ errors }` field errors on failure;
  * returns the parsed (coerced) data on success.
  */
-export async function runSchema<T>(
-  schema: Schema<T>,
-  plain: Record<string, unknown>,
-): Promise<T> {
+export async function runSchema<T>(schema: Schema<T>, plain: Record<string, unknown>): Promise<T> {
   if ("safeParse" in schema && typeof schema.safeParse === "function") {
     const result = await schema.safeParse(plain);
     if ((result as SafeParseResult<T>).success) {
@@ -95,10 +92,7 @@ export async function runSchema<T>(
  *
  * Returns the parsed (coerced) data on success.
  */
-export async function validate<T>(
-  schema: Schema<T>,
-  input: FormData | Record<string, unknown>,
-): Promise<T> {
+export async function validate<T>(schema: Schema<T>, input: FormData | Record<string, unknown>): Promise<T> {
   return runSchema(schema, toPlainObject(input));
 }
 

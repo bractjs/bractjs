@@ -14,7 +14,11 @@ export function CustomFields({ data }: { data: EntityFieldsData }) {
       {data.groups.map((g) => (
         <div className="admin-panel" key={g.id} style={{ display: "grid", gap: ".8rem" }}>
           <strong style={{ fontSize: ".95rem" }}>{g.name}</strong>
-          {g.fields.length === 0 ? <span style={{ color: "var(--admin-muted)", fontSize: ".85rem" }}>No fields in this group yet.</span> : null}
+          {g.fields.length === 0 ? (
+            <span style={{ color: "var(--admin-muted)", fontSize: ".85rem" }}>
+              No fields in this group yet.
+            </span>
+          ) : null}
           {g.fields.map((f) => {
             const key = `cf:${f.id}`;
             const raw = data.values[f.id];
@@ -22,16 +26,28 @@ export function CustomFields({ data }: { data: EntityFieldsData }) {
             return (
               <div key={f.id} style={{ display: "grid", gap: ".35rem" }}>
                 <span style={{ fontWeight: 600, fontSize: ".9rem" }}>
-                  {f.label}{f.repeatable ? <span style={{ color: "var(--admin-muted)", fontWeight: 400 }}> · repeatable</span> : null}
+                  {f.label}
+                  {f.repeatable ? (
+                    <span style={{ color: "var(--admin-muted)", fontWeight: 400 }}> · repeatable</span>
+                  ) : null}
                 </span>
                 {f.repeatable ? (
-                  <FieldRepeater fieldKey={key} kind={f.type} options={opts} defaultValues={Array.isArray(raw) ? raw : raw ? [raw] : []} />
+                  <FieldRepeater
+                    fieldKey={key}
+                    kind={f.type}
+                    options={opts}
+                    defaultValues={Array.isArray(raw) ? raw : raw ? [raw] : []}
+                  />
                 ) : f.type === "text" ? (
                   <input name={key} defaultValue={typeof raw === "string" ? raw : ""} className={input} />
                 ) : (
                   <select name={key} defaultValue={typeof raw === "string" ? raw : ""} className={select}>
                     <option value="">— none —</option>
-                    {opts.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    {opts.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
                   </select>
                 )}
               </div>

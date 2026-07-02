@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { buildTrie, matchRoute } from "../server/matcher.ts";
 import type { RouteFile } from "../server/scanner.ts";
 import { pathToSegments } from "../server/scanner.ts";

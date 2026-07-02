@@ -47,16 +47,12 @@ export function Image({
 }: ImageProps) {
   // Only include widths up to 1.5× the declared intrinsic width to avoid
   // generating unnecessarily large variants.
-  const widths = width
-    ? WIDTHS.filter((w) => w <= Math.ceil(width * 1.5))
-    : WIDTHS;
+  const widths = width ? WIDTHS.filter((w) => w <= Math.ceil(width * 1.5)) : WIDTHS;
 
   // Ensure at least one srcset entry even if widths filtered to empty.
   const srcWidths = widths.length > 0 ? widths : [width ?? 1280];
 
-  const srcset = srcWidths
-    .map((w) => `${imgUrl(src, w, quality, format, fit)} ${w}w`)
-    .join(", ");
+  const srcset = srcWidths.map((w) => `${imgUrl(src, w, quality, format, fit)} ${w}w`).join(", ");
 
   const defaultSrc = imgUrl(src, width ?? 1280, quality, format, fit);
 

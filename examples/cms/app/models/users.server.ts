@@ -31,7 +31,9 @@ export function findUserByUsername(username: string): Row | null {
 }
 
 export function findUserByEmail(email: string): User | null {
-  return db.query<User, [string]>(`SELECT ${PUBLIC} FROM users WHERE email = ?`).get(normalizeEmail(email)) ?? null;
+  return (
+    db.query<User, [string]>(`SELECT ${PUBLIC} FROM users WHERE email = ?`).get(normalizeEmail(email)) ?? null
+  );
 }
 
 /**
@@ -63,7 +65,10 @@ export function userCount(): number {
 
 /** The user's current session epoch (bumped on password change to revoke old sessions). */
 export function getUserSessionEpoch(id: string): number {
-  return db.query<{ sessionEpoch: number }, [string]>("SELECT sessionEpoch FROM users WHERE id = ?").get(id)?.sessionEpoch ?? 0;
+  return (
+    db.query<{ sessionEpoch: number }, [string]>("SELECT sessionEpoch FROM users WHERE id = ?").get(id)
+      ?.sessionEpoch ?? 0
+  );
 }
 
 export function verifyPassword(plain: string, hash: string): Promise<boolean> {
@@ -104,7 +109,10 @@ export async function updateUser(
     const hash = await Bun.password.hash(input.password);
     // Bump sessionEpoch so any other live session for this user is revoked on
     // its next request (a password change should kick out existing sessions).
-    db.run("UPDATE users SET displayName = ?, email = ?, passwordHash = ?, sessionEpoch = sessionEpoch + 1 WHERE id = ?", [input.displayName, email, hash, id]);
+    db.run(
+      "UPDATE users SET displayName = ?, email = ?, passwordHash = ?, sessionEpoch = sessionEpoch + 1 WHERE id = ?",
+      [input.displayName, email, hash, id],
+    );
   } else {
     db.run("UPDATE users SET displayName = ?, email = ? WHERE id = ?", [input.displayName, email, id]);
   }

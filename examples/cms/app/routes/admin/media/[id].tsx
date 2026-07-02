@@ -1,13 +1,19 @@
-import { Form, Link, useActionData, useLoaderData } from "@bractjs/bractjs";
-import { HttpError, validate } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
+import { Form, HttpError, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
-import { deleteMedia, getMedia, mediaReferences, updateMedia, type Media, type MediaRefs } from "../../../models/media.server.ts";
-import { removeUploadFile } from "../../../upload.server.ts";
-import { MediaSchema, type MediaInput } from "../../../validation.ts";
-import { fromValidationError, type FormState } from "../../../form.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
+import { type FormState, fromValidationError } from "../../../form.ts";
+import {
+  deleteMedia,
+  getMedia,
+  type Media,
+  type MediaRefs,
+  mediaReferences,
+  updateMedia,
+} from "../../../models/media.server.ts";
 import { dangerButton, ErrorNote, Field, input, primaryButton } from "../../../ui.tsx";
+import { removeUploadFile } from "../../../upload.server.ts";
+import { type MediaInput, MediaSchema } from "../../../validation.ts";
 
 type Data = { media: Media; refs: MediaRefs };
 
@@ -50,7 +56,9 @@ export function ErrorBoundary({ error }: { error: unknown }) {
     <div className="admin-panel">
       <h1 style={{ marginTop: 0 }}>Media not found</h1>
       <p style={{ color: "var(--muted)" }}>{msg}</p>
-      <Link to="/admin/media" style={{ color: "var(--accent)", fontWeight: 600 }}>← Back to media</Link>
+      <Link to="/admin/media" style={{ color: "var(--accent)", fontWeight: 600 }}>
+        ← Back to media
+      </Link>
     </div>
   );
 }
@@ -66,16 +74,40 @@ export default function MediaDetail() {
     <>
       <div className="admin-bar">
         <h1 style={{ margin: 0 }}>Media</h1>
-        <Link to="/admin/media" style={{ color: "var(--accent)", textDecoration: "none" }}>← All media</Link>
+        <Link to="/admin/media" style={{ color: "var(--accent)", textDecoration: "none" }}>
+          ← All media
+        </Link>
       </div>
-      <div style={{ display: "grid", gap: "1.2rem", gridTemplateColumns: "minmax(0, 320px) 1fr", alignItems: "start" }}>
+      <div
+        style={{
+          display: "grid",
+          gap: "1.2rem",
+          gridTemplateColumns: "minmax(0, 320px) 1fr",
+          alignItems: "start",
+        }}
+      >
         <div className="admin-panel">
           <img src={media.url} alt={media.alt} style={{ width: "100%", borderRadius: "8px" }} />
-          <dl style={{ fontSize: ".82rem", color: "var(--muted)", display: "grid", gridTemplateColumns: "auto 1fr", gap: ".2rem .6rem", marginBottom: 0 }}>
-            <dt>Name</dt><dd style={{ margin: 0, overflowWrap: "anywhere" }}>{media.originalName}</dd>
-            <dt>Type</dt><dd style={{ margin: 0 }}>{media.mimeType}</dd>
-            <dt>Size</dt><dd style={{ margin: 0 }}>{(media.size / 1024).toFixed(1)} KB</dd>
-            <dt>URL</dt><dd style={{ margin: 0, overflowWrap: "anywhere" }}><code>{media.url}</code></dd>
+          <dl
+            style={{
+              fontSize: ".82rem",
+              color: "var(--muted)",
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: ".2rem .6rem",
+              marginBottom: 0,
+            }}
+          >
+            <dt>Name</dt>
+            <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{media.originalName}</dd>
+            <dt>Type</dt>
+            <dd style={{ margin: 0 }}>{media.mimeType}</dd>
+            <dt>Size</dt>
+            <dd style={{ margin: 0 }}>{(media.size / 1024).toFixed(1)} KB</dd>
+            <dt>URL</dt>
+            <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+              <code>{media.url}</code>
+            </dd>
           </dl>
         </div>
 
@@ -93,10 +125,18 @@ export default function MediaDetail() {
                 <input name="caption" defaultValue={media.caption} className={input} />
               </Field>
               <Field label="Description">
-                <textarea name="description" defaultValue={media.description} className={`${input} min-h-20`} />
+                <textarea
+                  name="description"
+                  defaultValue={media.description}
+                  className={`${input} min-h-20`}
+                />
               </Field>
               {state?.error ? <ErrorNote>{state.error}</ErrorNote> : null}
-              <div><button type="submit" className={primaryButton}>Save</button></div>
+              <div>
+                <button type="submit" className={primaryButton}>
+                  Save
+                </button>
+              </div>
             </Form>
           </div>
 
@@ -107,14 +147,21 @@ export default function MediaDetail() {
                 ? "Not referenced anywhere — safe to delete."
                 : `Referenced by ${refs.posts} post field(s) and ${refs.pages} page(s).`}
             </p>
-            <Form method="post" style={{ display: "flex", gap: ".8rem", alignItems: "center", flexWrap: "wrap" }}>
+            <Form
+              method="post"
+              style={{ display: "flex", gap: ".8rem", alignItems: "center", flexWrap: "wrap" }}
+            >
               <input type="hidden" name="intent" value="delete" />
               {refs.total > 0 ? (
-                <label style={{ display: "inline-flex", gap: ".35rem", alignItems: "center", fontSize: ".85rem" }}>
+                <label
+                  style={{ display: "inline-flex", gap: ".35rem", alignItems: "center", fontSize: ".85rem" }}
+                >
                   <input type="checkbox" name="force" value="1" /> delete anyway
                 </label>
               ) : null}
-              <button type="submit" className={dangerButton}>Delete media</button>
+              <button type="submit" className={dangerButton}>
+                Delete media
+              </button>
             </Form>
           </div>
         </div>

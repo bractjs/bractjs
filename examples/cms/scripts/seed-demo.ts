@@ -7,10 +7,10 @@
 // section HTML so list/detail/pagination/prose rendering get a real workout.
 
 import { db } from "../app/db.server.ts";
-import { listUsers } from "../app/models/users.server.ts";
 import { createCategory, getCategoryBySlug } from "../app/models/categories.server.ts";
-import { createPost, getPostBySlug } from "../app/models/posts.server.ts";
 import { createPage } from "../app/models/pages.server.ts";
+import { createPost, getPostBySlug } from "../app/models/posts.server.ts";
+import { listUsers } from "../app/models/users.server.ts";
 import { slugify } from "../app/validation.ts";
 
 const authorId = listUsers()[0]?.id ?? null;
@@ -31,18 +31,22 @@ const PARAS = [
   "At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.",
   "Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur at vero eos et accusamus.",
 ];
-const pick = <T,>(arr: T[], i: number): T => arr[i % arr.length]!;
+const pick = <T>(arr: T[], i: number): T => arr[i % arr.length]!;
 
 /** Build a long, multi-section HTML body keyed off `seed` for variety. */
 function longBody(title: string, seed: number): string {
   const parts: string[] = [`<p><strong>${pick(LEAD, seed)}</strong></p>`];
   const sections = 4 + (seed % 3); // 4–6 sections
   for (let s = 0; s < sections; s++) {
-    parts.push(`<h2>${pick(["Background", "How it works", "In practice", "Trade-offs", "What's next", "A closer look"], s)}</h2>`);
+    parts.push(
+      `<h2>${pick(["Background", "How it works", "In practice", "Trade-offs", "What's next", "A closer look"], s)}</h2>`,
+    );
     parts.push(`<p>${pick(PARAS, seed + s)}</p>`);
     parts.push(`<p>${pick(PARAS, seed + s + 2)} ${pick(PARAS, seed + s + 4)}</p>`);
     if (s === 1) {
-      parts.push("<ul><li>Predictable, file-based routing.</li><li>Loaders and actions colocated with the route.</li><li>Server modules stay on the server.</li><li>Cookie sessions with a same-origin CSRF gate.</li></ul>");
+      parts.push(
+        "<ul><li>Predictable, file-based routing.</li><li>Loaders and actions colocated with the route.</li><li>Server modules stay on the server.</li><li>Cookie sessions with a same-origin CSRF gate.</li></ul>",
+      );
     }
     if (s === 2) {
       parts.push(`<blockquote><p>“${pick(LEAD, seed + s)}”</p></blockquote>`);
@@ -68,9 +72,22 @@ let catsAdded = 0;
 for (const c of catDefs) {
   const slug = slugify(c.name);
   const existing = getCategoryBySlug(slug);
-  if (existing) { catId[slug] = existing.id; continue; }
-  const res = createCategory({ name: c.name, slug, description: c.desc, parentId: c.parent ? catId[c.parent] ?? null : null, seoTitle: "", seoDescription: "" });
-  if (res.ok && res.id) { catId[slug] = res.id; catsAdded++; }
+  if (existing) {
+    catId[slug] = existing.id;
+    continue;
+  }
+  const res = createCategory({
+    name: c.name,
+    slug,
+    description: c.desc,
+    parentId: c.parent ? (catId[c.parent] ?? null) : null,
+    seoTitle: "",
+    seoDescription: "",
+  });
+  if (res.ok && res.id) {
+    catId[slug] = res.id;
+    catsAdded++;
+  }
 }
 
 // ── posts (mix of published/draft, spread over the last ~3 weeks) ─────────────
@@ -101,7 +118,7 @@ postDefs.forEach((p, i) => {
       body: longBody(p.title, i),
       excerpt: `${pick(LEAD, i)} A longer dispatch on “${p.title}”, with several sections to exercise the prose styles.`,
       status,
-      categoryId: p.cat ? catId[p.cat] ?? null : null,
+      categoryId: p.cat ? (catId[p.cat] ?? null) : null,
       featuredMediaId: null,
       seoTitle: "",
       seoDescription: "",
@@ -112,7 +129,10 @@ postDefs.forEach((p, i) => {
   // Spread dates so the published index sorts realistically (newest first).
   const created = Date.now() - (postDefs.length - i) * 1.5 * DAY;
   db.run("UPDATE posts SET createdAt=?, updatedAt=?, publishedAt=? WHERE id=?", [
-    created, created, status === "published" ? created : null, res.id,
+    created,
+    created,
+    status === "published" ? created : null,
+    res.id,
   ]);
   postsAdded++;
 });
@@ -137,20 +157,26 @@ pageDefs.forEach((p, i) => {
     slug,
     body: longBody(p.title, i + 3),
     status: p.status ?? "published",
-    parentId: p.parent ? pageId[p.parent] ?? null : null,
+    parentId: p.parent ? (pageId[p.parent] ?? null) : null,
     featuredMediaId: null,
     menuOrder: p.order ?? 0,
     seoTitle: "",
     seoDescription: "",
   });
-  if (res.ok && res.id) { pageId[slug] = res.id; pagesAdded++; }
-  else if (!res.ok) {
+  if (res.ok && res.id) {
+    pageId[slug] = res.id;
+    pagesAdded++;
+  } else if (!res.ok) {
     // Already exists — record its id so children can still nest under it.
-    const row = db.query<{ id: string }, [string | null, string]>(
-      "SELECT id FROM pages WHERE IFNULL(parentId,'') = IFNULL(?,'') AND slug = ?",
-    ).get(p.parent ? pageId[p.parent] ?? null : null, slug);
+    const row = db
+      .query<{ id: string }, [string | null, string]>(
+        "SELECT id FROM pages WHERE IFNULL(parentId,'') = IFNULL(?,'') AND slug = ?",
+      )
+      .get(p.parent ? (pageId[p.parent] ?? null) : null, slug);
     if (row) pageId[slug] = row.id;
   }
 });
 
-console.log(`✅ demo seed: +${catsAdded} categories, +${postsAdded} posts, +${pagesAdded} pages (existing rows skipped).`);
+console.log(
+  `✅ demo seed: +${catsAdded} categories, +${postsAdded} posts, +${pagesAdded} pages (existing rows skipped).`,
+);

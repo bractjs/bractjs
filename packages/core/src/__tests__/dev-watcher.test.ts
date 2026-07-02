@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { watchApp, type AppWatcher } from "../dev/watcher.ts";
+import { type AppWatcher, watchApp } from "../dev/watcher.ts";
 
 // fs.watch delivers events asynchronously and the watcher debounces 50ms, so
 // each test polls for its expectation instead of sleeping a fixed time.
@@ -17,10 +17,7 @@ function makeTempAppDir(): string {
   return dir;
 }
 
-function trackedWatch(
-  dir: string,
-  onChange: Parameters<typeof watchApp>[1],
-): AppWatcher {
+function trackedWatch(dir: string, onChange: Parameters<typeof watchApp>[1]): AppWatcher {
   const watcher = watchApp(dir, onChange);
   cleanups.push(() => watcher.close());
   return watcher;
@@ -39,7 +36,9 @@ describe("watchApp", () => {
   test("reports changes and stops reporting after close()", async () => {
     const dir = makeTempAppDir();
     const seen: string[] = [];
-    const watcher = trackedWatch(dir, (file) => { seen.push(file); });
+    const watcher = trackedWatch(dir, (file) => {
+      seen.push(file);
+    });
 
     writeFileSync(join(dir, "a.ts"), "export const a = 1;");
     expect(await waitFor(() => seen.length >= 1)).toBe(true);
@@ -56,7 +55,9 @@ describe("watchApp", () => {
   test("close() is idempotent and safe mid-debounce", async () => {
     const dir = makeTempAppDir();
     let calls = 0;
-    const watcher = trackedWatch(dir, () => { calls++; });
+    const watcher = trackedWatch(dir, () => {
+      calls++;
+    });
 
     // Trigger an event, then close before the 50ms debounce can fire.
     writeFileSync(join(dir, "c.ts"), "export const c = 3;");
@@ -71,7 +72,9 @@ describe("watchApp", () => {
     const dir = makeTempAppDir();
     let invoked = false;
     let unhandled = 0;
-    const onUnhandled = () => { unhandled++; };
+    const onUnhandled = () => {
+      unhandled++;
+    };
     process.on("unhandledRejection", onUnhandled);
     cleanups.push(() => process.off("unhandledRejection", onUnhandled));
 
@@ -90,7 +93,9 @@ describe("watchApp", () => {
   test("ignores files with unwatched extensions", async () => {
     const dir = makeTempAppDir();
     const seen: string[] = [];
-    trackedWatch(dir, (file) => { seen.push(file); });
+    trackedWatch(dir, (file) => {
+      seen.push(file);
+    });
 
     writeFileSync(join(dir, "notes.md"), "# not code");
     await Bun.sleep(300);

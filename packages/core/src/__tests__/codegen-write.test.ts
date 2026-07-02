@@ -1,11 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdir, rm, writeFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import {
-  writeRouteTypes,
-  explainStalenessForApp,
-} from "../codegen/route-codegen.ts";
+import { join } from "node:path";
+import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
 
 let appDir = "";
 

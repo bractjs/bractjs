@@ -21,8 +21,16 @@ function makeServer(port: number, hooks: { onShutdown?: () => void }) {
 describe("multiple createServer() instances", () => {
   test("each server runs its OWN onShutdown when stopped", async () => {
     const stopped: string[] = [];
-    const a = makeServer(4381, { onShutdown: () => { stopped.push("a"); } });
-    const b = makeServer(4382, { onShutdown: () => { stopped.push("b"); } });
+    const a = makeServer(4381, {
+      onShutdown: () => {
+        stopped.push("a");
+      },
+    });
+    const b = makeServer(4382, {
+      onShutdown: () => {
+        stopped.push("b");
+      },
+    });
 
     a.stop();
     b.stop();
@@ -34,7 +42,11 @@ describe("multiple createServer() instances", () => {
 
   test("stop() is idempotent per server (second call does not re-run the hook)", async () => {
     let calls = 0;
-    const srv = makeServer(4383, { onShutdown: () => { calls++; } });
+    const srv = makeServer(4383, {
+      onShutdown: () => {
+        calls++;
+      },
+    });
 
     srv.stop();
     srv.stop();
@@ -49,7 +61,11 @@ describe("multiple createServer() instances", () => {
     first.stop();
     await Bun.sleep(20);
 
-    const second = makeServer(4385, { onShutdown: () => { secondHookRan = true; } });
+    const second = makeServer(4385, {
+      onShutdown: () => {
+        secondHookRan = true;
+      },
+    });
     second.stop();
     await Bun.sleep(50);
 

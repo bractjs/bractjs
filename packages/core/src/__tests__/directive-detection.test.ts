@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hasServerDirective, hasClientDirective } from "../shared/directives.ts";
+import { hasClientDirective, hasServerDirective } from "../shared/directives.ts";
 
 // The action registry, module-registry codegen, and build plugins all share
 // this detector. A module detected by one but not another either leaks server

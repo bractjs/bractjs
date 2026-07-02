@@ -4,8 +4,29 @@
 // every tag that isn't allowlisted, all event handlers, and dangerous URLs.
 
 const ALLOWED_TAGS = new Set([
-  "p", "br", "hr", "h1", "h2", "h3", "h4", "blockquote", "pre", "code",
-  "strong", "b", "em", "i", "u", "s", "ul", "ol", "li", "a", "img", "figure", "figcaption",
+  "p",
+  "br",
+  "hr",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "blockquote",
+  "pre",
+  "code",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "u",
+  "s",
+  "ul",
+  "ol",
+  "li",
+  "a",
+  "img",
+  "figure",
+  "figcaption",
 ]);
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
   a: new Set(["href", "title"]),
@@ -77,5 +98,8 @@ function escapeAttr(s: string): string {
 
 /** Strip all tags → plain text (for auto-excerpts / meta descriptions). */
 export function stripTags(raw: string): string {
-  return raw.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  return raw
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

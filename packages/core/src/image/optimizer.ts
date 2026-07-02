@@ -1,4 +1,4 @@
-import type { ImageTransformParams, TransformResult, ImageFormat } from "./types.ts";
+import type { ImageFormat, ImageTransformParams, TransformResult } from "./types.ts";
 import { MIME } from "./types.ts";
 
 // In-process semaphore (DoS guard): cap concurrent ImageMagick spawns so a
@@ -33,7 +33,9 @@ async function detectBinary(): Promise<string | null> {
     try {
       const proc = Bun.spawn([bin, "-version"], { stdout: "ignore", stderr: "ignore" });
       if ((await proc.exited) === 0) return bin;
-    } catch { /* not found */ }
+    } catch {
+      /* not found */
+    }
   }
   return null;
 }
@@ -66,7 +68,8 @@ function buildArgs(binary: string, input: string, params: ImageTransformParams):
     ...base,
     `file:${input}`,
     ...resizeArgs(params),
-    "-quality", String(params.q),
+    "-quality",
+    String(params.q),
     "-strip",
     `${params.format}:-`,
   ];
@@ -95,10 +98,7 @@ export async function transformImage(
       killSignal: "SIGKILL",
     });
 
-    const [data, exitCode] = await Promise.all([
-      new Response(proc.stdout!).arrayBuffer(),
-      proc.exited,
-    ]);
+    const [data, exitCode] = await Promise.all([new Response(proc.stdout!).arrayBuffer(), proc.exited]);
 
     if (exitCode !== 0) {
       // Non-zero exit covers normal failures AND timeout-induced SIGKILL,

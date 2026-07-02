@@ -1,7 +1,7 @@
-import { Outlet } from "@bractjs/bractjs";
 import type { HeadersArgs, LoaderArgs } from "@bractjs/bractjs";
-import { getAdmin, requireAdmin, type AdminUser } from "../../auth.server.ts";
-import { readFlash, FLASH_CLEAR, type Flash } from "../../flash.server.ts";
+import { Outlet } from "@bractjs/bractjs";
+import { type AdminUser, getAdmin, requireAdmin } from "../../auth.server.ts";
+import { FLASH_CLEAR, type Flash, readFlash } from "../../flash.server.ts";
 
 // Public admin sub-paths that must NOT be gated (otherwise an unauthenticated
 // visitor to /admin/login would loop). `/admin/verify` is the second sign-in

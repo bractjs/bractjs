@@ -1,4 +1,4 @@
-import { Suspense, use, type ReactNode } from "react";
+import { type ReactNode, Suspense, use } from "react";
 import { Deferred } from "../../shared/deferred.ts";
 
 interface AwaitProps<T> {

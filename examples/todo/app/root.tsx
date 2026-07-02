@@ -79,10 +79,7 @@ const styles = `
 // Site-wide default <title> / <meta>. Each route's meta() overrides these
 // (React 19 hoists route <title>/<meta> into <head>).
 export function meta() {
-  return [
-    { title: "BractJS Todo" },
-    { name: "viewport", content: "width=device-width, initial-scale=1" },
-  ];
+  return [{ title: "BractJS Todo" }, { name: "viewport", content: "width=device-width, initial-scale=1" }];
 }
 
 export default function Root() {

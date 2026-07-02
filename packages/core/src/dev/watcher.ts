@@ -1,5 +1,5 @@
-import path from "node:path";
 import { watch } from "node:fs";
+import path from "node:path";
 
 const WATCHED_EXTENSIONS = new Set([".tsx", ".ts", ".css"]);
 

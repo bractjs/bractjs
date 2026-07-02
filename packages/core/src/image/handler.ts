@@ -1,9 +1,9 @@
-import { join, resolve, sep } from "node:path";
 import { realpath } from "node:fs/promises";
-import type { ImageTransformParams, ImageFormat, ImageFit } from "./types.ts";
-import { QUALITY_DEFAULT, FORMAT_DEFAULT, FIT_DEFAULT, MIME, ALLOWED_FITS } from "./types.ts";
+import { join, resolve, sep } from "node:path";
+import { getFromDisk, getFromMemory, setInMemory, setOnDisk } from "./cache.ts";
 import { transformImage } from "./optimizer.ts";
-import { getFromMemory, setInMemory, getFromDisk, setOnDisk } from "./cache.ts";
+import type { ImageFit, ImageFormat, ImageTransformParams } from "./types.ts";
+import { ALLOWED_FITS, FIT_DEFAULT, FORMAT_DEFAULT, MIME, QUALITY_DEFAULT } from "./types.ts";
 
 const ALLOWED_DIMS = new Set([320, 640, 768, 1024, 1280, 1536, 1920, 3840]);
 const MAX_AREA = 4_000_000;

@@ -6,7 +6,7 @@
 // New code can import those directly from "@bractjs/bractjs"; this stays for the
 // existing admin routes' `FormState` shape.
 
-import { readValidationError, isValidationResponse, formValues, type FieldErrors } from "@bractjs/bractjs";
+import { type FieldErrors, formValues, isValidationResponse, readValidationError } from "@bractjs/bractjs";
 
 export type { FieldErrors };
 export type FormState = { error?: string; fieldErrors?: FieldErrors; values?: Record<string, string> };

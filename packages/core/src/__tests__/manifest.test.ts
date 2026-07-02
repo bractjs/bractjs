@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { generateManifest } from "../build/manifest.ts";
 
 describe("generateManifest", () => {
@@ -50,9 +50,7 @@ describe("generateManifest", () => {
   });
 
   test("handles many routes", () => {
-    const chunks = new Map(
-      Array.from({ length: 20 }, (_, i) => [`route/${i}`, `/build/chunk-${i}.js`])
-    );
+    const chunks = new Map(Array.from({ length: 20 }, (_, i) => [`route/${i}`, `/build/chunk-${i}.js`]));
     const m = generateManifest({ clientEntry: "/client.js", routeChunks: chunks });
     expect(Object.keys(m.routes)).toHaveLength(20);
     expect(m.routes["route/10"].chunk).toBe("/build/chunk-10.js");

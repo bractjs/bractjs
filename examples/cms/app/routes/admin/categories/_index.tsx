@@ -1,12 +1,26 @@
-import { Form, Link, useActionData, useLoaderData } from "@bractjs/bractjs";
-import { validate } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
+import { Form, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
-import { createCategory, deleteCategory, categoryTreeFlat, type CategoryNode } from "../../../models/categories.server.ts";
-import { CategorySchema, type CategoryInput } from "../../../validation.ts";
-import { fromValidationError, type FormState } from "../../../form.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
-import { dangerButton, EmptyState, ErrorNote, Field, ghostButton, input, primaryButton, select, textarea } from "../../../ui.tsx";
+import { type FormState, fromValidationError } from "../../../form.ts";
+import {
+  type CategoryNode,
+  categoryTreeFlat,
+  createCategory,
+  deleteCategory,
+} from "../../../models/categories.server.ts";
+import {
+  dangerButton,
+  EmptyState,
+  ErrorNote,
+  Field,
+  ghostButton,
+  input,
+  primaryButton,
+  select,
+  textarea,
+} from "../../../ui.tsx";
+import { type CategoryInput, CategorySchema } from "../../../validation.ts";
 
 export async function loader({ request }: LoaderArgs): Promise<{ cats: CategoryNode[] }> {
   await requirePermission(request, "categories.manage");
@@ -64,7 +78,8 @@ export default function Categories() {
                 <option value="">— none —</option>
                 {cats.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {" ".repeat(c.depth * 2)}{c.name}
+                    {" ".repeat(c.depth * 2)}
+                    {c.name}
                   </option>
                 ))}
               </select>
@@ -73,7 +88,11 @@ export default function Categories() {
               <textarea name="description" className={`${textarea} min-h-16`} />
             </Field>
             {state?.error ? <ErrorNote>{state.error}</ErrorNote> : null}
-            <div><button type="submit" className={primaryButton}>Add category</button></div>
+            <div>
+              <button type="submit" className={primaryButton}>
+                Add category
+              </button>
+            </div>
           </Form>
         </div>
 
@@ -83,23 +102,38 @@ export default function Categories() {
           ) : (
             <table className="admin-table">
               <thead>
-                <tr><th>Name</th><th>Slug</th><th style={{ width: "1%" }}></th></tr>
+                <tr>
+                  <th>Name</th>
+                  <th>Slug</th>
+                  <th style={{ width: "1%" }}></th>
+                </tr>
               </thead>
               <tbody>
                 {cats.map((c) => (
                   <tr key={c.id}>
                     <td>
                       <span style={{ color: "var(--muted)" }}>{"— ".repeat(c.depth)}</span>
-                      <Link to={`/admin/categories/${c.id}`} style={{ fontWeight: 600, textDecoration: "none" }}>{c.name}</Link>
+                      <Link
+                        to={`/admin/categories/${c.id}`}
+                        style={{ fontWeight: 600, textDecoration: "none" }}
+                      >
+                        {c.name}
+                      </Link>
                     </td>
-                    <td><code>{c.slug}</code></td>
+                    <td>
+                      <code>{c.slug}</code>
+                    </td>
                     <td>
                       <div className="toolbar">
-                        <Link to={`/admin/categories/${c.id}`} className={ghostButton}>Edit</Link>
+                        <Link to={`/admin/categories/${c.id}`} className={ghostButton}>
+                          Edit
+                        </Link>
                         <Form method="post" style={{ margin: 0 }}>
                           <input type="hidden" name="intent" value="delete" />
                           <input type="hidden" name="id" value={c.id} />
-                          <button type="submit" className={dangerButton}>Delete</button>
+                          <button type="submit" className={dangerButton}>
+                            Delete
+                          </button>
                         </Form>
                       </div>
                     </td>

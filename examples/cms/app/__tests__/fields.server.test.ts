@@ -1,11 +1,21 @@
 // In-memory DB (NODE_ENV=test). The boot seed provides categories/posts we can
 // point link fields at when testing resolution.
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { db } from "../db.server.ts";
 import {
-  createGroup, getGroup, groupsForTarget, updateGroup, deleteGroup,
-  addField, listFields, moveField, removeField,
-  setFieldValue, getFieldValues, saveEntityFields, resolveEntityFields,
+  addField,
+  createGroup,
+  deleteGroup,
+  getFieldValues,
+  getGroup,
+  groupsForTarget,
+  listFields,
+  moveField,
+  removeField,
+  resolveEntityFields,
+  saveEntityFields,
+  setFieldValue,
+  updateGroup,
 } from "../models/fields.server.ts";
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
@@ -24,7 +34,9 @@ test("createGroup + groupsForTarget + update + delete", () => {
 
 test("addField enforces a unique name per group", () => {
   const g = group();
-  expect(addField(g.id, { label: "Subtitle", name: "subtitle", type: "text", repeatable: false }).ok).toBe(true);
+  expect(addField(g.id, { label: "Subtitle", name: "subtitle", type: "text", repeatable: false }).ok).toBe(
+    true,
+  );
   const dup = addField(g.id, { label: "Other", name: "subtitle", type: "text", repeatable: false });
   expect(dup.ok).toBe(false);
   expect(listFields(g.id)).toHaveLength(1);
@@ -34,7 +46,7 @@ test("moveField swaps order; removeField deletes", () => {
   const g = group();
   addField(g.id, { label: "A", name: "a", type: "text", repeatable: false });
   addField(g.id, { label: "B", name: "b", type: "text", repeatable: false });
-  let ids = listFields(g.id).map((f) => f.name);
+  const ids = listFields(g.id).map((f) => f.name);
   expect(ids).toEqual(["a", "b"]);
   moveField(listFields(g.id)[1]!.id, "up");
   expect(listFields(g.id).map((f) => f.name)).toEqual(["b", "a"]);
@@ -64,7 +76,7 @@ test("saveEntityFields reads cf:<id> inputs (single via get, repeatable via getA
   const fd = new FormData();
   fd.set(`cf:${single!.id}`, "Welcome");
   fd.append(`cf:${repeat!.id}`, "one");
-  fd.append(`cf:${repeat!.id}`, "");      // filtered out
+  fd.append(`cf:${repeat!.id}`, ""); // filtered out
   fd.append(`cf:${repeat!.id}`, "two");
   const eid = `e-${rnd()}`;
   saveEntityFields("post", eid, fd);

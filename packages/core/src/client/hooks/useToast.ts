@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { toast, toastStore, EMPTY_TOASTS, type Toast, type ToastEntry } from "../toast-store.ts";
+import { EMPTY_TOASTS, type Toast, type ToastEntry, toast, toastStore } from "../toast-store.ts";
 
 /** The stable `toast` API — `toast.success(...)`, `toast.error(...)`, `toast.promise(...)`. */
 export function useToast(): Toast {

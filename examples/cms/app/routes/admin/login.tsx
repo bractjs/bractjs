@@ -1,13 +1,20 @@
-import { Form, useActionData, useLoaderData, useNavigation, redirect, validate } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
+import { Form, redirect, useActionData, useLoaderData, useNavigation, validate } from "@bractjs/bractjs";
 import { LockKeyhole, LogIn } from "lucide-react";
-import { authenticatePassword, beginPendingMfa, checkLoginRate, clearLoginRate, getAdmin, showSeedCredentials } from "../../auth.server.ts";
+import {
+  authenticatePassword,
+  beginPendingMfa,
+  checkLoginRate,
+  clearLoginRate,
+  getAdmin,
+  showSeedCredentials,
+} from "../../auth.server.ts";
+import { AuthShell } from "../../components/AuthShell.tsx";
+import { OAuthButtons } from "../../components/OAuthButtons.tsx";
 import { issueLoginCode } from "../../mfa.server.ts";
 import { configuredProviders } from "../../oauth.server.ts";
 import { clientIp } from "../../ratelimit.server.ts";
-import { LoginSchema, type LoginInput } from "../../validation.ts";
-import { AuthShell } from "../../components/AuthShell.tsx";
-import { OAuthButtons } from "../../components/OAuthButtons.tsx";
+import { type LoginInput, LoginSchema } from "../../validation.ts";
 
 const OAUTH_ERRORS: Record<string, string> = {
   oauth_state: "Sign-in failed (bad state). Please try again.",
@@ -16,12 +23,20 @@ const OAUTH_ERRORS: Record<string, string> = {
   not_registered: "No CMS account is linked to that email. Ask an admin to add you.",
 };
 
-type LoaderData = { providers: { google: boolean; microsoft: boolean }; error: string | null; seedHint: boolean };
+type LoaderData = {
+  providers: { google: boolean; microsoft: boolean };
+  error: string | null;
+  seedHint: boolean;
+};
 
 export async function loader({ request }: LoaderArgs): Promise<LoaderData | Response> {
   if (await getAdmin(request)) throw redirect("/admin");
   const code = new URL(request.url).searchParams.get("error");
-  return { providers: configuredProviders(), error: (code && OAUTH_ERRORS[code]) || null, seedHint: showSeedCredentials() };
+  return {
+    providers: configuredProviders(),
+    error: (code && OAUTH_ERRORS[code]) || null,
+    seedHint: showSeedCredentials(),
+  };
 }
 
 type ActionData = { error?: string };
@@ -65,7 +80,9 @@ export default function Login() {
     <AuthShell title="Bract Gazette" subtitle="Sign in to manage content.">
       <Form method="post" className="space-y-4">
         <div>
-          <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">Username</label>
+          <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">
+            Username
+          </label>
           <input
             id="username"
             name="username"
@@ -76,7 +93,9 @@ export default function Login() {
           />
         </div>
         <div>
-          <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
+          <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+            Password
+          </label>
           <input
             id="password"
             name="password"
@@ -87,7 +106,10 @@ export default function Login() {
           />
         </div>
         {error ? (
-          <p role="alert" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p
+            role="alert"
+            className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
             <LockKeyhole size={15} /> {error}
           </p>
         ) : null}
@@ -103,7 +125,11 @@ export default function Login() {
       <p className="mt-5 text-center text-xs text-slate-400">
         Then we email you a one-time code.
         {seedHint ? (
-          <> Seed login: <code className="font-mono">admin</code> / <code className="font-mono">admin123</code>.</>
+          <>
+            {" "}
+            Seed login: <code className="font-mono">admin</code> / <code className="font-mono">admin123</code>
+            .
+          </>
         ) : null}
       </p>
     </AuthShell>

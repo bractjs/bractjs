@@ -1,17 +1,12 @@
-import { Form, useActionData, useLoaderData, useNavigation, redirect, validate } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
-import { ShieldCheck, RotateCcw, ArrowLeft } from "lucide-react";
-import {
-  getAdmin,
-  getPendingUserId,
-  loginCookie,
-  clearPendingMfa,
-} from "../../auth.server.ts";
-import { issueLoginCode, verifyLoginCode } from "../../mfa.server.ts";
-import { clientIp } from "../../ratelimit.server.ts";
-import { getUserById } from "../../models/users.server.ts";
-import { CodeSchema, type CodeInput } from "../../validation.ts";
+import { Form, redirect, useActionData, useLoaderData, useNavigation, validate } from "@bractjs/bractjs";
+import { ArrowLeft, RotateCcw, ShieldCheck } from "lucide-react";
+import { clearPendingMfa, getAdmin, getPendingUserId, loginCookie } from "../../auth.server.ts";
 import { AuthShell } from "../../components/AuthShell.tsx";
+import { issueLoginCode, verifyLoginCode } from "../../mfa.server.ts";
+import { getUserById } from "../../models/users.server.ts";
+import { clientIp } from "../../ratelimit.server.ts";
+import { type CodeInput, CodeSchema } from "../../validation.ts";
 
 /** a***@example.com — enough to confirm the right inbox without echoing it. */
 function maskEmail(email: string): string {
@@ -76,7 +71,9 @@ export default function Verify() {
     <AuthShell title="Check your email" subtitle={`We sent a 6-digit code to ${maskedEmail}.`}>
       <Form method="post" className="space-y-4">
         <div>
-          <label htmlFor="code" className="mb-1.5 block text-sm font-medium text-slate-700">Sign-in code</label>
+          <label htmlFor="code" className="mb-1.5 block text-sm font-medium text-slate-700">
+            Sign-in code
+          </label>
           <input
             id="code"
             name="code"
@@ -91,10 +88,20 @@ export default function Verify() {
           />
         </div>
         {actionData?.error ? (
-          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionData.error}</p>
+          <p
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {actionData.error}
+          </p>
         ) : null}
         {actionData?.resent ? (
-          <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">A new code is on its way.</p>
+          <p
+            role="status"
+            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+          >
+            A new code is on its way.
+          </p>
         ) : null}
         <button
           type="submit"
@@ -107,11 +114,17 @@ export default function Verify() {
       <div className="mt-4 flex items-center justify-between text-sm">
         <Form method="post" className="m-0">
           <input type="hidden" name="intent" value="resend" />
-          <button type="submit" className="flex items-center gap-1.5 text-slate-500 transition hover:text-slate-800">
+          <button
+            type="submit"
+            className="flex items-center gap-1.5 text-slate-500 transition hover:text-slate-800"
+          >
             <RotateCcw size={14} /> Resend code
           </button>
         </Form>
-        <a href="/admin/login" className="flex items-center gap-1.5 text-slate-500 transition hover:text-slate-800">
+        <a
+          href="/admin/login"
+          className="flex items-center gap-1.5 text-slate-500 transition hover:text-slate-800"
+        >
           <ArrowLeft size={14} /> Start over
         </a>
       </div>

@@ -1,4 +1,4 @@
-import { join, relative, resolve, isAbsolute } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { hasServerDirective } from "../shared/directives.ts";
 
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
@@ -87,12 +87,16 @@ export async function loadServerActions(appDir: string): Promise<void> {
     if (!isEligible(rel)) continue;
     const filePath = join(appDir, rel);
     let src: string;
-    try { src = await Bun.file(filePath).text(); } catch { continue; }
+    try {
+      src = await Bun.file(filePath).text();
+    } catch {
+      continue;
+    }
     if (!hasServerDirective(src)) continue;
 
     let mod: Record<string, unknown>;
     try {
-      mod = await import(filePath) as Record<string, unknown>;
+      mod = (await import(filePath)) as Record<string, unknown>;
     } catch (err) {
       console.error("[bractjs] failed to load server actions from", rel, err);
       continue;

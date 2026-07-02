@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test";
-import { MiddlewarePipeline } from "../server/middleware.ts";
-import type { MiddlewareContext } from "../server/middleware.ts";
-import { cors } from "../middleware/cors.ts";
+import { describe, expect, test } from "bun:test";
 import { authGuard } from "../middleware/authGuard.ts";
+import { cors } from "../middleware/cors.ts";
 import { requestLogger } from "../middleware/requestLogger.ts";
+import type { MiddlewareContext } from "../server/middleware.ts";
+import { MiddlewarePipeline } from "../server/middleware.ts";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -31,8 +31,18 @@ describe("MiddlewarePipeline", () => {
     const order: number[] = [];
     const pipeline = new MiddlewarePipeline();
     pipeline
-      .use(async (ctx, next) => { order.push(1); const r = await next(); order.push(4); return r; })
-      .use(async (ctx, next) => { order.push(2); const r = await next(); order.push(3); return r; });
+      .use(async (ctx, next) => {
+        order.push(1);
+        const r = await next();
+        order.push(4);
+        return r;
+      })
+      .use(async (ctx, next) => {
+        order.push(2);
+        const r = await next();
+        order.push(3);
+        return r;
+      });
 
     await pipeline.run(makeCtx(), ok200);
     expect(order).toEqual([1, 2, 3, 4]);
@@ -80,7 +90,9 @@ describe("MiddlewarePipeline", () => {
 describe("cors()", () => {
   test("adds CORS headers to regular requests for allowed origin", async () => {
     const mw = cors({ origin: "https://example.com" });
-    const ctx = makeCtx({ request: new Request("http://localhost/", { headers: { Origin: "https://example.com" } }) });
+    const ctx = makeCtx({
+      request: new Request("http://localhost/", { headers: { Origin: "https://example.com" } }),
+    });
     const pipeline = new MiddlewarePipeline();
     pipeline.use(mw);
     const res = await pipeline.run(ctx, ok200);
@@ -89,7 +101,9 @@ describe("cors()", () => {
 
   test("wildcard origin allows any origin", async () => {
     const mw = cors({ origin: "*" });
-    const ctx = makeCtx({ request: new Request("http://localhost/", { headers: { Origin: "https://any.com" } }) });
+    const ctx = makeCtx({
+      request: new Request("http://localhost/", { headers: { Origin: "https://any.com" } }),
+    });
     const pipeline = new MiddlewarePipeline();
     pipeline.use(mw);
     const res = await pipeline.run(ctx, ok200);
@@ -107,7 +121,9 @@ describe("cors()", () => {
 
   test("does not set CORS header for disallowed origin", async () => {
     const mw = cors({ origin: "https://allowed.com" });
-    const ctx = makeCtx({ request: new Request("http://localhost/", { headers: { Origin: "https://evil.com" } }) });
+    const ctx = makeCtx({
+      request: new Request("http://localhost/", { headers: { Origin: "https://evil.com" } }),
+    });
     const pipeline = new MiddlewarePipeline();
     pipeline.use(mw);
     const res = await pipeline.run(ctx, ok200);
@@ -116,7 +132,9 @@ describe("cors()", () => {
 
   test("accepts array of origins", async () => {
     const mw = cors({ origin: ["https://a.com", "https://b.com"] });
-    const ctx = makeCtx({ request: new Request("http://localhost/", { headers: { Origin: "https://b.com" } }) });
+    const ctx = makeCtx({
+      request: new Request("http://localhost/", { headers: { Origin: "https://b.com" } }),
+    });
     const pipeline = new MiddlewarePipeline();
     pipeline.use(mw);
     const res = await pipeline.run(ctx, ok200);
@@ -166,7 +184,7 @@ describe("authGuard()", () => {
     pipeline.use(mw);
     const res = await pipeline.run(makeCtx(), ok200);
     expect(res.status).toBe(401);
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe("Unauthorized");
   });
 

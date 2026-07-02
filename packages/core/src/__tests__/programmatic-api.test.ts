@@ -6,12 +6,12 @@
  * bun:test to exit before printing results — a known pre-existing issue.
  * Behavioral coverage (HTTP response, HMR) lives in integration.test.ts.
  */
-import { test, expect, describe } from "bun:test";
-import { loadUserConfig, validateUserConfig, defineConfig } from "../config/load.ts";
-import { runBuild } from "../build/bundler.ts";
-import { createDevServer } from "../dev/server.ts";
+import { describe, expect, test } from "bun:test";
 import type { BuildConfig } from "../build/bundler.ts";
-import type { DevServerOptions, DevServer } from "../dev/server.ts";
+import { runBuild } from "../build/bundler.ts";
+import { defineConfig, loadUserConfig, validateUserConfig } from "../config/load.ts";
+import type { DevServer, DevServerOptions } from "../dev/server.ts";
+import { createDevServer } from "../dev/server.ts";
 
 // ── loadUserConfig ────────────────────────────────────────────────────────
 
@@ -102,9 +102,7 @@ test("runBuild signature does not require server-only fields (port/manifest/publ
 });
 
 test("runBuild rejects with a defined error when appDir does not exist", async () => {
-  await expect(
-    runBuild({ appDir: "/definitely/does/not/exist/__bractjs_test__" }),
-  ).rejects.toBeDefined();
+  await expect(runBuild({ appDir: "/definitely/does/not/exist/__bractjs_test__" })).rejects.toBeDefined();
 });
 
 // ── createDevServer ───────────────────────────────────────────────────────

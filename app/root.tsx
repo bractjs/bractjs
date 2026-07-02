@@ -1,7 +1,7 @@
 // This is a user file, not framework source.
 // It lives in the app/ directory of a BractJS project and represents
 // the root layout that wraps every page.
-import { Scripts, LiveReload, Outlet } from "@bractjs/bractjs";
+import { LiveReload, Outlet, Scripts } from "@bractjs/bractjs";
 
 export default function Root() {
   return (

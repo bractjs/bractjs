@@ -17,9 +17,20 @@ export function DropZone() {
 
   useEffect(() => {
     if (!mounted) return;
-    const onEnter = (e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); depth.current += 1; setActive(true); };
-    const onOver = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
-    const onLeave = (e: DragEvent) => { if (!hasFiles(e)) return; depth.current = Math.max(0, depth.current - 1); if (depth.current === 0) setActive(false); };
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth.current += 1;
+      setActive(true);
+    };
+    const onOver = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth.current = Math.max(0, depth.current - 1);
+      if (depth.current === 0) setActive(false);
+    };
     const onDrop = async (e: DragEvent) => {
       if (!hasFiles(e)) return;
       e.preventDefault();

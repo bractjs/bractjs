@@ -1,8 +1,8 @@
-import { createElement, type ComponentType } from "react";
 import { join, resolve } from "node:path";
-import { renderRoute, type ServerManifest } from "./render.ts";
+import { type ComponentType, createElement } from "react";
 import { BractJSProvider, type RouteManifest } from "../shared/context.ts";
 import type { ModuleRegistry } from "./layout.ts";
+import { renderRoute, type ServerManifest } from "./render.ts";
 
 /**
  * Render the SPA-mode document shell: the app's root component around an

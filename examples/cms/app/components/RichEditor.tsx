@@ -58,8 +58,24 @@ export function RichEditor({ name, defaultValue = "" }: { name: string; defaultV
   };
 
   return (
-    <div style={{ border: "1px solid var(--admin-line, #dde3e8)", borderRadius: "10px", overflow: "hidden", background: "#fff" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: ".2rem", padding: ".4rem", borderBottom: "1px solid #eef1f4", background: "#f9fafb" }}>
+    <div
+      style={{
+        border: "1px solid var(--admin-line, #dde3e8)",
+        borderRadius: "10px",
+        overflow: "hidden",
+        background: "#fff",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: ".2rem",
+          padding: ".4rem",
+          borderBottom: "1px solid #eef1f4",
+          background: "#f9fafb",
+        }}
+      >
         {COMMANDS.map((c) => (
           <button
             key={c.title}
@@ -67,7 +83,15 @@ export function RichEditor({ name, defaultValue = "" }: { name: string; defaultV
             title={c.title}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => c.run(exec)}
-            style={{ border: "1px solid #dde3e8", background: "#fff", borderRadius: "6px", padding: ".25rem .5rem", cursor: "pointer", fontSize: ".82rem", fontWeight: 600 }}
+            style={{
+              border: "1px solid #dde3e8",
+              background: "#fff",
+              borderRadius: "6px",
+              padding: ".25rem .5rem",
+              cursor: "pointer",
+              fontSize: ".82rem",
+              fontWeight: 600,
+            }}
           >
             {c.label}
           </button>

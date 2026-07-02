@@ -1,7 +1,7 @@
 import { useContext } from "react";
-import { RouterContext } from "../router.tsx";
 import { BractJSContext } from "../../shared/context.ts";
 import type { RouterLocation } from "../../shared/route-types.ts";
+import { RouterContext } from "../router.tsx";
 
 /**
  * The current location: `{ pathname, search, hash, state, key }`.

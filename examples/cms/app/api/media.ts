@@ -5,7 +5,7 @@
 // authorization check (media.manage) on top. Registered via root.tsx.
 
 import { route } from "@bractjs/bractjs";
-import { getAdmin, can } from "../auth.server.ts";
+import { can, getAdmin } from "../auth.server.ts";
 import { saveUpload } from "../upload.server.ts";
 
 export const uploadMedia = route("POST", "/api/media/upload", async (input, request) => {

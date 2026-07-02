@@ -1,7 +1,7 @@
-import { Link, useLoaderData } from "@bractjs/bractjs";
 import type { LoaderArgs } from "@bractjs/bractjs";
+import { Link, useLoaderData } from "@bractjs/bractjs";
+import { type ResolvedMenu, resolvedMenu } from "../models/menus.server.ts";
 import { listPublished, type PostWithRefs } from "../models/posts.server.ts";
-import { resolvedMenu, type ResolvedMenu } from "../models/menus.server.ts";
 import { EmptyState, PostCard, SiteFrame } from "../ui.tsx";
 
 type Data = { latest: PostWithRefs[]; header: ResolvedMenu; footer: ResolvedMenu };
@@ -36,10 +36,15 @@ export default function Home() {
             </div>
           ) : null}
           <div style={{ display: "grid", gap: "1.4rem" }}>
-            {rest.map((p) => <PostCard key={p.id} post={p} />)}
+            {rest.map((p) => (
+              <PostCard key={p.id} post={p} />
+            ))}
           </div>
           <p style={{ textAlign: "center", marginTop: "2rem" }}>
-            <Link to="/posts" style={{ color: "var(--accent)", fontVariant: "small-caps", letterSpacing: ".06em" }}>
+            <Link
+              to="/posts"
+              style={{ color: "var(--accent)", fontVariant: "small-caps", letterSpacing: ".06em" }}
+            >
               Read all posts →
             </Link>
           </p>

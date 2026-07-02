@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
-import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
-export {}; // make this file a module
+import { join, resolve } from "node:path";
 
 const command = process.argv[2];
 

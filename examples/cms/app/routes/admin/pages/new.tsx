@@ -1,15 +1,14 @@
-import { Link, useActionData, useLoaderData } from "@bractjs/bractjs";
-import { validate } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
+import { Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
-import { createPage, pageTreeFlat, type PageNode } from "../../../models/pages.server.ts";
-import { listMedia, type Media } from "../../../models/media.server.ts";
-import { loadEntityFields, saveEntityFields, type EntityFieldsData } from "../../../models/fields.server.ts";
-import { sanitizeHtml } from "../../../sanitize.ts";
-import { PageSchema, type PageInput } from "../../../validation.ts";
-import { fromValidationError, type FormState } from "../../../form.ts";
-import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { PageForm } from "../../../components/PageForm.tsx";
+import { flashFail, flashRedirect } from "../../../flash.server.ts";
+import { type FormState, fromValidationError } from "../../../form.ts";
+import { type EntityFieldsData, loadEntityFields, saveEntityFields } from "../../../models/fields.server.ts";
+import { listMedia, type Media } from "../../../models/media.server.ts";
+import { createPage, type PageNode, pageTreeFlat } from "../../../models/pages.server.ts";
+import { sanitizeHtml } from "../../../sanitize.ts";
+import { type PageInput, PageSchema } from "../../../validation.ts";
 
 type Data = { parents: PageNode[]; media: Media[]; customFields: EntityFieldsData };
 
@@ -27,7 +26,8 @@ export async function action({ request, formData }: ActionArgs): Promise<FormSta
     return flashFail(await fromValidationError(err));
   }
   const res = createPage({ ...data, body: sanitizeHtml(data.body) });
-  if (!res.ok || !res.id) return flashFail({ error: res.reason, fieldErrors: res.reason ? { slug: [res.reason] } : undefined });
+  if (!res.ok || !res.id)
+    return flashFail({ error: res.reason, fieldErrors: res.reason ? { slug: [res.reason] } : undefined });
   saveEntityFields("page", res.id, formData);
   return flashRedirect(`/admin/pages/${res.id}`, "Page created");
 }
@@ -43,9 +43,17 @@ export default function NewPage() {
     <>
       <div className="admin-bar">
         <h1 style={{ margin: 0 }}>New page</h1>
-        <Link to="/admin/pages" style={{ color: "var(--accent)", textDecoration: "none" }}>← All pages</Link>
+        <Link to="/admin/pages" style={{ color: "var(--accent)", textDecoration: "none" }}>
+          ← All pages
+        </Link>
       </div>
-      <PageForm parentOptions={parents} media={media} customFields={customFields} state={state} submitLabel="Create page" />
+      <PageForm
+        parentOptions={parents}
+        media={media}
+        customFields={customFields}
+        state={state}
+        submitLabel="Create page"
+      />
     </>
   );
 }

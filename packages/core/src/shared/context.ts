@@ -1,5 +1,5 @@
-import { createContext, useContext, createElement, type ComponentType, type ReactNode } from "react";
-import type { RouterLocation, RouteMatch } from "./route-types.ts";
+import { type ComponentType, createContext, createElement, type ReactNode, useContext } from "react";
+import type { RouteMatch, RouterLocation } from "./route-types.ts";
 
 export interface RouteManifest {
   [routeId: string]: {

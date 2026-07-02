@@ -1,11 +1,11 @@
-import { Form, Link, useActionData, useLoaderData } from "@bractjs/bractjs";
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
+import { Form, Link, useActionData, useLoaderData } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
-import { deleteMedia, listMedia, mediaReferences, type Media } from "../../../models/media.server.ts";
-import { removeUploadFile, saveUpload } from "../../../upload.server.ts";
-import { EmptyState, ErrorNote, Field, input, primaryButton } from "../../../ui.tsx";
-import type { FormState } from "../../../form.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
+import type { FormState } from "../../../form.ts";
+import { deleteMedia, listMedia, type Media, mediaReferences } from "../../../models/media.server.ts";
+import { EmptyState, ErrorNote, Field, input, primaryButton } from "../../../ui.tsx";
+import { removeUploadFile, saveUpload } from "../../../upload.server.ts";
 
 export async function loader({ request }: LoaderArgs): Promise<{ items: Media[] }> {
   await requirePermission(request, "media.manage");
@@ -44,7 +44,9 @@ export default function MediaLibrary() {
     <>
       <div className="admin-bar">
         <h1 style={{ margin: 0 }}>Media</h1>
-        <span style={{ color: "var(--admin-muted)", fontSize: ".85rem" }}>{items.length} file{items.length === 1 ? "" : "s"}</span>
+        <span style={{ color: "var(--admin-muted)", fontSize: ".85rem" }}>
+          {items.length} file{items.length === 1 ? "" : "s"}
+        </span>
       </div>
 
       <div style={{ display: "grid", gap: "1.2rem", gridTemplateColumns: "1fr 280px", alignItems: "start" }}>
@@ -54,18 +56,49 @@ export default function MediaLibrary() {
           ) : (
             <div className="media-grid">
               {items.map((m) => (
-                <Link key={m.id} to={`/admin/media/${m.id}`} className="admin-panel" style={{ padding: ".5rem", textDecoration: "none", display: "grid", gap: ".4rem" }}>
-                  <div style={{ aspectRatio: "1 / 1", overflow: "hidden", borderRadius: "8px", background: "#f1f4f6", display: "grid", placeItems: "center" }}>
-                    <img src={m.url} alt={m.alt} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <Link
+                  key={m.id}
+                  to={`/admin/media/${m.id}`}
+                  className="admin-panel"
+                  style={{ padding: ".5rem", textDecoration: "none", display: "grid", gap: ".4rem" }}
+                >
+                  <div
+                    style={{
+                      aspectRatio: "1 / 1",
+                      overflow: "hidden",
+                      borderRadius: "8px",
+                      background: "#f1f4f6",
+                      display: "grid",
+                      placeItems: "center",
+                    }}
+                  >
+                    <img
+                      src={m.url}
+                      alt={m.alt}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
                   </div>
-                  <span style={{ fontSize: ".78rem", color: "var(--admin-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.originalName}</span>
+                  <span
+                    style={{
+                      fontSize: ".78rem",
+                      color: "var(--admin-muted)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {m.originalName}
+                  </span>
                 </Link>
               ))}
             </div>
           )}
         </div>
 
-        <aside className="admin-panel" style={{ position: "sticky", top: "5rem", display: "grid", gap: ".7rem" }}>
+        <aside
+          className="admin-panel"
+          style={{ position: "sticky", top: "5rem", display: "grid", gap: ".7rem" }}
+        >
           <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Upload</h2>
           <p style={{ margin: 0, color: "var(--admin-muted)", fontSize: ".82rem" }}>
             Drag &amp; drop image(s) <strong>anywhere</strong> to upload, or pick a file below.
@@ -79,7 +112,11 @@ export default function MediaLibrary() {
               <input name="alt" placeholder="Describe the image" className={input} />
             </Field>
             {state?.error ? <ErrorNote>{state.error}</ErrorNote> : null}
-            <div><button type="submit" className={primaryButton}>Upload</button></div>
+            <div>
+              <button type="submit" className={primaryButton}>
+                Upload
+              </button>
+            </div>
           </Form>
         </aside>
       </div>

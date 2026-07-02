@@ -54,9 +54,9 @@ export function createCloudflareAdapter(
  * Usage in src/worker.ts:
  *   export default cloudflareHandler;
  */
-export function makeCloudflareHandler(
-  handler: (request: Request) => Promise<Response>,
-): { fetch(request: Request, env: CloudflareEnv, ctx: CloudflareExecutionContext): Promise<Response> } {
+export function makeCloudflareHandler(handler: (request: Request) => Promise<Response>): {
+  fetch(request: Request, env: CloudflareEnv, ctx: CloudflareExecutionContext): Promise<Response>;
+} {
   return {
     fetch(request, _env, _ctx) {
       return handler(request);

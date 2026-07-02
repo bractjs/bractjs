@@ -1,11 +1,15 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { useToasts } from "../hooks/useToast.ts";
-import { toast } from "../toast-store.ts";
 import type { ToastEntry, ToastType } from "../toast-store.ts";
+import { toast } from "../toast-store.ts";
 
 export type ToastPosition =
-  | "top-left" | "top-center" | "top-right"
-  | "bottom-left" | "bottom-center" | "bottom-right";
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
 
 export interface ToasterProps {
   position?: ToastPosition;
@@ -16,20 +20,37 @@ export interface ToasterProps {
 }
 
 const ACCENT: Record<ToastType, string> = {
-  success: "#16a34a", error: "#dc2626", warning: "#d97706", info: "#2563eb", loading: "#6b7280",
+  success: "#16a34a",
+  error: "#dc2626",
+  warning: "#d97706",
+  info: "#2563eb",
+  loading: "#6b7280",
 };
 const ICON: Record<ToastType, string> = {
-  success: "✓", error: "✕", warning: "!", info: "i", loading: "↻",
+  success: "✓",
+  error: "✕",
+  warning: "!",
+  info: "i",
+  loading: "↻",
 };
 
-function isTop(p: ToastPosition) { return p.startsWith("top"); }
+function isTop(p: ToastPosition) {
+  return p.startsWith("top");
+}
 
 function containerStyle(position: ToastPosition, gap: number): CSSProperties {
   const [, x] = position.split("-");
   return {
-    position: "fixed", zIndex: 9999, display: "flex", flexDirection: "column", gap,
-    pointerEvents: "none", maxWidth: "calc(100vw - 32px)", width: 380,
-    top: isTop(position) ? 16 : undefined, bottom: isTop(position) ? undefined : 16,
+    position: "fixed",
+    zIndex: 9999,
+    display: "flex",
+    flexDirection: "column",
+    gap,
+    pointerEvents: "none",
+    maxWidth: "calc(100vw - 32px)",
+    width: 380,
+    top: isTop(position) ? 16 : undefined,
+    bottom: isTop(position) ? undefined : 16,
     left: x === "left" ? 16 : x === "center" ? "50%" : undefined,
     right: x === "right" ? 16 : undefined,
     transform: x === "center" ? "translateX(-50%)" : undefined,
@@ -38,7 +59,10 @@ function containerStyle(position: ToastPosition, gap: number): CSSProperties {
 
 function ToastCard({ entry, top }: { entry: ToastEntry; top: boolean }) {
   const [shown, setShown] = useState(false);
-  useEffect(() => { const r = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(r); }, []);
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(r);
+  }, []);
   const dismiss = () => toast.dismiss(entry.id);
   return (
     <div
@@ -46,10 +70,19 @@ function ToastCard({ entry, top }: { entry: ToastEntry; top: boolean }) {
       aria-live={entry.type === "error" ? "assertive" : "polite"}
       data-bract-toast={entry.type}
       style={{
-        pointerEvents: "auto", display: "flex", alignItems: "flex-start", gap: 12,
-        padding: "12px 14px", borderRadius: 10, background: "#fff", color: "#111",
-        border: "1px solid rgba(0,0,0,0.08)", borderLeft: `4px solid ${ACCENT[entry.type]}`,
-        boxShadow: "0 6px 24px rgba(0,0,0,0.12)", fontSize: 14, lineHeight: 1.4,
+        pointerEvents: "auto",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+        padding: "12px 14px",
+        borderRadius: 10,
+        background: "#fff",
+        color: "#111",
+        border: "1px solid rgba(0,0,0,0.08)",
+        borderLeft: `4px solid ${ACCENT[entry.type]}`,
+        boxShadow: "0 6px 24px rgba(0,0,0,0.12)",
+        fontSize: 14,
+        lineHeight: 1.4,
         transition: "opacity .22s ease, transform .22s ease",
         opacity: shown ? 1 : 0,
         transform: shown ? "translateY(0)" : `translateY(${top ? -8 : 8}px)`,
@@ -58,9 +91,17 @@ function ToastCard({ entry, top }: { entry: ToastEntry; top: boolean }) {
       <span
         aria-hidden
         style={{
-          flex: "0 0 auto", width: 20, height: 20, borderRadius: "50%", color: "#fff",
-          background: ACCENT[entry.type], display: "grid", placeItems: "center",
-          fontSize: 12, fontWeight: 700, marginTop: 1,
+          flex: "0 0 auto",
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          color: "#fff",
+          background: ACCENT[entry.type],
+          display: "grid",
+          placeItems: "center",
+          fontSize: 12,
+          fontWeight: 700,
+          marginTop: 1,
         }}
       >
         {ICON[entry.type]}
@@ -73,11 +114,20 @@ function ToastCard({ entry, top }: { entry: ToastEntry; top: boolean }) {
         {entry.action ? (
           <button
             type="button"
-            onClick={() => { entry.action!.onClick(); dismiss(); }}
+            onClick={() => {
+              entry.action!.onClick();
+              dismiss();
+            }}
             style={{
-              marginTop: 8, padding: "4px 10px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-              color: ACCENT[entry.type], background: "transparent",
-              border: `1px solid ${ACCENT[entry.type]}`, borderRadius: 6,
+              marginTop: 8,
+              padding: "4px 10px",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              color: ACCENT[entry.type],
+              background: "transparent",
+              border: `1px solid ${ACCENT[entry.type]}`,
+              borderRadius: 6,
             }}
           >
             {entry.action.label}
@@ -85,10 +135,18 @@ function ToastCard({ entry, top }: { entry: ToastEntry; top: boolean }) {
         ) : null}
       </div>
       <button
-        type="button" aria-label="Dismiss" onClick={dismiss}
+        type="button"
+        aria-label="Dismiss"
+        onClick={dismiss}
         style={{
-          flex: "0 0 auto", border: "none", background: "transparent", cursor: "pointer",
-          color: "#888", fontSize: 16, lineHeight: 1, padding: 0,
+          flex: "0 0 auto",
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          color: "#888",
+          fontSize: 16,
+          lineHeight: 1,
+          padding: 0,
         }}
       >
         ×
@@ -108,9 +166,13 @@ export function Toaster({ position = "top-right", gap = 10, renderToast }: Toast
   return (
     <div data-bract-toaster={position} style={containerStyle(position, gap)}>
       {ordered.map((entry) =>
-        renderToast
-          ? <div key={entry.id} style={{ pointerEvents: "auto" }}>{renderToast(entry, () => toast.dismiss(entry.id))}</div>
-          : <ToastCard key={entry.id} entry={entry} top={isTop(position)} />,
+        renderToast ? (
+          <div key={entry.id} style={{ pointerEvents: "auto" }}>
+            {renderToast(entry, () => toast.dismiss(entry.id))}
+          </div>
+        ) : (
+          <ToastCard key={entry.id} entry={entry} top={isTop(position)} />
+        ),
       )}
     </div>
   );

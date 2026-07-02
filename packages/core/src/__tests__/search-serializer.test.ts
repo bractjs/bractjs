@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { serializeSearch, withSearch } from "../client/search-serializer.ts";
 
 describe("serializeSearch", () => {

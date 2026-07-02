@@ -38,7 +38,10 @@ export function pageTree(opts: { publishedOnly?: boolean } = {}): PageNode[] {
     else roots.push(node);
   }
   const assign = (nodes: PageNode[], depth: number) => {
-    for (const n of nodes) { n.depth = depth; assign(n.children, depth + 1); }
+    for (const n of nodes) {
+      n.depth = depth;
+      assign(n.children, depth + 1);
+    }
   };
   assign(roots, 0);
   return roots;
@@ -46,7 +49,12 @@ export function pageTree(opts: { publishedOnly?: boolean } = {}): PageNode[] {
 
 export function pageTreeFlat(opts: { publishedOnly?: boolean } = {}): PageNode[] {
   const out: PageNode[] = [];
-  const walk = (nodes: PageNode[]) => { for (const n of nodes) { out.push(n); walk(n.children); } };
+  const walk = (nodes: PageNode[]) => {
+    for (const n of nodes) {
+      out.push(n);
+      walk(n.children);
+    }
+  };
   walk(pageTree(opts));
   return out;
 }
@@ -56,9 +64,12 @@ export function getPageByPath(segments: string[], opts: { publishedOnly?: boolea
   let parentId: string | null = null;
   let page: Page | null = null;
   for (const slug of segments) {
-    const row: Page | null = db
-      .query<Page, [string | null, string]>("SELECT * FROM pages WHERE IFNULL(parentId,'') = IFNULL(?,'') AND slug = ?")
-      .get(parentId, slug) ?? null;
+    const row: Page | null =
+      db
+        .query<Page, [string | null, string]>(
+          "SELECT * FROM pages WHERE IFNULL(parentId,'') = IFNULL(?,'') AND slug = ?",
+        )
+        .get(parentId, slug) ?? null;
     if (!row) return null;
     if (opts.publishedOnly && row.status !== "published") return null;
     page = row;
@@ -88,43 +99,76 @@ export function pageFullPath(id: string): string {
 
 export function childPages(parentId: string, publishedOnly = false): Page[] {
   const extra = publishedOnly ? "AND status = 'published'" : "";
-  return db.query<Page, [string]>(`SELECT * FROM pages WHERE parentId = ? ${extra} ORDER BY menuOrder ASC, title ASC`).all(parentId);
+  return db
+    .query<Page, [string]>(
+      `SELECT * FROM pages WHERE parentId = ? ${extra} ORDER BY menuOrder ASC, title ASC`,
+    )
+    .all(parentId);
 }
 
 export function pageDescendantIds(id: string): Set<string> {
   const ids = new Set<string>([id]);
   const q = db.query<{ id: string }, [string]>("SELECT id FROM pages WHERE parentId = ?");
   const walk = (pid: string) => {
-    for (const row of q.all(pid)) if (!ids.has(row.id)) { ids.add(row.id); walk(row.id); }
+    for (const row of q.all(pid))
+      if (!ids.has(row.id)) {
+        ids.add(row.id);
+        walk(row.id);
+      }
   };
   walk(id);
   return ids;
 }
 
 export function hasChildPages(id: string): boolean {
-  return (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM pages WHERE parentId = ?").get(id)?.n ?? 0) > 0;
+  return (
+    (db.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM pages WHERE parentId = ?").get(id)?.n ??
+      0) > 0
+  );
 }
 
 type WriteInput = {
-  title: string; slug: string; body: string; status: PageStatus;
-  parentId: string | null; featuredMediaId: string | null; menuOrder: number;
-  seoTitle: string; seoDescription: string;
+  title: string;
+  slug: string;
+  body: string;
+  status: PageStatus;
+  parentId: string | null;
+  featuredMediaId: string | null;
+  menuOrder: number;
+  seoTitle: string;
+  seoDescription: string;
 };
 
 function slugTaken(parentId: string | null, slug: string, exceptId?: string): boolean {
-  const row = db.query<{ id: string }, [string | null, string]>(
-    "SELECT id FROM pages WHERE IFNULL(parentId,'') = IFNULL(?,'') AND slug = ?",
-  ).get(parentId, slug);
+  const row = db
+    .query<{ id: string }, [string | null, string]>(
+      "SELECT id FROM pages WHERE IFNULL(parentId,'') = IFNULL(?,'') AND slug = ?",
+    )
+    .get(parentId, slug);
   return !!row && row.id !== exceptId;
 }
 
 export function createPage(input: WriteInput): { ok: boolean; reason?: string; id?: string } {
-  if (slugTaken(input.parentId, input.slug)) return { ok: false, reason: "A page with that slug already exists under this parent." };
+  if (slugTaken(input.parentId, input.slug))
+    return { ok: false, reason: "A page with that slug already exists under this parent." };
   const id = newId();
   const now = nowTs();
   db.run(
     "INSERT INTO pages (id, title, slug, body, status, parentId, featuredMediaId, menuOrder, seoTitle, seoDescription, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-    [id, input.title, input.slug, input.body, input.status, input.parentId, input.featuredMediaId, input.menuOrder, input.seoTitle, input.seoDescription, now, now],
+    [
+      id,
+      input.title,
+      input.slug,
+      input.body,
+      input.status,
+      input.parentId,
+      input.featuredMediaId,
+      input.menuOrder,
+      input.seoTitle,
+      input.seoDescription,
+      now,
+      now,
+    ],
   );
   return { ok: true, id };
 }
@@ -139,7 +183,19 @@ export function updatePage(id: string, input: WriteInput): { ok: boolean; reason
   }
   db.run(
     "UPDATE pages SET title=?, slug=?, body=?, status=?, parentId=?, featuredMediaId=?, menuOrder=?, seoTitle=?, seoDescription=?, updatedAt=? WHERE id=?",
-    [input.title, input.slug, input.body, input.status, input.parentId, input.featuredMediaId, input.menuOrder, input.seoTitle, input.seoDescription, nowTs(), id],
+    [
+      input.title,
+      input.slug,
+      input.body,
+      input.status,
+      input.parentId,
+      input.featuredMediaId,
+      input.menuOrder,
+      input.seoTitle,
+      input.seoDescription,
+      nowTs(),
+      id,
+    ],
   );
   return { ok: true };
 }

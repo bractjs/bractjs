@@ -1,9 +1,13 @@
 import {
-  Component, Suspense, useContext,
-  type ComponentType, type ReactElement, type ReactNode,
+  Component,
+  type ComponentType,
+  type ReactElement,
+  type ReactNode,
+  Suspense,
+  useContext,
 } from "react";
-import { RouterContext } from "../router.tsx";
 import { BractJSContext } from "../../shared/context.ts";
+import { RouterContext } from "../router.tsx";
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
 
@@ -11,7 +15,9 @@ interface EBProps {
   fallback: ComponentType<{ error: Error }>;
   children: ReactNode;
 }
-interface EBState { error: Error | null }
+interface EBState {
+  error: Error | null;
+}
 
 class RouteErrorBoundary extends Component<EBProps, EBState> {
   state: EBState = { error: null };
@@ -47,17 +53,15 @@ export function Outlet(): ReactElement | null {
   // component here would mismatch the server HTML.
   const pending = routerCtx?.hydrationPending;
   const RouteComponent: ComponentType | undefined = pending
-    ? (pending === "spa" ? undefined : routerCtx?.currentModule?.Fallback)
-    : routerCtx?.currentModule?.default ?? bractCtx?.RouteComponent;
+    ? pending === "spa"
+      ? undefined
+      : routerCtx?.currentModule?.Fallback
+    : (routerCtx?.currentModule?.default ?? bractCtx?.RouteComponent);
   const ErrorFallback: ComponentType<{ error: Error }> =
     routerCtx?.currentModule?.ErrorBoundary ?? DefaultErrorFallback;
 
   if (!RouteComponent) {
-    return (
-      <Suspense fallback={null}>
-        {null}
-      </Suspense>
-    );
+    return <Suspense fallback={null}>{null}</Suspense>;
   }
 
   return (

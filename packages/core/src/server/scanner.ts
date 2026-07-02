@@ -2,11 +2,7 @@ import { basename } from "node:path";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type Segment =
-  | string
-  | { param: string }
-  | { optional: string }
-  | { catchAll: string };
+export type Segment = string | { param: string } | { optional: string } | { catchAll: string };
 
 export interface RouteFile {
   filePath: string;
@@ -81,10 +77,10 @@ export function layoutDirsFromFilePath(filePath: string): string[] {
 }
 
 function segmentScore(seg: Segment): number {
-  if (typeof seg === "string") return 0;       // static
-  if ("param" in seg) return 1;                // dynamic
-  if ("optional" in seg) return 2;             // optional dynamic
-  return 3;                                    // catch-all
+  if (typeof seg === "string") return 0; // static
+  if ("param" in seg) return 1; // dynamic
+  if ("optional" in seg) return 2; // optional dynamic
+  return 3; // catch-all
 }
 
 function routeScore(route: RouteFile): number {

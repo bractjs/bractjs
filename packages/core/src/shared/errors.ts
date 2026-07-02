@@ -16,11 +16,7 @@ export class HttpError extends BractJSError {
 }
 
 export function isRedirect(value: unknown): value is Response {
-  return (
-    value instanceof Response &&
-    value.status >= 300 &&
-    value.status < 400
-  );
+  return value instanceof Response && value.status >= 300 && value.status < 400;
 }
 
 export function isHttpError(value: unknown): value is HttpError {

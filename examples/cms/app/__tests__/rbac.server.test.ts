@@ -1,16 +1,38 @@
 // In-memory DB (NODE_ENV=test). The boot bootstrap creates the Administrator +
 // Editor roles and assigns the seeded admin, so those exist here too.
-import { test, expect } from "bun:test";
-import { createUser } from "../models/users.server.ts";
+import { expect, test } from "bun:test";
 import {
-  createRole, getRole, roleByName, setRolePermissions, rolePermissions, deleteRole,
-  createGroup, setGroupRoles, setGroupMembers, groupMemberIds,
-  setUserRoles, setUserGroups, userRoleIds, userGroupIds, userPermissions, userRoleNames,
-  countUsersWithPermission, directRoleMemberCount,
+  countUsersWithPermission,
+  createGroup,
+  createRole,
+  deleteRole,
+  directRoleMemberCount,
+  getRole,
+  groupMemberIds,
+  roleByName,
+  rolePermissions,
+  setGroupMembers,
+  setGroupRoles,
+  setRolePermissions,
+  setUserGroups,
+  setUserRoles,
+  userGroupIds,
+  userPermissions,
+  userRoleIds,
+  userRoleNames,
 } from "../models/rbac.server.ts";
+import { createUser } from "../models/users.server.ts";
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
-const mkUser = async () => (await createUser({ username: `r-${rnd()}`, password: "secret123", displayName: "R", email: `${rnd()}@ex.com` })).user!;
+const mkUser = async () =>
+  (
+    await createUser({
+      username: `r-${rnd()}`,
+      password: "secret123",
+      displayName: "R",
+      email: `${rnd()}@ex.com`,
+    })
+  ).user!;
 const mkRole = (perms: string[]) => {
   const id = createRole({ name: `Role-${rnd()}`, description: "" }).id!;
   setRolePermissions(id, perms);
