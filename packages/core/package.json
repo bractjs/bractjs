@@ -30,7 +30,8 @@
     "src",
     "bin",
     "types",
-    "templates"
+    "templates",
+    "LICENSE"
   ],
   "bin": {
     "bractjs": "./bin/cli.ts"

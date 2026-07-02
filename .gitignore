@@ -39,8 +39,15 @@ src/__tests__/.tmp-*
 tmp/
 .tmp/
 
-# Example projects
-examples/
+# Example app local state (the apps themselves are tracked)
+examples/*/node_modules/
+examples/*/app/_generated/
+examples/*/app/route-types.gen.ts
+examples/*/.bract-image-cache/
+examples/*/bin/
+examples/*/*.db
+examples/*/*.db-*
+examples/*/*.sqlite
 
 # Cache
 .bract-image-cache/
@@ -74,7 +81,6 @@ Desktop.ini
 
 # Internal docs not meant for the repo
 bract-*.md
-ROADMAP.md
 
 # Test coverage
 coverage/

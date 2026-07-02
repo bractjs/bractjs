@@ -81,7 +81,7 @@ cd packages/core
 npm version patch        # or: minor / major
 
 # 3. (Recommended) confirm the tarball contents before publishing
-npm publish --dry-run    # expect files: src, bin, types, templates (+ package.json, LICENSE)
+npm publish --dry-run    # expect files: src, bin, types, templates, LICENSE (+ package.json, README.md)
 
 # 4. Publish
 npm publish              # publishConfig.access is already "public"

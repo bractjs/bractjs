@@ -1,0 +1,13 @@
+node_modules/
+build/
+.bract-image-cache/
+app/_generated/
+app/route-types.gen.ts
+bin/cms-app
+cms.db
+cms.db-wal
+cms.db-shm
+public/uploads/*
+!public/uploads/.gitkeep
+public/styles.css
+.env

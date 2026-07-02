@@ -1,3 +1,13 @@
+/**
+ * @bractjs/bractjs — public API barrel.
+ *
+ * Every symbol exported here is public and must be mirrored in the
+ * hand-maintained declarations under `types/` (`types/index.d.ts` is the type
+ * surface consumers actually see — an export missing there is invisible to
+ * TypeScript users). Section-by-section usage docs live in the repository
+ * README: https://github.com/bractjs/bractjs#readme
+ */
+
 // Server
 export { createServer, renderRoute, redirect, json, error } from "./server/index.ts";
 export { buildFetchHandler } from "./server/serve.ts";

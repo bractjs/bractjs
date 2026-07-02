@@ -1,10 +1,43 @@
 # Changelog
 
-All notable changes to Bract are documented here.
+All notable changes to BractJS are documented here.
 
 ---
 
 ## [Unreleased]
+
+_Nothing yet._
+
+---
+
+## [0.2.2] — 2026-06-23
+
+### Security
+
+- **Static responses now send `X-Content-Type-Options: nosniff`.** Both hashed client chunks (`/build/client/*`) and `/public/*` assets (including user-uploaded files) carry the header, so browsers can't MIME-sniff a static file into a more dangerous type (e.g. treating an uploaded asset as HTML/JS).
+
+### Types
+
+- The CSP middleware surface — `csp()`, `CspOptions`, `CSP_NONCE_KEY`, `getCspNonce` — is now declared in the public type surface (`types/index.d.ts`). It previously existed at runtime only, so TypeScript consumers couldn't import it without errors.
+
+---
+
+## [0.2.1] — 2026-06-21
+
+### Added
+
+- **Toast notifications** — `<Toaster />` component and `useToast()` hook backed by a shared toast store. Flash messages set by loaders/actions surface as toasts on the next render; `<Form>` integrates with the flash flow after redirects.
+
+### Security
+
+- **Adapter-agnostic catch-all for unhandled request errors.** An uncaught throw from a global middleware or from dispatch itself previously escaped to the adapter — which on Bun leaked `err.message` in production, and on Cloudflare/custom adapters wasn't handled at all. `buildFetchHandler` now catches, logs, fires the `onError` lifecycle hook, and returns a generic 500 (the real message is shown only in explicit dev mode).
+- **`BunAdapter`'s last-resort error handler no longer leaks internals.** Its 500 body now returns `"Internal Server Error"` in production; the underlying `err.message` is exposed only in dev, matching the gating used on every other path.
+
+---
+
+## [0.2.0] — 2026-06-16
+
+> **Consolidated notes.** Everything below shipped incrementally across the `0.1.24`–`0.1.29` patch releases and was finalized in `0.2.0` (see the per-tag highlights in the section that follows). `0.2.0` itself also added the published npm README for `@bractjs/bractjs`.
 
 ### Security
 
@@ -39,7 +72,7 @@ All notable changes to Bract are documented here.
 
 ### Deprecated
 
-- **`StreamFetcherResult.events`** — never emitted; use `connect(actionId)`. Removed in 0.2.
+- **`StreamFetcherResult.events`** — never emitted; use `connect(actionId)`. Removal planned for 0.3.
 
 ### Added
 
@@ -77,6 +110,19 @@ All notable changes to Bract are documented here.
 - `src/__tests__/server-module-stub.test.ts` — proves a route importing a `bun:sqlite`-backed `*.server.ts` builds, that no server source/secret/SQL reaches the client output, that named + default exports stay resolvable, that the stub throws when invoked, and that the legacy `serverOnlyPlugin` still hard-fails the same import.
 - `src/__tests__/integration.test.ts` — added regression tests asserting that a route action which *returns* `redirect()` yields a `302` + `Location` for both the `X-BractJS-Action` (`<Form>`) and full-page POST paths (fixture: `routes/redirect-action.tsx`); plus `/_data` now carrying merged `meta`.
 - New suites for this release: `nav-utils.test.ts` (parseTo/location keys), `scroll-restoration.test.ts`, `search-validation.test.ts` (unit + live-server searchSchema coercion/400s), `search-serializer.test.ts`, `fetcher-store.test.ts`, `revalidation.test.ts` (mutation → revalidate contract), `selective-ssr.test.ts` (Fallback SSR, loader skipping, beforeLoad parity), `spa-mode.test.ts` (shell serving + CSRF intact), `prerender.test.ts` (generation + production file serving). `typed-routing.test.ts` extended with `useSearch`/`useSetSearch`/`<Link search>` type-level assertions.
+
+---
+
+## [0.1.24 – 0.1.29] — 2026-05-20 → 2026-06-14
+
+Incremental patch releases; their changes are consolidated into the `[0.2.0]` notes above. Highlights per tag:
+
+- **0.1.24** — deferred framework source resolution until plugin execution.
+- **0.1.25** — concurrent loader execution; `bun build --compile` safety + smoke tests; `*.server.ts` stubbed in client bundles instead of hard-failing; action-returned redirects honored; CSS modules support + client-side React deduplication.
+- **0.1.26** — docs: README requirements + changelog section.
+- **0.1.27** — end-to-end typed routing (typed `Link` / `useNavigate` / `useParams`); typed, validated search params with serialization.
+- **0.1.28** — security-model hardening: CSRF protection, validation handling, CSP configuration.
+- **0.1.29** — per-route middleware + `headers` export; prototype-pollution guards; converted to a pnpm workspace monorepo; `new-app` template package.
 
 ---
 
