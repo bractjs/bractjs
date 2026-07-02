@@ -37,6 +37,45 @@ const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 // large files should use a dedicated upload endpoint configured separately.
 const MAX_FORM_BYTES = 10 * 1_048_576; // 10 MiB
 
+type RouteChain = Awaited<ReturnType<typeof resolveRouteChain>>;
+type PipelineLoaderArgs = ReturnType<typeof buildLoaderArgs>;
+
+/**
+ * SECURITY(high): the shared route-gate pipeline — nested middleware
+ * (root → layout → route, shared mutable `context`, may short-circuit) →
+ * per-route context factory → loader args → beforeLoad gate. BOTH the
+ * document branch and the /_data soft-nav branch run requests through this
+ * single function; that equivalence IS the auth contract (a gate that held
+ * for the document but not for /_data would leak loader data to soft
+ * navigations, and vice versa). `data-contract.test.ts` pins the parity.
+ *
+ * What happens *after* the gates — actions, selective-SSR loader stripping,
+ * HTML render vs. JSON payload — intentionally differs per branch and lives
+ * in the `work` continuation.
+ */
+async function runRoutePipeline(
+  request: Request,
+  params: Record<string, string>,
+  chain: RouteChain,
+  search: Record<string, unknown>,
+  context: Record<string, unknown>,
+  work: (args: PipelineLoaderArgs, mwCtx: MiddlewareContext) => Promise<Response>,
+): Promise<Response> {
+  const mwCtx: MiddlewareContext = { request, params, context };
+  return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
+    const routeContext = await runRouteContext(
+      chain.route as Parameters<typeof runRouteContext>[0],
+      request,
+      params,
+      mwCtx.context,
+    );
+    const args = buildLoaderArgs(request, params, routeContext, search);
+    const beforeLoadResponse = await runBeforeLoad(chain.route, args);
+    if (beforeLoadResponse) return beforeLoadResponse;
+    return work(args, mwCtx);
+  });
+}
+
 export async function handleRequest(
   request: Request,
   trie: TrieNode,
@@ -98,24 +137,14 @@ async function route(
       // SECURITY(high): /_data must run the same auth/redirect gates as a full
       // page request — otherwise a SPA-style soft navigation to a protected
       // route would bypass nested middleware / beforeLoad() / defineContext()
-      // and leak loader data. Run the route middleware chain around the work,
-      // sharing the same mutable `context` so a gate can set/clear fields.
-      const mwCtx: MiddlewareContext = { request: loaderRequest, params: match.params, context };
+      // and leak loader data. runRoutePipeline is the single shared gate
+      // sequence for both branches.
       // `return await` (not bare `return`): a loader/gate inside the middleware
       // work can throw a redirect (e.g. requireAdmin). Without awaiting here the
       // returned promise rejects *after* this try block, so the catch below never
       // runs isRedirect() and the redirect escapes to the top-level handler as a
       // 500 instead of being returned as a 302 for the soft-nav client.
-      return await runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
-        const routeContext = await runRouteContext(
-          chain.route as Parameters<typeof runRouteContext>[0],
-          loaderRequest,
-          match.params,
-          mwCtx.context,
-        );
-        const args = buildLoaderArgs(loaderRequest, match.params, routeContext, search);
-        const beforeLoadResponse = await runBeforeLoad(chain.route, args);
-        if (beforeLoadResponse) return beforeLoadResponse;
+      return await runRoutePipeline(loaderRequest, match.params, chain, search, context, async (args) => {
         const results = await runLoaders(chain, args, onError);
         // Merged meta must ride along: ClientRouter re-renders the document head
         // from this payload on soft navigation, and the initial __BRACTJS_DATA__
@@ -171,25 +200,10 @@ async function route(
     throw err;
   }
 
-  // Nested route middleware (root → layout → route) wraps the action, loaders,
-  // and render. It shares the same mutable `context` object, runs *inside* the
-  // global pipeline, and can short-circuit (auth gate / redirect) by returning
-  // a Response. Empty chains call the work directly (no overhead).
-  const mwCtx: MiddlewareContext = { request, params: match.params, context };
-  return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
-    // Run per-route context factory (defineContext export) before loaders.
-    const routeContext = await runRouteContext(
-      chain.route as Parameters<typeof runRouteContext>[0],
-      request,
-      match.params,
-      mwCtx.context,
-    );
-    const args = buildLoaderArgs(request, match.params, routeContext, search);
-
-    // ── beforeLoad ────────────────────────────────────────────────────────
-    const beforeLoadResponse = await runBeforeLoad(chain.route, args);
-    if (beforeLoadResponse) return beforeLoadResponse;
-
+  // Middleware → context → args → beforeLoad run in runRoutePipeline (the
+  // shared gate sequence with the /_data branch); everything below is the
+  // document-specific work: actions, selective SSR, and the HTML render.
+  return runRoutePipeline(request, match.params, chain, search, context, async (args, mwCtx) => {
     // ── Action (mutating methods) ─────────────────────────────────────────
     let actionData: unknown = null;
     if (MUTATING_METHODS.has(request.method)) {

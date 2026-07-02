@@ -9,13 +9,9 @@ import {
 } from "react";
 import type { ServerManifest } from "../server/render.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
-import type {
-  MetaDescriptor,
-  RouteMatch,
-  RouterLocation,
-  ShouldRevalidateFunction,
-} from "../shared/route-types.ts";
+import type { MetaDescriptor, RouteMatch, RouterLocation } from "../shared/route-types.ts";
 import { cacheKey, loaderCache } from "./cache.ts";
+import { moduleView, parseDataPayload } from "./data-payload.ts";
 import { createLocationKey, matchPatternForPath, parseTo, toSamePath } from "./nav-utils.ts";
 import { type RevalidationInfo, registerRevalidator } from "./revalidation.ts";
 import {
@@ -87,6 +83,25 @@ export function ClientRouter({
     currentModuleRef.current = currentModule;
   }, [currentModule]);
 
+  /**
+   * Commit a `/_data` payload into router state. The five fields must always
+   * move together — a payload applied without (say) its `matches` leaves
+   * useMatches() rendering the previous route's chain. Callers wrap this in
+   * startTransition alongside any commit-specific extras (location, module,
+   * hydration flag).
+   */
+  const applyPayload = useCallback((data: Record<string, unknown>) => {
+    const payload = parseDataPayload(data);
+    setLoaderData(data);
+    setParams(payload.params);
+    setSearch(payload.search);
+    // Re-render the document head from the new route's merged meta. React 19
+    // hoists the <title>/<meta> elements rendered by <MetaTags> into <head>,
+    // so description/OG tags update on soft navigation.
+    setMeta(payload.meta);
+    setMatches(payload.matches);
+  }, []);
+
   const setRoute = useCallback((state: Partial<RouteState>) => {
     if (state.loaderData !== undefined) setLoaderData(state.loaderData);
     if (state.actionData !== undefined) setActionData(state.actionData);
@@ -135,20 +150,15 @@ export function ClientRouter({
 
         // Load the route module first so we can run client-side beforeLoad.
         const routeModule = chunkUrl
-          ? ((await import(/* @vite-ignore */ chunkUrl)) as RouteModuleClient & { beforeLoad?: unknown })
+          ? ((await import(/* @vite-ignore */ chunkUrl)) as RouteModuleClient)
           : null;
+        const view = moduleView(routeModule);
 
         // Run client-side beforeLoad if exported from the route module.
-        if (routeModule && typeof routeModule.beforeLoad === "function") {
+        if (view && typeof view.beforeLoad === "function") {
           const url = new URL(to, window.location.href);
           try {
-            const result = await (
-              routeModule.beforeLoad as (args: {
-                params: Record<string, string>;
-                context: Record<string, unknown>;
-                location: { pathname: string; search: string };
-              }) => Promise<Response | void>
-            )({
+            const result = await view.beforeLoad({
               params: {},
               context: {},
               location: { pathname: url.pathname, search: url.search },
@@ -175,32 +185,19 @@ export function ClientRouter({
         // Commit a /_data payload + the new location in one transition.
         const commit = (data: Record<string, unknown>, module: RouteModuleClient | null) => {
           startTransition(() => {
-            setLoaderData(data);
-            setParams((data.params as Record<string, string>) ?? {});
+            applyPayload(data);
             setLocation(nextLocation);
-            setSearch((data.search as Record<string, unknown>) ?? {});
             setCurrentModule(module);
-            // Re-render the document head from the new route's merged meta.
-            // React 19 hoists the <title>/<meta> elements rendered by <MetaTags>
-            // into <head>, so description/OG tags update on soft navigation.
-            setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
-            setMatches((data.matches as RouteMatch[] | undefined) ?? []);
           });
         };
 
         // ── Cache lookup (B1 / B2) ──────────────────────────────────────────
         // Read config and loaderDeps from the route module if available.
-        const routeConfig = (routeModule as Record<string, unknown> | null)?.config as
-          | { staleTime?: number; gcTime?: number }
-          | undefined;
-        const staleTime = routeConfig?.staleTime ?? 0;
-        const gcTime = routeConfig?.gcTime ?? 300_000;
+        const staleTime = view?.config?.staleTime ?? 0;
+        const gcTime = view?.config?.gcTime ?? 300_000;
 
-        const loaderDepsFn = (routeModule as Record<string, unknown> | null)?.loaderDeps as
-          | ((args: { searchParams: URLSearchParams }) => unknown[])
-          | undefined;
         const searchParams = new URLSearchParams(toSearch);
-        const deps = loaderDepsFn ? loaderDepsFn({ searchParams }) : [dataPath];
+        const deps = view?.loaderDeps ? view.loaderDeps({ searchParams }) : [dataPath];
         const key = cacheKey(toPathname, deps);
 
         const cached = loaderCache.get(key);
@@ -215,9 +212,7 @@ export function ClientRouter({
           commit(cached.data, routeModule);
           setNavState("idle");
           // The route can veto the background refetch via shouldRevalidate.
-          const gate = (routeModule as Record<string, unknown> | null)?.shouldRevalidate as
-            | ShouldRevalidateFunction
-            | undefined;
+          const gate = view?.shouldRevalidate;
           const allowRefetch = gate
             ? gate({
                 currentUrl: new URL(window.location.href),
@@ -231,14 +226,9 @@ export function ClientRouter({
             .then((r) => (r.ok ? r.json() : null))
             .then((fresh) => {
               if (!fresh) return;
-              loaderCache.set(key, fresh as Record<string, unknown>, staleTime, gcTime);
-              startTransition(() => {
-                setLoaderData(fresh as Record<string, unknown>);
-                setParams(((fresh as Record<string, unknown>).params as Record<string, string>) ?? {});
-                setSearch(((fresh as Record<string, unknown>).search as Record<string, unknown>) ?? {});
-                setMeta(((fresh as Record<string, unknown>).meta as MetaDescriptor[] | undefined) ?? []);
-                setMatches(((fresh as Record<string, unknown>).matches as RouteMatch[] | undefined) ?? []);
-              });
+              const freshData = fresh as Record<string, unknown>;
+              loaderCache.set(key, freshData, staleTime, gcTime);
+              startTransition(() => applyPayload(freshData));
             });
           return;
         }
@@ -260,9 +250,7 @@ export function ClientRouter({
         // `serverLoader()` that resolves to the freshly-fetched server data, so a
         // clientLoader can wrap/augment/cache it. Other slices (root/layouts) and
         // the meta/matches payload are untouched.
-        const clientLoader = (routeModule as Record<string, unknown> | null)?.clientLoader as
-          | import("../shared/route-types.ts").ClientLoaderFunction
-          | undefined;
+        const clientLoader = view?.clientLoader;
         if (typeof clientLoader === "function") {
           try {
             data.route = await clientLoader({
@@ -307,7 +295,7 @@ export function ClientRouter({
         setNavState("idle");
       }
     },
-    [manifest],
+    [manifest, applyPayload],
   );
 
   const navigate = useCallback(
@@ -332,45 +320,40 @@ export function ClientRouter({
    * mutation-triggered runs (info.formMethod set) first drop the whole loader
    * cache — any cached entry may reflect pre-mutation state.
    */
-  const revalidate = useCallback(async (info?: RevalidationInfo) => {
-    const loc = locationRef.current;
-    const path = loc.pathname + loc.search;
-    const gate = (currentModuleRef.current as Record<string, unknown> | null)?.shouldRevalidate as
-      | ShouldRevalidateFunction
-      | undefined;
-    const url = new URL(path, window.location.origin);
-    const allow = gate
-      ? gate({
-          currentUrl: url,
-          nextUrl: url,
-          formMethod: info?.formMethod,
-          actionStatus: info?.actionStatus,
-          defaultShouldRevalidate: true,
-        })
-      : true;
-    if (!allow) return;
-    if (info?.formMethod) loaderCache.clear();
-    setRevalidationState("loading");
-    try {
-      const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
-      if (!res.ok) {
-        console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
-        return;
+  const revalidate = useCallback(
+    async (info?: RevalidationInfo) => {
+      const loc = locationRef.current;
+      const path = loc.pathname + loc.search;
+      const gate = moduleView(currentModuleRef.current)?.shouldRevalidate;
+      const url = new URL(path, window.location.origin);
+      const allow = gate
+        ? gate({
+            currentUrl: url,
+            nextUrl: url,
+            formMethod: info?.formMethod,
+            actionStatus: info?.actionStatus,
+            defaultShouldRevalidate: true,
+          })
+        : true;
+      if (!allow) return;
+      if (info?.formMethod) loaderCache.clear();
+      setRevalidationState("loading");
+      try {
+        const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+        if (!res.ok) {
+          console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
+          return;
+        }
+        const data = (await res.json()) as Record<string, unknown>;
+        startTransition(() => applyPayload(data));
+      } catch (err) {
+        console.error("[bractjs] revalidate error:", err);
+      } finally {
+        setRevalidationState("idle");
       }
-      const data = (await res.json()) as Record<string, unknown>;
-      startTransition(() => {
-        setLoaderData(data);
-        setParams((data.params as Record<string, string>) ?? {});
-        setSearch((data.search as Record<string, unknown>) ?? {});
-        setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
-        setMatches((data.matches as RouteMatch[] | undefined) ?? []);
-      });
-    } catch (err) {
-      console.error("[bractjs] revalidate error:", err);
-    } finally {
-      setRevalidationState("idle");
-    }
-  }, []);
+    },
+    [applyPayload],
+  );
 
   // Let fetchers trigger revalidation without importing this component.
   useEffect(() => {
@@ -385,9 +368,7 @@ export function ClientRouter({
   // is only for the first paint of an SSR document.
   useEffect(() => {
     if (hydrationPending) return;
-    const cl = (initialModule as Record<string, unknown> | null)?.clientLoader as
-      | import("../shared/route-types.ts").ClientLoaderFunction
-      | undefined;
+    const cl = moduleView(initialModule)?.clientLoader;
     if (typeof cl !== "function" || cl.hydrate !== true) return;
     let cancelled = false;
     void (async () => {
@@ -440,11 +421,7 @@ export function ClientRouter({
         if (res.ok) {
           const data = (await res.json()) as Record<string, unknown>;
           startTransition(() => {
-            setLoaderData(data);
-            setParams((data.params as Record<string, string>) ?? {});
-            setSearch((data.search as Record<string, unknown>) ?? {});
-            setMeta((data.meta as MetaDescriptor[] | undefined) ?? []);
-            setMatches((data.matches as RouteMatch[] | undefined) ?? []);
+            applyPayload(data);
             setHydrationPending(false);
           });
           return;
@@ -545,9 +522,9 @@ export function ClientRouter({
         let clientAction: import("../shared/route-types.ts").ClientActionFunction | undefined;
         if (chunkUrl) {
           try {
-            const mod = (await import(/* @vite-ignore */ chunkUrl)) as Record<string, unknown>;
-            if (typeof mod.clientAction === "function") {
-              clientAction = mod.clientAction as import("../shared/route-types.ts").ClientActionFunction;
+            const mod = moduleView(await import(/* @vite-ignore */ chunkUrl));
+            if (typeof mod?.clientAction === "function") {
+              clientAction = mod.clientAction;
             }
           } catch {
             /* fall back to a plain server submit */

@@ -24,6 +24,11 @@ All notable changes to BractJS are documented here.
 - **Unhandled promise rejections are now logged and routed to `onError`** (process keeps serving; fatal states still arrive via `uncaughtException`). Previously there was no `unhandledRejection` handler at all, so fire-and-forget failures bypassed the lifecycle hooks.
 - **Dev: adding or deleting a `"use server"` module now updates the action registry without a restart** (the registry was populated once at boot, so new action files 404'd at `/_action` and deleted ones lingered). Changed action *bodies* still require a restart. Route-file checks in the dev watcher also handle Windows path separators, and `<appDir>/lifecycle.ts` is resolved through the configured `appDir` instead of a hardcoded `app/`.
 
+### Internal refactors (no behavior change)
+
+- **The server route-gate sequence is single-sourced.** The document branch and the `/_data` soft-nav branch of the request handler each carried their own copy of the security-sensitive pipeline (nested middleware → per-route context → loader args → `beforeLoad`); both now run through one shared `runRoutePipeline`, with only the intentional differences (actions, selective-SSR loader stripping, HTML vs. JSON) remaining per-branch. Parity is pinned by `data-contract.test.ts`.
+- **ClientRouter applies `/_data` payloads through one helper.** The loaderData/params/search/meta/matches commit was repeated four times (navigation, SWR refetch, revalidation, SPA hydration) with per-site casts; a shared `applyPayload` + a pure `parseDataPayload` (unit-tested) now guarantee all five fields move together, and route-module introspection goes through one typed `moduleView` instead of scattered `as Record<string, unknown>` casts.
+
 ### Tests / tooling
 
 - New `type-surface.test.ts` mechanically asserts every runtime export is declared in `types/*.d.ts` and every declared value exists at runtime — the hand-written declarations can no longer silently drift.
