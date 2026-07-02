@@ -1,21 +1,11 @@
 import type { BunPlugin } from "bun";
 import { relative, resolve, isAbsolute } from "node:path";
+import { hasClientDirective, hasServerDirective } from "../shared/directives.ts";
 
-const CLIENT_RE = /^["']use client["']/m;
-const SERVER_RE = /^["']use server["']/m;
-
-// Strip a UTF-8 BOM and any leading ASCII whitespace before testing the
-// directive regex. Editors that save files with BOM otherwise let "use server"
-// fall through and ship server code to the client bundle.
-function normalizeForDirectiveCheck(src: string): string {
-  return src.replace(/^﻿/, "").replace(/^\s+/, "");
-}
-export function hasClientDirective(src: string): boolean {
-  return CLIENT_RE.test(normalizeForDirectiveCheck(src));
-}
-function hasServerDirective(src: string): boolean {
-  return SERVER_RE.test(normalizeForDirectiveCheck(src));
-}
+// Re-exported for existing importers (use-client-runtime.ts); the shared
+// module in src/shared/directives.ts is the single source of truth, keeping
+// these plugins in lockstep with the runtime action registry and codegen.
+export { hasClientDirective, hasServerDirective };
 
 export function extractExports(src: string): string[] {
   const names: string[] = [];

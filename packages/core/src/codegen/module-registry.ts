@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import { scanRoutes, layoutDirsFromFilePath, type RouteFile } from "../server/scanner.ts";
+import { hasServerDirective } from "../shared/directives.ts";
 
 // Codegen entry-points: `bun build --compile` can't statically trace
 // `Bun.Glob` scans or `import(absPath)` calls, so we materialise the route /
@@ -63,7 +64,6 @@ async function collectLayouts(appDir: string, routes: RouteFile[]): Promise<stri
 
 // ── Action discovery ───────────────────────────────────────────────────────
 
-const SERVER_DIRECTIVE_RE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use server["']/;
 
 function isEligibleActionPath(rel: string): boolean {
   return (
@@ -88,7 +88,7 @@ async function collectActionFiles(appDir: string): Promise<string[]> {
     } catch {
       continue;
     }
-    if (!SERVER_DIRECTIVE_RE.test(src)) continue;
+    if (!hasServerDirective(src)) continue;
     // Normalise Windows separators to POSIX for the registry key.
     found.push(rel.split("\\").join("/"));
   }

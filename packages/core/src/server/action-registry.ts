@@ -1,9 +1,6 @@
 import { join, relative, resolve, isAbsolute } from "node:path";
+import { hasServerDirective } from "../shared/directives.ts";
 
-// Anchored at start-of-file. Allow whitespace and line/block comments before
-// the "use server" string literal. This prevents false matches from a "use
-// server" found inside template literals or runtime strings.
-const SERVER_RE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use server["']/;
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 
 // SECURITY(high): exporting a function from a `"use server"` module publishes
@@ -82,7 +79,7 @@ export async function loadServerActions(appDir: string): Promise<void> {
     const filePath = join(appDir, rel);
     let src: string;
     try { src = await Bun.file(filePath).text(); } catch { continue; }
-    if (!SERVER_RE.test(src)) continue;
+    if (!hasServerDirective(src)) continue;
 
     let mod: Record<string, unknown>;
     try {

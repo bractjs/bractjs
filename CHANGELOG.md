@@ -6,6 +6,10 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **`"use server"` / `"use client"` directive detection is unified** (`src/shared/directives.ts`) across the runtime action registry, the module-registry codegen, and the build plugins — three previously-divergent regexes. The build plugins used a multiline match, so (a) a `"use server"`-looking string at any line start mid-file could wrongly convert an innocent module's exports into fetch proxies, and (b) a real directive preceded by an indented comment could be registered server-side yet ship un-proxied source to the browser. Detection is now anchored to the file's directive prologue (whitespace/comments/BOM tolerated, mid-file matches rejected) everywhere.
+
 ### Fixed
 
 - **Type surface reconciled with the runtime API.** `types/index.d.ts` is hand-maintained and had drifted: `serverModuleStubPlugin` (the client-bundle plugin the docs mark as required), `generateRouteRegistry`/`generateActionRegistry`/`generateManifestModule`, `runRouteMiddleware`/`collectRouteMiddleware`, and the i18n helpers (`wrapRoutesWithLocale`, `stripLocale`, `localizedDataPath`) existed at runtime but were invisible to TypeScript consumers; `RouteMiddleware`, `SessionLike`, `RouteDefinition`, `RouteMiddlewareFunction`, `ClientLoaderFunction`, and `ClientActionFunction` types were likewise missing. All are now declared.
