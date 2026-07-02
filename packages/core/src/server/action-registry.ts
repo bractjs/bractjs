@@ -3,6 +3,15 @@ import { hasServerDirective } from "../shared/directives.ts";
 
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 
+/**
+ * Internal: empty the action registry. Used by the dev watcher before a
+ * re-scan (so deleted/renamed "use server" modules don't linger) and by tests
+ * for isolation. Not part of the public API.
+ */
+export function clearActionRegistry(): void {
+  registry.clear();
+}
+
 // SECURITY(high): exporting a function from a `"use server"` module publishes
 // it as an unauthenticated RPC endpoint reachable via POST /_action and
 // GET /_stream. For files under `routes/`, these reserved exports are framework

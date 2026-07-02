@@ -18,6 +18,12 @@ All notable changes to BractJS are documented here.
 - **`StreamFetcherResult` is exported from source** (it was declared in the types but not exported at runtime); its `events` field deprecation now correctly says removal is planned for 0.3.
 - **Hydration payload type declares `matches`.** The server has always sent the matched-route chain in `__BRACTJS_DATA__`, but `BractJSClientData` didn't declare it — this also broke `tsc --noEmit` on the framework itself.
 
+- **`DevServer.stop()` actually releases everything.** The dev file watcher was started without keeping its handle, so a stopped programmatic dev server kept watching and rebuilding forever; `watchApp` now returns a closable handle (FSWatcher + pending debounce timer) and `stop()` closes it. A throwing/rejecting watch callback is logged instead of becoming an unhandled rejection.
+- **`createDevServer()` no longer calls `process.exit(1)` on a port conflict.** It throws a `DevServerError` (new export of the dev module); the CLI catches it and preserves the friendly message + non-zero exit.
+- **Multiple `createServer()` instances no longer clobber each other.** `onShutdown`/`onError` hooks and the signal handlers used module-level slots, so the last server's hooks replaced everyone's and stopping one server disabled every later `stop()`. Live servers are now tracked in a registry: each `stop()` runs its own hook once, and SIGTERM/SIGINT/uncaughtException shut down all of them.
+- **Unhandled promise rejections are now logged and routed to `onError`** (process keeps serving; fatal states still arrive via `uncaughtException`). Previously there was no `unhandledRejection` handler at all, so fire-and-forget failures bypassed the lifecycle hooks.
+- **Dev: adding or deleting a `"use server"` module now updates the action registry without a restart** (the registry was populated once at boot, so new action files 404'd at `/_action` and deleted ones lingered). Changed action *bodies* still require a restart. Route-file checks in the dev watcher also handle Windows path separators, and `<appDir>/lifecycle.ts` is resolved through the configured `appDir` instead of a hardcoded `app/`.
+
 ### Tests / tooling
 
 - New `type-surface.test.ts` mechanically asserts every runtime export is declared in `types/*.d.ts` and every declared value exists at runtime — the hand-written declarations can no longer silently drift.

@@ -4,6 +4,7 @@ import { createHmrServer } from "./hmr-server.ts";
 import { watchApp } from "./watcher.ts";
 import { rebuildClient } from "./rebuilder.ts";
 import { filePathToPattern, scanRoutes } from "../server/scanner.ts";
+import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
 import { basename, extname, join, resolve } from "node:path";
 import type { LifecycleHooks } from "../server/lifecycle.ts";
 import { loadUserConfig } from "../config/load.ts";
@@ -80,6 +81,19 @@ export interface DevServer {
   stop(): void;
 }
 
+/**
+ * A dev-server startup failure with a user-actionable message (e.g. a port
+ * conflict). The CLI prints `message` without a stack and exits non-zero;
+ * programmatic callers can catch it and react — createDevServer never calls
+ * `process.exit()` itself.
+ */
+export class DevServerError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "DevServerError";
+  }
+}
+
 export async function createDevServer(options?: DevServerOptions): Promise<DevServer> {
   // Must precede any user-code import so SSR-time isDevRuntime() checks
   // (e.g. inside <LiveReload>) observe the dev mode.
@@ -102,14 +116,16 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
   // down"). Idempotent — no-op write when nothing changed.
   await syncRouteTypes(appDir);
 
-  // Friendly port-conflict message instead of a raw Bun EADDRINUSE stack.
+  // Friendly port-conflict error instead of a raw Bun EADDRINUSE stack. Thrown
+  // (not process.exit) so programmatic createDevServer() callers keep running;
+  // the CLI catches DevServerError and exits with the message.
   const onPortInUse = (which: "app server" | "HMR socket", port: number): never => {
-    console.error(
-      `[bractjs] Port ${port} is already in use (${which}). ` +
+    throw new DevServerError(
+      `Port ${port} is already in use (${which}). ` +
         `Set \`port\` (and \`hmrPort\` for the HMR socket) in bractjs.config.ts, ` +
         `or stop the process using it.`,
+      "EADDRINUSE",
     );
-    return process.exit(1);
   };
 
   let hmr: ReturnType<typeof createHmrServer>;
@@ -127,10 +143,10 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
   // Lint route modules + collect the route table (read sources once, no exec).
   const routeRows = await inspectRoutes(appDir);
 
-  // Load user lifecycle hooks if defined (e.g. app/lifecycle.ts)
+  // Load user lifecycle hooks if defined (<appDir>/lifecycle.ts)
   let lifecycle: LifecycleHooks = {};
   try {
-    const lifecyclePath = `${process.cwd()}/app/lifecycle.ts`;
+    const lifecyclePath = resolve(process.cwd(), appDir, "lifecycle.ts");
     const mod = await import(lifecyclePath);
     if (mod.default) lifecycle = mod.default;
   } catch {
@@ -146,12 +162,27 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
     throw err;
   }
 
-  watchApp(appDir, async (file, info) => {
+  const watcher = watchApp(appDir, async (rawFile, info) => {
+    // fs.watch yields backslash-separated paths on Windows; the checks and
+    // pattern derivation below assume POSIX form (action-registry and the
+    // codegen normalize the same way).
+    const file = rawFile.split("\\").join("/");
+
     // Add/remove/rename of a route file changes the route set → regenerate
     // typed routes. Saves (content changes) never alter the generated output
     // (it uses type-only `typeof import(...)`), so skip codegen on those.
     if (info.renameSeen && file.startsWith("routes/")) {
       await syncRouteTypes(appDir);
+    }
+
+    // Add/remove/rename of an action-eligible file (routes/* or *.server.ts):
+    // the registry was populated once at boot, so a newly created "use server"
+    // module would 404 at /_action until restart, and a deleted one would
+    // linger. Re-scan from scratch (changed BODIES still need a restart — the
+    // module cache serves the old code).
+    if (info.renameSeen && (file.startsWith("routes/") || /\.server\.tsx?$/.test(file))) {
+      clearActionRegistry();
+      await loadServerActions(appDir);
     }
 
     // Re-lint changed route modules (warn-once dedupes repeats).
@@ -183,6 +214,7 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
   return {
     stop() {
+      watcher.close();
       srv.stop();
       hmr.stop();
     },

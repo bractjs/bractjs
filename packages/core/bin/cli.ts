@@ -89,13 +89,24 @@ switch (command) {
     await scaffoldNew(process.argv[3]);
     break;
 
-  case "dev":
+  case "dev": {
     // Ensure dev-only handlers gated by isExplicitDev() (e.g. /_hmr/module,
     // /_bractjs/devtools.js) are reachable when the user hasn't set NODE_ENV.
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
-    const { createDevServer } = await import("../src/dev/server.ts");
-    await createDevServer();
+    const { createDevServer, DevServerError } = await import("../src/dev/server.ts");
+    try {
+      await createDevServer();
+    } catch (err) {
+      // User-actionable startup failures (port conflicts) get the message
+      // without a stack; anything else is a real bug and should blow up loud.
+      if (err instanceof DevServerError) {
+        console.error(`[bractjs] ${err.message}`);
+        process.exit(1);
+      }
+      throw err;
+    }
     break;
+  }
 
   case "build": {
     // Force production so React's conditional exports resolve to the prod

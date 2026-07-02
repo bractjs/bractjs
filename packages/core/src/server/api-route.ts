@@ -50,6 +50,15 @@ export interface ApiRouteDefinition<
 const routeRegistry: ApiRouteDefinition<HttpMethod, string, any, any>[] = [];
 
 /**
+ * Internal: drop every registered API route (routes register via `route()`
+ * import side-effects, so tests that import fixtures need a reset). Not part
+ * of the public API.
+ */
+export function clearApiRoutes(): void {
+  routeRegistry.length = 0;
+}
+
+/**
  * Define a typed API route.
  *
  * Usage in app/api/users.ts:
