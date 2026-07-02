@@ -6,7 +6,18 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- **Type surface reconciled with the runtime API.** `types/index.d.ts` is hand-maintained and had drifted: `serverModuleStubPlugin` (the client-bundle plugin the docs mark as required), `generateRouteRegistry`/`generateActionRegistry`/`generateManifestModule`, `runRouteMiddleware`/`collectRouteMiddleware`, and the i18n helpers (`wrapRoutesWithLocale`, `stripLocale`, `localizedDataPath`) existed at runtime but were invisible to TypeScript consumers; `RouteMiddleware`, `SessionLike`, `RouteDefinition`, `RouteMiddlewareFunction`, `ClientLoaderFunction`, and `ClientActionFunction` types were likewise missing. All are now declared.
+- **`ValidationError` is exported as a value.** The barrel exported it type-only while the declarations promised a class, so `err instanceof ValidationError` compiled but threw at runtime.
+- **`routesFingerprint` / `explainStaleness` are actually exported.** The 0.2.0 notes announced them but they never reached the public barrel.
+- **`StreamFetcherResult` is exported from source** (it was declared in the types but not exported at runtime); its `events` field deprecation now correctly says removal is planned for 0.3.
+- **Hydration payload type declares `matches`.** The server has always sent the matched-route chain in `__BRACTJS_DATA__`, but `BractJSClientData` didn't declare it — this also broke `tsc --noEmit` on the framework itself.
+
+### Tests / tooling
+
+- New `type-surface.test.ts` mechanically asserts every runtime export is declared in `types/*.d.ts` and every declared value exists at runtime — the hand-written declarations can no longer silently drift.
+- `pnpm typecheck` (core) now also typechecks the declaration files themselves via `tsconfig.types.json` (`skipLibCheck: false`); they were previously excluded from all typechecking.
 
 ---
 

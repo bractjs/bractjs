@@ -182,6 +182,15 @@ export interface RouteMatch<TData = unknown, THandle = Record<string, unknown>> 
   handle: THandle | undefined;
 }
 
+/** A route's identity in the resolved route tree (id = appDir-relative file path). */
+export interface RouteDefinition {
+  id: string;
+  path: string;
+  filePath: string;
+  parentId?: string;
+  index?: boolean;
+}
+
 export type Segment =
   | string
   | { param: string }

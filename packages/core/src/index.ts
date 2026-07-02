@@ -15,8 +15,8 @@ export { defineContext } from "./server/context.ts";
 export type { ContextFactory } from "./server/context.ts";
 export { route } from "./server/api-route.ts";
 export type { ApiRouteDefinition, ApiRouteOptions, AppApiRoutes } from "./server/api-route.ts";
-export { validate, safeValidate, isValidationResponse, readValidationError } from "./server/validate.ts";
-export type { FieldErrors, ValidationError, SafeValidateResult } from "./server/validate.ts";
+export { validate, safeValidate, isValidationResponse, readValidationError, ValidationError } from "./server/validate.ts";
+export type { FieldErrors, SafeValidateResult } from "./server/validate.ts";
 export { hasForbiddenKey, nullProtoFromEntries } from "./server/proto-guard.ts";
 export { formText, formValues } from "./shared/form-data.ts";
 export { defineActions } from "./shared/define-actions.ts";
@@ -66,6 +66,9 @@ export {
 } from "./codegen/module-registry.ts";
 export type { CodegenResult } from "./codegen/module-registry.ts";
 export type { ModuleRegistry } from "./server/layout.ts";
+
+// Route-type codegen helpers (staleness detection for route-types.gen.ts)
+export { routesFingerprint, explainStaleness } from "./codegen/route-codegen.ts";
 
 // Client RPC
 export { createClient } from "./client/rpc.ts";
@@ -142,7 +145,7 @@ export { useNavigation } from "./client/hooks/useNavigation.ts";
 export { useNavigate } from "./client/hooks/useNavigate.ts";
 export type { NavigateFn, NavigateOptions } from "./client/hooks/useNavigate.ts";
 export { useFetcher } from "./client/hooks/useFetcher.ts";
-export type { FetcherResult, FetcherFormProps, UseFetcherOptions } from "./client/hooks/useFetcher.ts";
+export type { FetcherResult, FetcherFormProps, UseFetcherOptions, StreamFetcherResult } from "./client/hooks/useFetcher.ts";
 export { useFetchers } from "./client/hooks/useFetchers.ts";
 export type { FetcherEntry, FetcherState } from "./client/fetcher-store.ts";
 export { useRevalidator } from "./client/hooks/useRevalidator.ts";

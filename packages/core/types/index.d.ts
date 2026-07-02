@@ -4,12 +4,13 @@ import type { ReactNode, Context, CSSProperties } from "react";
 export type {
   LoaderArgs, ActionArgs, MetaDescriptor, MetaArgs,
   LoaderFunction, ActionFunction, MetaFunction, RouteModule,
-  RouteFile, Segment, RouterLocation, RouteMatch,
+  RouteFile, Segment, RouterLocation, RouteMatch, RouteDefinition,
   ShouldRevalidateArgs, ShouldRevalidateFunction,
   HeadersFunction, HeadersArgs,
+  RouteMiddlewareFunction, ClientLoaderFunction, ClientActionFunction,
   LoaderData, ActionData,
 } from "./route.d.ts";
-import type { RouterLocation, LoaderData, ActionData, ActionArgs, RouteMatch } from "./route.d.ts";
+import type { RouterLocation, LoaderData, ActionData, ActionArgs, RouteMatch, RouteFile } from "./route.d.ts";
 
 // ── Config + Server ───────────────────────────────────────────────────────
 export type { BractJSConfig, ServerManifest, BuildConfig } from "./config.d.ts";
@@ -99,8 +100,25 @@ export declare class MiddlewarePipeline {
 }
 export declare const pipeline: MiddlewarePipeline;
 
+/** A route/layout/root module's `middleware` entry — same shape as the global {@link MiddlewareFn}. */
+export type RouteMiddleware = MiddlewareFn;
+/** Compose + run a per-route middleware chain around `handler` (root → layouts → route). */
+export declare function runRouteMiddleware(
+  fns: RouteMiddleware[],
+  ctx: MiddlewareContext,
+  handler: () => Promise<Response>,
+): Promise<Response>;
+/** Flatten a route chain's `middleware` exports (fn or array) into one ordered list. */
+export declare function collectRouteMiddleware(chain: {
+  root: { middleware?: unknown };
+  layouts: Array<{ middleware?: unknown }>;
+  route: { middleware?: unknown };
+}): RouteMiddleware[];
+
 export interface CorsOptions { origin: string | string[]; methods?: string[]; }
-export interface SessionStorageLike { getSession(cookie?: string | null): Promise<{ get(key: string): unknown }>; }
+/** Minimal read-only session, as exposed by {@link authGuard}. */
+export interface SessionLike { get(key: string): unknown; }
+export interface SessionStorageLike { getSession(cookie?: string | null): Promise<SessionLike>; }
 export interface AuthGuardOptions { session: SessionStorageLike; required?: boolean; }
 export declare function requestLogger(): MiddlewareFn;
 export declare function cors(options: CorsOptions): MiddlewareFn;
@@ -399,7 +417,7 @@ export interface FetcherResult {
   Form: (props: FetcherFormProps) => ReactNode;
 }
 export interface StreamFetcherResult<T = unknown> {
-  /** @deprecated Never emitted — call `connect(actionId)` instead. Removed in 0.2. */
+  /** @deprecated Never emitted — call `connect(actionId)` instead. Removal planned for 0.3. */
   events: AsyncGenerator<T>;
   connect(actionId: string): AsyncGenerator<T>;
 }
@@ -466,6 +484,15 @@ export declare function useToasts(): ToastEntry[];
 export declare function useLocale(defaultLocale?: string): string;
 export declare function useLocalizedLink(defaultLocale?: string): (path: string) => string;
 export interface I18nConfig { locales: string[]; defaultLocale: string; }
+/** Duplicate each route under `/:locale/...` prefixes (server-side route-table helper). */
+export declare function wrapRoutesWithLocale(routes: RouteFile[], i18n: I18nConfig): RouteFile[];
+/** Split a pathname into its leading locale (if any) and the locale-free remainder. */
+export declare function stripLocale(
+  pathname: string,
+  locales: string[],
+): { locale: string | null; strippedPathname: string };
+/** Re-prefix a pathname with a locale for `/_data` fetches (no-op when locale is null). */
+export declare function localizedDataPath(pathname: string, locale: string | null): string;
 
 // ── Adapter (D1) ──────────────────────────────────────────────────────────
 export interface BractAdapter {
@@ -495,11 +522,16 @@ export declare function transformCssModule(filePath: string): Promise<{ map: Rec
 //
 // Apply all of these on the relevant bundle or face crashes / secret leaks:
 //   server bundle  → useClientStubPlugin
-//   client bundle  → createUseServerProxyPlugin(appDir), serverOnlyPlugin,
+//   client bundle  → createUseServerProxyPlugin(appDir), serverModuleStubPlugin,
 //                    clientEnvPlugin(allowedKeys, env), cssModulesPlugin
 export declare const useClientStubPlugin: unknown; // BunPlugin
 export declare function createUseServerProxyPlugin(appDir?: string): unknown; // BunPlugin
 export declare const useServerProxyPlugin: unknown; // BunPlugin (legacy — uses absolute paths)
+/** Client bundle: replaces every export of a `*.server.ts` module with an inert throwing
+ *  stub, keeping the import resolvable while guaranteeing zero server source reaches the
+ *  browser. This is the plugin the dev and production client builds use. */
+export declare const serverModuleStubPlugin: unknown; // BunPlugin
+/** Client bundle (legacy, opt-in): the stricter predecessor that hard-fails any `*.server.ts` import. */
 export declare const serverOnlyPlugin: unknown; // BunPlugin
 export declare function clientEnvPlugin(
   allowedKeys: string[],
@@ -515,6 +547,32 @@ export interface CodegenResult {
 export declare function writeModuleRegistries(appDir: string): Promise<CodegenResult>;
 /** Read `<buildDir>/route-manifest.json`; write `<appDir>/_generated/manifest.ts`. */
 export declare function writeManifestModule(appDir: string, buildDir: string): Promise<string>;
+/** Render the static-import route/layout/root registry module (`_generated/routes.ts`) as source text. */
+export declare function generateRouteRegistry(input: {
+  appDir: string;
+  routes: RouteFile[];
+  layoutRelPaths: string[];
+  hasRoot: boolean;
+}): string;
+/** Render the static-import `"use server"` action registry module (`_generated/actions.ts`) as source text. */
+export declare function generateActionRegistry(input: {
+  appDir: string;
+  actionRelPaths: string[];
+}): string;
+/** Render `_generated/manifest.ts` (an inline ServerManifest constant) from the on-disk manifest JSON. */
+export declare function generateManifestModule(disk: {
+  version?: number;
+  mode?: string;
+  clientEntry: string;
+  rootChunk?: string;
+  routes: Record<string, { chunk: string; pattern: string }>;
+}): string;
+
+// ── Route-type codegen helpers ────────────────────────────────────────────
+/** Stable 8-hex fingerprint of a route-pattern set (order-independent). */
+export declare function routesFingerprint(patterns: string[]): Promise<string>;
+/** Human-readable reason the generated route types are stale, or null when fresh. */
+export declare function explainStaleness(oldSrc: string | null, patterns: string[]): Promise<string | null>;
 
 /** Pre-loaded route/layout/root modules keyed by appDir-relative path. */
 export type ModuleRegistry = Record<string, import("./route.d.ts").RouteModule | Record<string, unknown>>;

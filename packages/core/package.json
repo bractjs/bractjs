@@ -47,7 +47,7 @@
     "dev": "bun run src/dev/server.ts",
     "build": "bun run src/build/bundler.ts",
     "test": "bun test",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit && bunx tsc -p tsconfig.types.json"
   },
   "peerDependencies": {
     "react": "^19",

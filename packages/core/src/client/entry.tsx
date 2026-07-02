@@ -77,7 +77,7 @@ function FallbackApp(): ReactElement {
   hydrateRoot(
     document,
     <ClientRouter
-      initialData={{ ...data, location: initialLocation, search: data.search ?? {} }}
+      initialData={{ ...data, location: initialLocation, search: data.search ?? {}, matches: data.matches ?? [] }}
       initialModule={initialModule}
     >
       <RootComponent />
