@@ -33,6 +33,7 @@ All notable changes to BractJS are documented here.
 - `compile-smoke.test.ts` now reports a proper **skip** when `bun build --compile` is unavailable instead of silently passing empty tests, and can be forced to fail in CI.
 - **npm tarball no longer ships the test suite** (66 files) — `files` excludes `src/__tests__`; a new `prepublishOnly` gate (`scripts/verify-pack.ts`) asserts LICENSE/README/types/template presence and rejects generated or test files.
 - `typescript` is a real devDependency (so `bunx tsc` stops re-resolving it and rewriting `pnpm-lock.yaml` as a side effect) and `@types/bun` is pinned instead of `latest`.
+- **Test backfill for previously-untested areas**: the toast store (auto-dismiss, in-place updates, `toast.promise` transitions), the typed `createClient` RPC proxy (URL/method/CSRF-marker/error contract, via a captured fetch), the Cloudflare adapter, and a new `data-contract.test.ts` that pins the **document-vs-`/_data` parity contract** (beforeLoad short-circuit, middleware, `headers()`, 404s must agree across both branches of the request handler).
 
 ---
 
