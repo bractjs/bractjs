@@ -39,7 +39,6 @@ const APP = join(TMP, "app");
 const BIN = join(TMP, "bin", "app");
 const PORT = 3987;
 
-let compileAvailable = false;
 let serverProc: Bun.Subprocess | null = null;
 const originalCwd = process.cwd();
 
@@ -59,6 +58,22 @@ async function probeCompile(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Probed at module load so the suite can skipIf() — a silent `return` inside
+// each test would report "pass" while asserting nothing. In CI, set
+// CI_REQUIRE_COMPILE=1 to turn "compile unavailable" into a hard failure
+// instead of a skip.
+await rm(TMP, { recursive: true, force: true });
+await mkdir(TMP, { recursive: true });
+const compileAvailable = await probeCompile();
+if (!compileAvailable) {
+  if (process.env.CI_REQUIRE_COMPILE) {
+    throw new Error(
+      "[compile-smoke] `bun build --compile` unavailable, but CI_REQUIRE_COMPILE is set — failing instead of skipping.",
+    );
+  }
+  console.warn("[compile-smoke] `bun build --compile` unavailable — skipping e2e binary test.");
 }
 
 async function scaffoldApp(): Promise<void> {
@@ -166,13 +181,7 @@ async function waitForServer(url: string, timeoutMs = 15_000): Promise<boolean> 
 }
 
 beforeAll(async () => {
-  await rm(TMP, { recursive: true, force: true });
-  await mkdir(TMP, { recursive: true });
-  compileAvailable = await probeCompile();
-  if (!compileAvailable) {
-    console.warn("[compile-smoke] `bun build --compile` unavailable — skipping e2e binary test.");
-    return;
-  }
+  if (!compileAvailable) return;
 
   await scaffoldApp();
 
@@ -236,16 +245,14 @@ afterAll(async () => {
   await rm(TMP, { recursive: true, force: true });
 });
 
-describe("bun build --compile single-binary", () => {
+describe.skipIf(!compileAvailable)("bun build --compile single-binary", () => {
   test("compiled binary serves SSR HTML with 200", async () => {
-    if (!compileAvailable) return;
     const res = await fetch(`http://localhost:${PORT}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
   });
 
   test("compiled binary renders meta() <title> and <meta> into the SSR head", async () => {
-    if (!compileAvailable) return;
     const res = await fetch(`http://localhost:${PORT}/`);
     const html = await res.text();
     // Strip the data island so we assert on the rendered document, not the
@@ -256,7 +263,6 @@ describe("bun build --compile single-binary", () => {
   });
 
   test("compiled binary embeds loader data + bootstrap island", async () => {
-    if (!compileAvailable) return;
     const res = await fetch(`http://localhost:${PORT}/`);
     const html = await res.text();
     expect(html).toContain("__BRACTJS_DATA__");
@@ -264,7 +270,6 @@ describe("bun build --compile single-binary", () => {
   });
 
   test("compiled binary did not fall back to a runtime fs scan (registry mode)", async () => {
-    if (!compileAvailable) return;
     // A 404 for an unmapped path proves routing came from the embedded trie,
     // not a crash from a missing appDir scan.
     const res = await fetch(`http://localhost:${PORT}/definitely-not-a-route`);

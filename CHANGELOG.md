@@ -28,6 +28,11 @@ All notable changes to BractJS are documented here.
 
 - New `type-surface.test.ts` mechanically asserts every runtime export is declared in `types/*.d.ts` and every declared value exists at runtime — the hand-written declarations can no longer silently drift.
 - `pnpm typecheck` (core) now also typechecks the declaration files themselves via `tsconfig.types.json` (`skipLibCheck: false`); they were previously excluded from all typechecking.
+- **CI (GitHub Actions)**: lint, workspace typecheck, lockfile-drift check, full test suite (compile-smoke required via `CI_REQUIRE_COMPILE=1`), and an npm-tarball dry-run now gate every push/PR. There was previously no CI at all.
+- **Biome** is the repo's linter/formatter (`pnpm lint` / `pnpm format`); `.editorconfig` populated (it was tracked but empty).
+- `compile-smoke.test.ts` now reports a proper **skip** when `bun build --compile` is unavailable instead of silently passing empty tests, and can be forced to fail in CI.
+- **npm tarball no longer ships the test suite** (66 files) — `files` excludes `src/__tests__`; a new `prepublishOnly` gate (`scripts/verify-pack.ts`) asserts LICENSE/README/types/template presence and rejects generated or test files.
+- `typescript` is a real devDependency (so `bunx tsc` stops re-resolving it and rewriting `pnpm-lock.yaml` as a side effect) and `@types/bun` is pinned instead of `latest`.
 
 ---
 

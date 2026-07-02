@@ -42,6 +42,8 @@ tmp/
 # Example app local state (the apps themselves are tracked)
 examples/*/node_modules/
 examples/*/app/_generated/
+# Dev-rebuilder client bundles (content-hashed, regenerated on every dev run)
+examples/*/src/client/
 examples/*/app/route-types.gen.ts
 examples/*/.bract-image-cache/
 examples/*/bin/
