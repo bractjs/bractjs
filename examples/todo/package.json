@@ -7,7 +7,9 @@
     "build": "NODE_ENV=production bractjs build",
     "start": "NODE_ENV=production bractjs start",
     "compile": "NODE_ENV=production bractjs compile ./bin/todo-app ./app/server.ts",
-    "start:bin": "./bin/todo-app"
+    "start:bin": "./bin/todo-app",
+    "pretypecheck": "bractjs codegen:seed",
+    "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@bractjs/bractjs": "workspace:*",

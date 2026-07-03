@@ -67,6 +67,10 @@ constraints these enforce.
 
 ## Releasing `@bractjs/bractjs`
 
+> The full step-by-step release guide (GitHub PR flow, tagging rules, npm
+> publish, verification, troubleshooting) lives in
+> [PUBLISH_GUIDE.md](PUBLISH_GUIDE.md). The short version follows.
+
 The framework is the **only** published package; publish it from
 `packages/core/`. The repo root is `"private": true` and cannot be published
 (this is intentional — it prevents publishing the workspace by accident).

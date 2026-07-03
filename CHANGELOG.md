@@ -6,6 +6,10 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`bractjs codegen:seed [app]`** — seeds `<app>/_generated/` (route/action registries + typed routes + a manifest stub) so `app/server.ts` typechecks on a fresh clone without first running a build. This is the same seeding `bractjs new` does; the two now share one implementation.
+
 ### Security
 
 - **`"use server"` / `"use client"` directive detection is unified** (`src/shared/directives.ts`) across the runtime action registry, the module-registry codegen, and the build plugins — three previously-divergent regexes. The build plugins used a multiline match, so (a) a `"use server"`-looking string at any line start mid-file could wrongly convert an innocent module's exports into fetch proxies, and (b) a real directive preceded by an indented comment could be registered server-side yet ship un-proxied source to the browser. Detection is now anchored to the file's directive prologue (whitespace/comments/BOM tolerated, mid-file matches rejected) everywhere.
