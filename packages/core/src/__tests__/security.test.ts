@@ -416,6 +416,26 @@ describe("image handler — dim allowlist", () => {
 // the conversion via a direct loader throw is awkward without fixtures. Skip
 // here — the request-handler change is type-checked + reachable via redirect.)
 
+// ── Open-redirect backstop covers beforeLoad / route-middleware returns ───
+// sanitizeRedirect already guards redirects thrown/returned by loaders/actions;
+// these pin that a redirect Response *returned* from beforeLoad (and, by the
+// same code path, route middleware) is neutralized too — on BOTH the document
+// and /_data branches — so a raw off-origin Location can't escape the gate.
+
+describe("open-redirect backstop — beforeLoad-returned redirect", () => {
+  test("document GET: raw off-origin redirect → 500, no Location", async () => {
+    const res = await fetch(`${BASE}/redirect-beforeload-external`, { redirect: "manual" });
+    expect(res.status).toBe(500);
+    expect(res.headers.get("Location")).toBeNull();
+  });
+
+  test("/_data soft-nav: raw off-origin redirect → 500, no Location", async () => {
+    const res = await fetch(`${BASE}/_data?path=/redirect-beforeload-external`, { redirect: "manual" });
+    expect(res.status).toBe(500);
+    expect(res.headers.get("Location")).toBeNull();
+  });
+});
+
 // ── Item 12 — Content-Type branching for action ──────────────────────────
 
 describe("action Content-Type branching", () => {

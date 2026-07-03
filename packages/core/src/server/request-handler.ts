@@ -62,7 +62,7 @@ async function runRoutePipeline(
   work: (args: PipelineLoaderArgs, mwCtx: MiddlewareContext) => Promise<Response>,
 ): Promise<Response> {
   const mwCtx: MiddlewareContext = { request, params, context };
-  return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
+  const res = await runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
     const routeContext = await runRouteContext(
       chain.route as Parameters<typeof runRouteContext>[0],
       request,
@@ -74,6 +74,15 @@ async function runRoutePipeline(
     if (beforeLoadResponse) return beforeLoadResponse;
     return work(args, mwCtx);
   });
+  // SECURITY(medium): the open-redirect backstop covers the WHOLE gate pipeline,
+  // not just loaders/actions. Route middleware and beforeLoad may *return* a
+  // redirect Response too — a raw off-origin `Location` built from user input in
+  // those hooks would otherwise be emitted unchecked. sanitizeRedirect is a
+  // no-op for non-3xx, same-origin, and `allowExternal`-branded responses, so it
+  // is idempotent over the loader/action redirects `work` already sanitized.
+  // Scoped to the SSR route handler on purpose: /api handlers and the global
+  // pipeline (e.g. an OAuth start route that redirects off-origin) are not gated.
+  return sanitizeRedirect(res, request.url);
 }
 
 export async function handleRequest(
