@@ -1,0 +1,14 @@
+# Mirror of biome.json `files.includes` negations.
+node_modules
+build
+dist
+**/_generated
+**/route-types.gen.ts
+pnpm-lock.yaml
+**/.tmp-*
+examples/*/src/client
+examples/cms/app/styles.css
+
+# Generated Tailwind output (built by `bun run css`, gitignored) — must not be
+# formatted or the next css build re-minifies it and fails the format check.
+examples/*/public/styles.css

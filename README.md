@@ -109,10 +109,7 @@ Defaults: `appDir="./app"`, `publicDir="./public"`, `buildDir="./build"`, `port=
 import { Outlet, Scripts, LiveReload } from "@bractjs/bractjs";
 
 export function meta() {
-  return [
-    { title: "My App" },
-    { name: "viewport", content: "width=device-width, initial-scale=1" },
-  ];
+  return [{ title: "My App" }, { name: "viewport", content: "width=device-width, initial-scale=1" }];
 }
 
 export default function Root() {
@@ -123,8 +120,8 @@ export default function Root() {
         {/* BractJS hoists <title>/<meta> from every route's meta() into <head> */}
       </head>
       <body>
-        <Outlet />     {/* renders the matched route tree */}
-        <Scripts />    {/* injects the client bundle + bootstrap data */}
+        <Outlet /> {/* renders the matched route tree */}
+        <Scripts /> {/* injects the client bundle + bootstrap data */}
         <LiveReload /> {/* dev-only HMR client; no-op in production */}
       </body>
     </html>
@@ -148,16 +145,16 @@ export default function Root() {
 
 Drop a file in `app/routes/`; it becomes a route. BractJS scans at startup and builds a trie.
 
-| File | URL |
-|------|-----|
-| `routes/_index.tsx` | `/` |
-| `routes/about.tsx` | `/about` |
-| `routes/blog/_index.tsx` | `/blog` |
-| `routes/blog/[id].tsx` | `/blog/:id` |
-| `routes/users/[[id]].tsx` | `/users` **and** `/users/:id` (optional) |
-| `routes/docs/[...slug].tsx` | `/docs/*` (catch-all) |
-| `routes/blog/layout.tsx` | wraps all `/blog/*` routes |
-| `routes/(marketing)/about.tsx` | `/about` (group adds no URL segment) |
+| File                           | URL                                      |
+| ------------------------------ | ---------------------------------------- |
+| `routes/_index.tsx`            | `/`                                      |
+| `routes/about.tsx`             | `/about`                                 |
+| `routes/blog/_index.tsx`       | `/blog`                                  |
+| `routes/blog/[id].tsx`         | `/blog/:id`                              |
+| `routes/users/[[id]].tsx`      | `/users` **and** `/users/:id` (optional) |
+| `routes/docs/[...slug].tsx`    | `/docs/*` (catch-all)                    |
+| `routes/blog/layout.tsx`       | wraps all `/blog/*` routes               |
+| `routes/(marketing)/about.tsx` | `/about` (group adds no URL segment)     |
 
 - `[param]` → a dynamic segment, read via `useParams()` / `params` arg.
 - `[[param]]` → an **optional** dynamic segment: the route matches whether the segment is present or not (when absent, `params.param` is simply unset).
@@ -231,7 +228,7 @@ export const searchSchema = z.object({
 // 7) shouldRevalidate — veto automatic data refetches (the SWR background
 //    refetch, and the revalidation after <Form>/fetcher mutations).
 export function shouldRevalidate({ currentUrl, nextUrl, formMethod, defaultShouldRevalidate }) {
-  if (formMethod === "DELETE") return true;     // always refetch after deletes
+  if (formMethod === "DELETE") return true; // always refetch after deletes
   return defaultShouldRevalidate;
 }
 
@@ -243,7 +240,7 @@ export function shouldRevalidate({ currentUrl, nextUrl, formMethod, defaultShoul
 //    beforeLoad ALWAYS runs on the server — ssr:false is not an auth bypass.
 export const ssr = "data-only";
 export function Fallback() {
-  return <p>Loading dashboard…</p>;             // SSR'd in the component's place
+  return <p>Loading dashboard…</p>; // SSR'd in the component's place
 }
 
 // 9) headers — set response headers (Cache-Control / ETag / Vary / CDN hints)
@@ -260,7 +257,7 @@ export function headers({ loaderData, parentHeaders }: HeadersArgs<LoaderData>) 
 export const middleware = [
   async (ctx, next) => {
     if (!ctx.context.user) return redirect("/login");
-    ctx.context.startedAt = Date.now();         // visible to loaders
+    ctx.context.startedAt = Date.now(); // visible to loaders
     return next();
   },
 ];
@@ -270,7 +267,7 @@ export const middleware = [
 //     serverLoader() for this route's server data. Set clientLoader.hydrate =
 //     true to also run on the first hydration of an SSR'd document.
 export async function clientLoader({ serverLoader }) {
-  const server = await serverLoader();          // the normal /_data route slice
+  const server = await serverLoader(); // the normal /_data route slice
   return { ...server, fetchedAt: Date.now() };
 }
 // clientLoader.hydrate = true;                  // opt into running on hydration
@@ -282,7 +279,11 @@ export async function clientAction({ formData, serverAction }) {
 // 12) default — the page component (required for a renderable route).
 export default function BlogPost() {
   const { post } = useLoaderData<LoaderData>();
-  return <article><h1>{post.title}</h1></article>;
+  return (
+    <article>
+      <h1>{post.title}</h1>
+    </article>
+  );
 }
 ```
 
@@ -294,24 +295,28 @@ global pipeline → searchSchema → route middleware (root → layout → route
 
 - **Route middleware** wraps everything after search validation: it runs in chain order with a shared `context`, can short-circuit with a `Response`, and (being outermost-first) can also post-process the final response. It runs inside the app-wide `pipeline` (§14).
 - **Loaders run concurrently** (root, every layout, and the route loader all in one `Promise.all`).
-- A loader that throws an `HttpError`/redirect `Response` is intentional control flow. Any *other* thrown error is caught, sanitized (generic message in production, full message+stack only when `NODE_ENV=development`), and rendered via the nearest `ErrorBoundary`.
+- A loader that throws an `HttpError`/redirect `Response` is intentional control flow. Any _other_ thrown error is caught, sanitized (generic message in production, full message+stack only when `NODE_ENV=development`), and rendered via the nearest `ErrorBoundary`.
 
 > **Security:** put auth checks in `beforeLoad` (per route) or middleware (cross-cutting) — never in a component. `/_data` (used by `<Link>` soft-nav) runs `beforeLoad` and the loader, so a component-only check would still leak loader JSON. See §14.
 
 ### Less boilerplate
 
 **Infer loader data — `useLoaderData<typeof loader>()`.** Pass the loader function type and the data type is inferred from its return (no `LoaderData` alias to maintain). The `Response` redirect branch is excluded; `Deferred` fields (from `defer()`, §8) are preserved for `<Await>`. Same for `useActionData<typeof action>()`.
+
 ```tsx
-export async function loader() { return { post: await db.post.find() }; }
+export async function loader() {
+  return { post: await db.post.find() };
+}
 export default function Post() {
-  const { post } = useLoaderData<typeof loader>();   // typed — no hand-written type
+  const { post } = useLoaderData<typeof loader>(); // typed — no hand-written type
 }
 ```
 
 **Type search params on the args — `LoaderArgs<T>`.** Parameterize to drop the cast (the schema's output type):
+
 ```tsx
 export async function loader({ search }: LoaderArgs<{ page: number }>) {
-  return db.posts({ page: search.page });            // search.page is a number
+  return db.posts({ page: search.page }); // search.page is a number
 }
 // After codegen (§18), `LoaderArgsFor<"/posts">` types params + context + search from the route.
 ```
@@ -319,21 +324,33 @@ export async function loader({ search }: LoaderArgs<{ page: number }>) {
 ### `defineActions` — multi-button forms without an `intent` switch
 
 A route action that handles several buttons usually devolves into `if (intent === …)`. `defineActions` composes it from one handler per intent, and `<Form intent="…">` (§10) renders the matching hidden input. An unknown/missing intent returns a 400 automatically (dev lists the known intents).
+
 ```tsx
 import { defineActions, safeValidate, formText } from "@bractjs/bractjs";
 
 export const action = defineActions({
-  add:    async ({ formData }) => {
-    const r = await safeValidate(TitleSchema, formData);   // §13
+  add: async ({ formData }) => {
+    const r = await safeValidate(TitleSchema, formData); // §13
     if (!r.ok) return { error: r.firstError };
-    addTodo(r.data.title); return {};
+    addTodo(r.data.title);
+    return {};
   },
-  toggle: ({ formData }) => { toggleTodo(formText(formData, "id")); return {}; },
-  delete: ({ formData }) => { deleteTodo(formText(formData, "id")); return {}; },
+  toggle: ({ formData }) => {
+    toggleTodo(formText(formData, "id"));
+    return {};
+  },
+  delete: ({ formData }) => {
+    deleteTodo(formText(formData, "id"));
+    return {};
+  },
 });
 ```
+
 ```tsx
-<Form method="post" intent="toggle"><input type="hidden" name="id" value={id} /><button>Toggle</button></Form>
+<Form method="post" intent="toggle">
+  <input type="hidden" name="id" value={id} />
+  <button>Toggle</button>
+</Form>
 ```
 
 ---
@@ -347,32 +364,41 @@ import { json, redirect, error, HttpError, isRedirect, isHttpError } from "@brac
 ```
 
 ### `json(data, init?)`
+
 Serialize a value as `application/json`.
+
 ```ts
 return json({ ok: true }, { status: 201 });
 ```
 
 ### `redirect(url, status?, headers?, options?)`
+
 Throw or return a redirect. **Open-redirect safe by default** — rejects `//evil.com`, `/\evil`, `https://…`, `javascript:` unless you pass `{ allowExternal: true }`.
+
 ```ts
-return redirect("/dashboard");                                   // 302
-return redirect("/login", 303);                                  // custom status
-return redirect("/x", 302, { "Set-Cookie": cookie });            // with headers
+return redirect("/dashboard"); // 302
+return redirect("/login", 303); // custom status
+return redirect("/x", 302, { "Set-Cookie": cookie }); // with headers
 return redirect("https://other.com", 302, undefined, { allowExternal: true });
 ```
 
 ### `error(message, status?)`
+
 Convenience JSON error: `{ "error": message }` with the given status (default 500).
+
 ```ts
 return error("Bad Request", 400);
 ```
 
 ### `HttpError` & `BractJSError`
+
 Throw a typed HTTP error from a loader/action. The framework converts it to a response with that status (and a default status text if you omit the message).
+
 ```ts
-throw new HttpError(403);                 // → 403 Forbidden
+throw new HttpError(403); // → 403 Forbidden
 throw new HttpError(404, "No such post"); // → 404 with custom message
 ```
+
 `isRedirect(value)` / `isHttpError(value)` / `isBractJSError(value)` are type guards if you handle errors manually.
 
 ---
@@ -414,12 +440,13 @@ import { Suspense } from "react";
 ```
 
 ### `defer(data)`
+
 Wraps each `Promise` field in a `Deferred`; non-promise fields pass through. Awaited fields are in the initial HTML; promises stream after.
 
 ```tsx
 export async function loader({ params }: LoaderArgs) {
   return defer({
-    post: await db.post.findById(params.id),  // awaited → initial HTML
+    post: await db.post.findById(params.id), // awaited → initial HTML
     comments: db.comments.forPost(params.id), // Promise → streamed
   });
 }
@@ -440,6 +467,7 @@ export default function BlogPost() {
 ```
 
 ### `<Await resolve={promise | Deferred} fallback={…}>{(data) => …}</Await>`
+
 Unwraps a promise (or a `Deferred` field from a `defer()` loader) with React 19's `use()` inside its own `<Suspense>`. `isDeferred(value)` and the `Deferred` class are exported if you need to detect/construct deferred values manually.
 
 ---
@@ -449,28 +477,37 @@ Unwraps a promise (or a `Deferred` field from a `defer()` loader) with React 19'
 All hooks are SSR-safe (they return sensible values during SSR) and imported from `@bractjs/bractjs`.
 
 ### `useLoaderData<T>()` → `T`
+
 The current route's loader return value. **Pass the loader function type** to infer it (`Response` branch excluded, `Deferred` fields preserved) — no hand-written type to keep in sync. An explicit object type still works.
+
 ```ts
-const { post } = useLoaderData<typeof loader>();   // inferred from loader()
-const { post } = useLoaderData<LoaderData>();       // or an explicit type
+const { post } = useLoaderData<typeof loader>(); // inferred from loader()
+const { post } = useLoaderData<LoaderData>(); // or an explicit type
 ```
 
 ### `useActionData<T>()` → `T | null`
+
 The most recent action return value (null until an action runs). Like `useLoaderData`, accepts the action function type.
+
 ```ts
 const result = useActionData<typeof action>();
 ```
 
 ### `useParams<T>()` → `T`
+
 URL dynamic params. Pass the **route pattern** as a generic to type the result against your codegen'd routes (see §18); an object shape also works.
+
 ```ts
-const { id } = useParams<"/blog/:id">();        // { id: string } — typed from routes
-const { id } = useParams<{ id: string }>();     // or a hand-written shape
+const { id } = useParams<"/blog/:id">(); // { id: string } — typed from routes
+const { id } = useParams<{ id: string }>(); // or a hand-written shape
 ```
+
 > The pattern is supplied by the caller because the framework can't infer the active route at the type level (React Router's `useParams` works the same way).
 
 ### `useMatches()` → `RouteMatch[]`
+
 The matched route chain, **outermost → innermost** (root, layouts, then the leaf route). Each entry is `{ id, pathname, params, data, handle }`, where `handle` is that module's static `handle` export. Ideal for breadcrumbs and conditional chrome without threading props through every layout. SSR-safe; updates on soft navigation and revalidation.
+
 ```tsx
 // routes/blog/[id].tsx
 export const handle = { breadcrumb: "Post" };
@@ -480,59 +517,77 @@ const crumbs = useMatches()
   .filter((m) => m.handle?.breadcrumb)
   .map((m) => m.handle!.breadcrumb as string);
 ```
+
 > `handle` travels in the SSR bootstrap and the `/_data` payload, so it must be JSON-serializable (same constraint as loader data).
 
 ### `useLocation()` → `{ pathname, search, hash, state, key }`
+
 The current location — reactive on the client, request-derived during SSR (`hash` is always `""` there). `key` is the history entry's identity (what scroll restoration uses); `state` is whatever you passed via `navigate(to, { state })`.
+
 ```ts
 const location = useLocation();
 const isActive = location.pathname.startsWith("/blog");
 ```
 
 ### `useNavigation()` → `{ state }`
+
 `"idle" | "loading" | "submitting"`. Form/`submit()` mutations walk `"submitting"` → `"loading"` (revalidation) → `"idle"`.
+
 ```ts
 const { state } = useNavigation();
 if (state === "loading") return <Spinner />;
 ```
 
 ### `useNavigate()` → `(to, { params?, search?, replace?, state? }) => Promise<void>`
+
 Imperative soft navigation — the counterpart to `<Link>`. `to` autocompletes your routes (after codegen, §18); `params` and `search` are typed per route; any string is still accepted.
+
 ```ts
 const navigate = useNavigate();
-await navigate("/blog/:id", { params: { id: "42" } });     // typed
-await navigate("/posts", { search: { page: 2 } });          // typed search → /posts?page=2
-await navigate("/login", { replace: true });                // replaceState, no history entry
-await navigate("/wizard/2", { state: { from: "step1" } });  // read via useLocation().state
+await navigate("/blog/:id", { params: { id: "42" } }); // typed
+await navigate("/posts", { search: { page: 2 } }); // typed search → /posts?page=2
+await navigate("/login", { replace: true }); // replaceState, no history entry
+await navigate("/wizard/2", { state: { from: "step1" } }); // read via useLocation().state
 ```
 
 ### `useRevalidator()` → `{ revalidate, state }`
+
 Manually re-run the current route's loaders — for "Refresh" buttons, polling, or after out-of-band changes (e.g. a WebSocket event). Respects the route's `shouldRevalidate`. `state` is `"idle" | "loading"` and tracks only revalidation (navigations are `useNavigation()`).
+
 ```ts
 const { revalidate, state } = useRevalidator();
 <button onClick={() => void revalidate()} disabled={state === "loading"}>Refresh</button>
 ```
 
 ### `useSearch()` / `useSetSearch()` — typed, validated search params
+
 `useSearch` returns the route's **validated** search object (the `searchSchema` output — numbers are numbers, defaults applied). Validation runs once on the server; the client never re-runs the schema. `useSetSearch` merges a patch, writes the URL, and soft-navigates so loaders re-run. Set a key to `undefined` to delete it.
+
 ```ts
-const search = useSearch<"/posts">();              // { page: number; q?: string }
+const search = useSearch<"/posts">(); // { page: number; q?: string }
 const setSearch = useSetSearch<"/posts">();
-setSearch({ page: search.page + 1 });              // patch → /posts?page=2&q=…
-setSearch((prev) => ({ q: undefined }), { replace: true });  // delete + replaceState
+setSearch({ page: search.page + 1 }); // patch → /posts?page=2&q=…
+setSearch((prev) => ({ q: undefined }), { replace: true }); // delete + replaceState
 ```
 
 ### `useSearchParams<T>()` → `{ searchParams, getParam, setSearchParams }`
+
 The low-level escape hatch: raw string `URLSearchParams` read/write; writing triggers a soft-nav loader re-run. Prefer `useSearch`/`useSetSearch` (above) when the route has a `searchSchema`.
+
 ```ts
 const { searchParams, getParam, setSearchParams } = useSearchParams<"/blog/:id">();
-const q = getParam("q");                        // string | null
-setSearchParams({ q: "bun" });                  // replace all params
-setSearchParams((prev) => { prev.set("page", "2"); return prev; }); // update
+const q = getParam("q"); // string | null
+setSearchParams({ q: "bun" }); // replace all params
+setSearchParams((prev) => {
+  prev.set("page", "2");
+  return prev;
+}); // update
 ```
 
 ### `useFetcher({ key? })` → `{ data, state, formData, formMethod, load, submit, Form, key }`
+
 Background fetch/mutation without navigating. After a `submit`, the active route's loaders revalidate automatically (gated by `shouldRevalidate`). `formData`/`formMethod` are set from the moment `submit` is called — render them for **optimistic UI**. A `key` gives the fetcher a stable identity shared across components and surviving remounts; unkeyed fetchers are component-bound.
+
 ```ts
 const fetcher = useFetcher({ key: `delete-${id}` });
 await fetcher.load("/products?q=bun");                       // GET loader data
@@ -542,7 +597,9 @@ const optimisticTitle = fetcher.formData?.get("title");      // while submitting
 ```
 
 ### `useFetchers()` → `FetcherEntry[]`
+
 Every active fetcher — the cross-component view for optimistic UI (e.g. dim each table row whose keyed delete fetcher is in flight elsewhere in the tree).
+
 ```ts
 const deleting = new Set(
   useFetchers()
@@ -552,27 +609,35 @@ const deleting = new Set(
 ```
 
 ### `useFetcher<T>({ stream: true })` → `{ connect }`
+
 Consume an async-generator server action as an SSE stream.
+
 ```ts
 const { connect } = useFetcher<string>({ stream: true });
-for await (const chunk of connect(actionId)) { /* … */ }
+for await (const chunk of connect(actionId)) {
+  /* … */
+}
 ```
 
-### `useBlocker(shouldBlock)` 
+### `useBlocker(shouldBlock)`
+
 Prompt before leaving when there are unsaved changes (intercepts back/forward and `<Link>` navigations).
+
 ```ts
 useBlocker(() => formIsDirty);
 ```
 
 ### `useToast()` → `toast` and `useToasts()` → `ToastEntry[]`
+
 Flash status feedback ("Saved", "Delete completed", …) from anywhere. `useToast()` returns the stable `toast` API; you can also import `toast` directly to fire from non-React code (event handlers, fetcher callbacks). Render a single [`<Toaster />`](#10-client-components) in `root.tsx`. `useToasts()` exposes the live queue if you want to build a custom renderer.
+
 ```ts
 import { toast, useToast } from "@bractjs/bractjs";
 
 toast.success("Saved successfully");
 toast.error("Delete failed", { description: "Try again." });
-toast.info("Heads up");           // also: .warning, .loading
-toast.dismiss(id);                // or toast.dismiss() to clear all
+toast.info("Heads up"); // also: .warning, .loading
+toast.dismiss(id); // or toast.dismiss() to clear all
 
 // Wrap an async action: loading → success / error
 await toast.promise(savePost(data), {
@@ -583,13 +648,15 @@ await toast.promise(savePost(data), {
 
 // Optional action button (e.g. undo) + custom auto-dismiss
 toast.success("Delete completed", {
-  duration: 6000,                 // ms; Infinity/0 = sticky
+  duration: 6000, // ms; Infinity/0 = sticky
   action: { label: "Undo", onClick: () => restore(id) },
 });
 ```
 
 ### `useLocale(defaultLocale?)` → `string` and `useLocalizedLink(defaultLocale?)` → `(path) => string`
+
 For i18n prefix routing (§19).
+
 ```ts
 const locale = useLocale("en");                 // reads params.locale
 const localized = useLocalizedLink("en");
@@ -601,15 +668,24 @@ const localized = useLocalizedLink("en");
 ## 10. Client components
 
 ### `<Outlet />`
+
 Renders the matched child route inside a layout (or the route tree inside `root.tsx`).
+
 ```tsx
 export default function BlogLayout() {
-  return <div><nav>Blog</nav><Outlet /></div>;
+  return (
+    <div>
+      <nav>Blog</nav>
+      <Outlet />
+    </div>
+  );
 }
 ```
 
 ### `<Link to params? search? prefetch? replace? viewTransition?>`
+
 Soft-navigates without a full reload. After codegen (§18), `to` autocompletes your routes; for a dynamic route pass typed `params`, and `search` is typed by the target's `searchSchema`. Building the URL yourself still works, so existing links need no changes.
+
 ```tsx
 <Link to="/blog/:id" params={{ id: "42" }}>Read</Link>  {/* typed route + params */}
 <Link to={`/blog/${id}`}>Read</Link>                    {/* built string — also fine */}
@@ -617,20 +693,23 @@ Soft-navigates without a full reload. After codegen (§18), `to` autocompletes y
 <Link to="/about" prefetch="intent">About</Link>        {/* preload on hover/focus intent */}
 <Link to="/gallery" viewTransition>Gallery</Link>       {/* use View Transitions API */}
 ```
+
 Modifier-clicks (ctrl/cmd/shift/alt) fall back to native browser navigation.
 
-**Prefetch modes** — prefetching warms the route chunk (`modulepreload`) *and* the loader cache, so the click commits instantly (prefetched data stays fresh ≥ 30s; concurrent data prefetches are capped at 6 so long lists can't stampede the server):
+**Prefetch modes** — prefetching warms the route chunk (`modulepreload`) _and_ the loader cache, so the click commits instantly (prefetched data stays fresh ≥ 30s; concurrent data prefetches are capped at 6 so long lists can't stampede the server):
 
-| mode | when |
-|---|---|
-| `"none"` (default) | never |
-| `"intent"` | hover **or focus**, after a 100 ms delay (canceled on fly-by) — best default |
-| `"hover"` | immediately on mouseenter (legacy alias) |
-| `"viewport"` | when the link scrolls into view (one shared IntersectionObserver) — for lists |
-| `"render"` | as soon as the link mounts |
+| mode               | when                                                                          |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `"none"` (default) | never                                                                         |
+| `"intent"`         | hover **or focus**, after a 100 ms delay (canceled on fly-by) — best default  |
+| `"hover"`          | immediately on mouseenter (legacy alias)                                      |
+| `"viewport"`       | when the link scrolls into view (one shared IntersectionObserver) — for lists |
+| `"render"`         | as soon as the link mounts                                                    |
 
 ### `<ScrollRestoration getKey? storageKey?>`
+
 Restores the window scroll position on back/forward (and reload), scrolls to top — or to the `#hash` element — on new navigations. Render it **once** in `app/root.tsx`, next to `<Scripts />`. Positions persist in `sessionStorage`. Pass `getKey={(location) => location.pathname}` to share one position across every visit to the same path.
+
 ```tsx
 <body>
   <Outlet />
@@ -640,7 +719,9 @@ Restores the window scroll position on back/forward (and reload), scrolls to top
 ```
 
 ### `<Form method action?>`
+
 Fetch-based submission that re-runs the current route's loader after the action.
+
 ```tsx
 <Form method="post">
   <input name="title" />
@@ -648,23 +729,29 @@ Fetch-based submission that re-runs the current route's loader after the action.
 </Form>
 <Form method="post" action="/blog/new">…</Form>
 ```
+
 Submits as `multipart/form-data` with the `X-BractJS-Action` header (CSRF gate). If the action returns a redirect, the form follows it.
 
 ### `<Scripts />` and `<LiveReload />`
+
 Markers used inside `root.tsx` (§3). `<Scripts />` is where the client bundle + bootstrap data go; `<LiveReload />` is the dev-only HMR client.
 
 ### `<Image />`
+
 Responsive, format-converted images via the built-in `/_image` endpoint — see §20.
 
 ### `<Toaster position? gap? renderToast?>`
+
 Renders the toast queue fired by [`toast` / `useToast()`](#9-client-hooks). Mount it **once** in `app/root.tsx`, next to `<Scripts />`. Self-contained inline styles (no CSS import, CSP-safe — no injected `<style>`/nonce).
+
 ```tsx
 <body>
   <Outlet />
-  <Toaster position="top-right" />   {/* top|bottom + left|center|right */}
+  <Toaster position="top-right" /> {/* top|bottom + left|center|right */}
   <Scripts />
 </body>
 ```
+
 Style hooks: target `[data-bract-toaster]` / `[data-bract-toast="success|error|…"]` with your own CSS, or pass `renderToast={(t, dismiss) => <YourCard …/>}` to fully replace the card.
 
 ---
@@ -763,9 +850,9 @@ export const webhook = route("POST", "/api/webhook", handleWebhook, { csrf: fals
 import { createClient } from "@bractjs/bractjs";
 import type { AppApiRoutes } from "@bractjs/bractjs"; // union of your route defs
 
-const client = createClient<AppApiRoutes>();          // optional baseUrl arg
-const users = await client["/api/users"].GET();        // typed output
-await client["/api/users"].POST({ name: "Alice" });    // typed input
+const client = createClient<AppApiRoutes>(); // optional baseUrl arg
+const users = await client["/api/users"].GET(); // typed output
+await client["/api/users"].POST({ name: "Alice" }); // typed input
 ```
 
 The proxy builds `METHOD path` from the property chain. Non-2xx responses throw an `Error` with `.status` and `.response` attached.
@@ -795,6 +882,7 @@ export async function action({ formData }: ActionArgs) {
 ### `safeValidate` — validate without try/catch (recommended for inline form errors)
 
 Returns a result instead of throwing — the clean idiom when you want to render field errors rather than a 400 page. `firstError` is the first field message.
+
 ```ts
 import { safeValidate } from "@bractjs/bractjs";
 
@@ -802,11 +890,12 @@ export const action = defineActions({
   create: async ({ formData }) => {
     const r = await safeValidate(Schema, formData);
     if (!r.ok) return { error: r.firstError, fieldErrors: r.fieldErrors };
-    await db.post.create(r.data);   // r.data is typed + coerced
+    await db.post.create(r.data); // r.data is typed + coerced
     return redirect("/blog");
   },
 });
 ```
+
 If you prefer to keep calling `validate()` and catching: `isValidationResponse(err)` narrows the thrown 400, and `readValidationError(res)` parses it into `{ fieldErrors, firstError }`.
 
 ### FormData helpers
@@ -832,31 +921,37 @@ pipeline
 
 ### Built-in middleware
 
-| Middleware | What it does |
-|---|---|
-| `requestLogger()` | Logs `[METHOD] /path → status in Xms`. Never logs the query string or headers (token-leak safe). |
-| `cors(options)` | Sets CORS headers, handles `OPTIONS` preflight (204), always sets `Vary: Origin`, refuses `credentials:true` + `origin:"*"`. |
-| `authGuard(options)` | Reads the session, sets `ctx.context.user`; with `required:true` returns 401 when unauthenticated. |
-| `csp(options?)` | Opt-in nonce-based Content-Security-Policy (see below). |
+| Middleware           | What it does                                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `requestLogger()`    | Logs `[METHOD] /path → status in Xms`. Never logs the query string or headers (token-leak safe).                             |
+| `cors(options)`      | Sets CORS headers, handles `OPTIONS` preflight (204), always sets `Vary: Origin`, refuses `credentials:true` + `origin:"*"`. |
+| `authGuard(options)` | Reads the session, sets `ctx.context.user`; with `required:true` returns 401 when unauthenticated.                           |
+| `csp(options?)`      | Opt-in nonce-based Content-Security-Policy (see below).                                                                      |
 
 **`cors(options)`** — `{ origin: string | string[]; methods?: string[]; credentials?: boolean }`:
+
 ```ts
 pipeline.use(cors({ origin: ["https://a.com", "https://b.com"], credentials: true }));
 ```
 
 **`authGuard(options)`** — `{ session: SessionStorageLike; required?: boolean }`:
+
 ```ts
 pipeline.use(authGuard({ session, required: true })); // 401 if no session.user
 ```
 
 **`csp(options?)`** — generates a per-request nonce, applies it to the scripts BractJS injects (via `renderToReadableStream`'s `nonce`), and sets the CSP header:
+
 ```ts
-pipeline.use(csp({
-  directives: { "img-src": "'self' data: https://cdn.example", "frame-ancestors": "'none'" },
-  reportOnly: false, // true → Content-Security-Policy-Report-Only
-  strict: false,     // true → drop 'unsafe-inline' from style-src (see below)
-}));
+pipeline.use(
+  csp({
+    directives: { "img-src": "'self' data: https://cdn.example", "frame-ancestors": "'none'" },
+    reportOnly: false, // true → Content-Security-Policy-Report-Only
+    strict: false, // true → drop 'unsafe-inline' from style-src (see below)
+  }),
+);
 ```
+
 Read the nonce inside a component/middleware with `getCspNonce(context)` (key: `CSP_NONCE_KEY`) to nonce your own inline scripts.
 
 `script-src` is always nonce-based (`'nonce-…' 'strict-dynamic'`), so injected `<script>` cannot execute. Note that with `'strict-dynamic'`, supporting browsers **ignore** the `'self'`/host expressions in `script-src` — trust flows solely through the nonce and the scripts it loads (the `'self'` is kept only as a fallback for older browsers). The default policy also sets `form-action 'self'` (a `<form>` can only submit same-origin), `base-uri 'self'`, `frame-ancestors 'self'`, and `object-src 'none'`. The default `style-src` allows `'unsafe-inline'` for ergonomics (React inline styles, CSS-in-JS); this leaves inline-style injection possible. Pass `strict: true` (or override `style-src` with a nonce/hash) if your app serves all styles from same-origin stylesheets.
@@ -890,7 +985,7 @@ const requireAdmin: RouteMiddlewareFunction = async (ctx, next) => {
   if (!(ctx.context.user as { admin?: boolean } | undefined)?.admin) {
     return redirect("/login");
   }
-  return next();                 // continue to child layouts/route + loaders
+  return next(); // continue to child layouts/route + loaders
 };
 
 export const middleware = [requireAdmin];
@@ -910,9 +1005,9 @@ import { createCookieSession } from "@bractjs/bractjs";
 const session = createCookieSession({
   name: "__session",
   secrets: [Bun.env.SESSION_SECRET!], // first signs; all verify (rotate by prepending)
-  maxAge: 60 * 60 * 24 * 7,           // seconds; 1 week
-  secure: true,                        // false only for local HTTP dev
-  sameSite: "Lax",                     // "Strict" | "Lax" | "None"
+  maxAge: 60 * 60 * 24 * 7, // seconds; 1 week
+  secure: true, // false only for local HTTP dev
+  sameSite: "Lax", // "Strict" | "Lax" | "None"
 });
 ```
 
@@ -949,19 +1044,23 @@ import { defineLifecycle } from "@bractjs/bractjs";
 import { db } from "./db.server.ts";
 
 export default defineLifecycle({
-  async onStart()   { await db.connect();    },
-  async onShutdown(){ await db.disconnect(); },
+  async onStart() {
+    await db.connect();
+  },
+  async onShutdown() {
+    await db.disconnect();
+  },
   onError(err, request) {
     Sentry.captureException(err, { extra: { url: request?.url } });
   },
 });
 ```
 
-| Hook | When |
-|------|------|
-| `onStart` | Once, after the server starts listening. |
-| `onShutdown` | Before exit — any signal, programmatic `stop()`, or uncaught exception. |
-| `onError` | Every unexpected error (loader/action throws, uncaught exceptions). Redirects and `HttpError`s are intentional control flow and are **not** reported. `request` is `undefined` for process-level exceptions. |
+| Hook         | When                                                                                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `onStart`    | Once, after the server starts listening.                                                                                                                                                                     |
+| `onShutdown` | Before exit — any signal, programmatic `stop()`, or uncaught exception.                                                                                                                                      |
+| `onError`    | Every unexpected error (loader/action throws, uncaught exceptions). Redirects and `HttpError`s are intentional control flow and are **not** reported. `request` is `undefined` for process-level exceptions. |
 
 - **Dev** picks up `app/lifecycle.ts` automatically.
 - **Production**: spread into `createServer()`:
@@ -977,11 +1076,11 @@ export default defineLifecycle({
 
 ## 17. Environment variables
 
-| Convention | Behavior |
-|---|---|
+| Convention                     | Behavior                                                                                                                                                                                                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `*.server.ts` / `*.server.tsx` | **Stubbed out of the client bundle.** Import it freely from a route's `loader`/`action`; every export is replaced by an inert stub in the browser build, so the real source (DB drivers, secrets, `bun:sqlite`) never ships. The stub throws if you accidentally call it on the client. |
-| Keys listed in `clientEnv` | Replaced with string literals in the client bundle. |
-| Any other `process.env.*` | Becomes the literal `"undefined"` in the client bundle. |
+| Keys listed in `clientEnv`     | Replaced with string literals in the client bundle.                                                                                                                                                                                                                                     |
+| Any other `process.env.*`      | Becomes the literal `"undefined"` in the client bundle.                                                                                                                                                                                                                                 |
 
 ```ts
 // db.server.ts — never reaches the browser
@@ -1045,17 +1144,21 @@ import type { TypedLoaderArgs } from "../route-types.gen.ts";
 import { routes } from "../route-types.gen.ts";
 
 export async function loader({ params }: TypedLoaderArgs<"/blog/:id">) {
-  return db.post.findById(params.id);          // params.id: string
+  return db.post.findById(params.id); // params.id: string
 }
-routes["/blog/:id"]({ id: "123" });            // → "/blog/123"  (typo'd routes won't compile)
+routes["/blog/:id"]({ id: "123" }); // → "/blog/123"  (typo'd routes won't compile)
 ```
 
 **Type a route's search params or context** by augmenting the package interfaces — `SearchParams<T>` / `Context<T>` and `useSearchParams<T>()` pick it up:
 
 ```ts
 declare module "@bractjs/bractjs" {
-  interface RouteSearchParamsMap { "/blog": { page: string; sort: string } }
-  interface RouteContextMap { "/admin": { user: { id: string; role: "admin" } } }
+  interface RouteSearchParamsMap {
+    "/blog": { page: string; sort: string };
+  }
+  interface RouteContextMap {
+    "/admin": { user: { id: string; role: "admin" } };
+  }
 }
 ```
 
@@ -1115,16 +1218,16 @@ import { Image } from "@bractjs/bractjs";
 />
 ```
 
-| Prop | Type | Default | Notes |
-|------|------|---------|-------|
-| `src` | `string` | — | Path under `/public/` (required) |
-| `alt` | `string` | — | Required |
-| `width` / `height` | `number` | — | Intrinsic size |
-| `quality` | `number` | `80` | 1–100 |
-| `format` | `"webp" \| "avif" \| "jpeg" \| "png"` | `"webp"` | `ImageFormat` |
-| `fit` | `"cover" \| "contain" \| "fill"` | `"cover"` | `ImageFit` |
-| `priority` | `boolean` | `false` | Disable lazy load, set `fetchpriority=high` |
-| `sizes` | `string` | `"100vw"` | HTML `sizes` |
+| Prop               | Type                                  | Default   | Notes                                       |
+| ------------------ | ------------------------------------- | --------- | ------------------------------------------- |
+| `src`              | `string`                              | —         | Path under `/public/` (required)            |
+| `alt`              | `string`                              | —         | Required                                    |
+| `width` / `height` | `number`                              | —         | Intrinsic size                              |
+| `quality`          | `number`                              | `80`      | 1–100                                       |
+| `format`           | `"webp" \| "avif" \| "jpeg" \| "png"` | `"webp"`  | `ImageFormat`                               |
+| `fit`              | `"cover" \| "contain" \| "fill"`      | `"cover"` | `ImageFit`                                  |
+| `priority`         | `boolean`                             | `false`   | Disable lazy load, set `fetchpriority=high` |
+| `sizes`            | `string`                              | `"100vw"` | HTML `sizes`                                |
 
 Generates a `srcset` across breakpoints (320→1920px). Optimized images are cached in memory (LRU, 200 slots) and on disk (`.bract-image-cache/`, survives restarts), both served `Cache-Control: immutable`. The endpoint validates widths against an allowlist, caps total pixel area, limits concurrency, and kills runaway transforms (DoS hardening).
 
@@ -1136,28 +1239,29 @@ Generates a `srcset` across breakpoints (320→1920px). Optimized images are cac
 
 ### CLI
 
-| Command | Description |
-|---------|-------------|
-| `bractjs new <name>` | Scaffold a new app into `<name>/`. |
-| `bractjs dev` | Dev server with HMR (port 3000, HMR ws 3001). |
-| `bractjs build` | Dual server + client build with content-hashed output. |
-| `bractjs start` | Serve the production build. |
-| `bractjs codegen [app] [out]` | Generate `route-types.gen.ts`. |
-| `bractjs codegen:registry [app]` | Generate `app/_generated/{routes,actions}.ts`. |
-| `bractjs codegen:manifest [app] [build]` | Snapshot manifest → `app/_generated/manifest.ts`. |
-| `bractjs compile [outfile] [entry]` | Full single-binary pipeline. |
+| Command                                  | Description                                            |
+| ---------------------------------------- | ------------------------------------------------------ |
+| `bractjs new <name>`                     | Scaffold a new app into `<name>/`.                     |
+| `bractjs dev`                            | Dev server with HMR (port 3000, HMR ws 3001).          |
+| `bractjs build`                          | Dual server + client build with content-hashed output. |
+| `bractjs start`                          | Serve the production build.                            |
+| `bractjs codegen [app] [out]`            | Generate `route-types.gen.ts`.                         |
+| `bractjs codegen:registry [app]`         | Generate `app/_generated/{routes,actions}.ts`.         |
+| `bractjs codegen:manifest [app] [build]` | Snapshot manifest → `app/_generated/manifest.ts`.      |
+| `bractjs compile [outfile] [entry]`      | Full single-binary pipeline.                           |
 
 The CLI is a thin wrapper — every command delegates to a public function, so you can script the same thing.
 
 ### Programmatic API
 
 **`createDevServer(options?)`** — dev server with HMR.
+
 ```ts
 import { createDevServer } from "@bractjs/bractjs";
 
 const dev = await createDevServer({
-  port: 3000,            // default: config.port ?? 3000
-  hmrPort: 3001,         // HMR websocket
+  port: 3000, // default: config.port ?? 3000
+  hmrPort: 3001, // HMR websocket
   config: { appDir: "./app", clientEnv: ["PUBLIC_API_URL"] },
   skipUserConfig: false, // true → don't read bractjs.config.ts
 });
@@ -1165,6 +1269,7 @@ dev.stop();
 ```
 
 **`runBuild(config?)`** — production build (accepts only build-relevant fields).
+
 ```ts
 import { runBuild } from "@bractjs/bractjs";
 
@@ -1172,19 +1277,21 @@ await runBuild({
   appDir: "./app",
   buildDir: "./build",
   minify: true,
-  sourcemap: "external",   // "none" | "linked" | "inline" | "external"
+  sourcemap: "external", // "none" | "linked" | "inline" | "external"
   clientEnv: ["PUBLIC_API_URL"],
-  plugins: [],             // extra Bun plugins
+  plugins: [], // extra Bun plugins
 });
 ```
 
 **`loadUserConfig()`** — read `bractjs.config.ts` (or `.js`) from cwd, validated.
+
 ```ts
 import { loadUserConfig } from "@bractjs/bractjs";
 const cfg = await loadUserConfig(); // {} if no file; throws on a malformed shape
 ```
 
 **`createServer(config?)`** — production HTTP server. Returns `{ stop }`.
+
 ```ts
 import { createServer } from "@bractjs/bractjs";
 import lifecycle from "./app/lifecycle.ts";
@@ -1192,6 +1299,7 @@ const srv = createServer({ port: 3000, buildDir: "./build", ...lifecycle });
 ```
 
 **`buildFetchHandler(config)`** — the adapter-agnostic `(Request) => Promise<Response>` core, if you want to mount BractJS inside another server.
+
 ```ts
 import { buildFetchHandler } from "@bractjs/bractjs";
 const handler = buildFetchHandler({ appDir: "./app", manifest });
@@ -1211,7 +1319,7 @@ Three levels of SSR control, all opt-in:
 ```ts
 // bractjs.config.ts
 export default {
-  ssr: false,   // every document GET serves one static shell
+  ssr: false, // every document GET serves one static shell
 };
 ```
 
@@ -1227,7 +1335,7 @@ export default {
 };
 ```
 
-`bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations *into* a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported for custom pipelines.
+`bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations _into_ a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported for custom pipelines.
 
 Deployment notes: with `bun build --compile`, ship `build/client/` (including `_prerender/`) alongside the binary — or pass it via `--asset`. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs.
 
@@ -1258,10 +1366,10 @@ createServer({
   port: Number(process.env.PORT ?? 3000),
   appDir: "./app",
   publicDir: "./public",
-  manifest,        // no manifest read from disk
-  routeFiles,      // no Bun.Glob route scan
-  moduleRegistry,  // no dynamic import(absPath)
-  actionModules,   // no scan/import for "use server" files
+  manifest, // no manifest read from disk
+  routeFiles, // no Bun.Glob route scan
+  moduleRegistry, // no dynamic import(absPath)
+  actionModules, // no scan/import for "use server" files
 });
 ```
 
@@ -1297,6 +1405,7 @@ import { BunAdapter } from "@bractjs/bractjs";
 ```
 
 **Cloudflare Workers:**
+
 ```ts
 import { buildFetchHandler, makeCloudflareHandler } from "@bractjs/bractjs";
 const handler = buildFetchHandler({ appDir: "./app", manifest });
@@ -1310,18 +1419,21 @@ export default makeCloudflareHandler(handler);
 
 If you write your own `Bun.build()` (instead of `bractjs build`), you **must** apply these or face crashes / secret leaks. All are exported.
 
-| Bundle | Plugin | Without it |
-|---|---|---|
-| Server | `useClientStubPlugin` | Server crashes calling browser-only hooks from `"use client"` modules. |
-| Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB code, secrets) ship in the browser JS. |
-| Client | `serverModuleStubPlugin` | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle. |
-| Client | `clientEnvPlugin(allowedKeys, env)` | Server env vars leak into the browser bundle. |
-| Client | `cssModulesPlugin` | `*.module.css` imports don't resolve. |
+| Bundle | Plugin                               | Without it                                                               |
+| ------ | ------------------------------------ | ------------------------------------------------------------------------ |
+| Server | `useClientStubPlugin`                | Server crashes calling browser-only hooks from `"use client"` modules.   |
+| Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB code, secrets) ship in the browser JS.          |
+| Client | `serverModuleStubPlugin`             | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle. |
+| Client | `clientEnvPlugin(allowedKeys, env)`  | Server env vars leak into the browser bundle.                            |
+| Client | `cssModulesPlugin`                   | `*.module.css` imports don't resolve.                                    |
 
 ```ts
 import {
-  useClientStubPlugin, createUseServerProxyPlugin,
-  serverModuleStubPlugin, clientEnvPlugin, cssModulesPlugin,
+  useClientStubPlugin,
+  createUseServerProxyPlugin,
+  serverModuleStubPlugin,
+  clientEnvPlugin,
+  cssModulesPlugin,
 } from "@bractjs/bractjs";
 
 // Server bundle (target: "bun"):
@@ -1330,7 +1442,7 @@ plugins: [useClientStubPlugin];
 // Client bundle (target: "browser"):
 plugins: [
   serverModuleStubPlugin,
-  createUseServerProxyPlugin("./app"),               // same appDir as createServer!
+  createUseServerProxyPlugin("./app"), // same appDir as createServer!
   clientEnvPlugin(["PUBLIC_API_URL"], Bun.env as Record<string, string>),
   cssModulesPlugin,
 ];
@@ -1349,24 +1461,24 @@ import { defineConfig } from "@bractjs/bractjs";
 export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `port` | `number` | `3000` | TCP port |
-| `hmrPort` | `number` | `3001` | Dev HMR WebSocket port (`bractjs dev` only) |
-| `appDir` | `string` | `"./app"` | Contains `routes/` and `root.tsx` |
-| `publicDir` | `string` | `"./public"` | Static assets (served no-cache) |
-| `buildDir` | `string` | `"./build"` | Build output |
-| `imageCacheDir` | `string` | `".bract-image-cache"` | Optimized-image disk cache |
-| `maxRequestBodySize` | `number` | `16777216` (16 MiB) | Hard ceiling on any request body, enforced by the Bun adapter (§27) |
-| `sourcemap` | `string` | `"external"` | `"none" \| "linked" \| "inline" \| "external"` |
-| `minify` | `boolean` | `true` | Minify client bundles |
-| `clientEnv` | `string[]` | `[]` | `process.env` keys exposed to the client |
-| `plugins` | `BunPlugin[]` | `[]` | Extra client-build plugins |
-| `adapter` | `BractAdapter` | `BunAdapter` | Custom server adapter |
-| `i18n` | `I18nConfig` | — | Locale config consumed by the i18n utilities |
-| `ssr` | `boolean` | `true` | `false` → SPA mode: static shell for every document GET (§21) |
-| `prerender` | `string[] \| () => paths` | — | Paths to prerender at build time (§21) |
-| `onStart` / `onShutdown` / `onError` | hooks | — | Lifecycle (§16) |
+| Field                                | Type                      | Default                | Description                                                         |
+| ------------------------------------ | ------------------------- | ---------------------- | ------------------------------------------------------------------- |
+| `port`                               | `number`                  | `3000`                 | TCP port                                                            |
+| `hmrPort`                            | `number`                  | `3001`                 | Dev HMR WebSocket port (`bractjs dev` only)                         |
+| `appDir`                             | `string`                  | `"./app"`              | Contains `routes/` and `root.tsx`                                   |
+| `publicDir`                          | `string`                  | `"./public"`           | Static assets (served no-cache)                                     |
+| `buildDir`                           | `string`                  | `"./build"`            | Build output                                                        |
+| `imageCacheDir`                      | `string`                  | `".bract-image-cache"` | Optimized-image disk cache                                          |
+| `maxRequestBodySize`                 | `number`                  | `16777216` (16 MiB)    | Hard ceiling on any request body, enforced by the Bun adapter (§27) |
+| `sourcemap`                          | `string`                  | `"external"`           | `"none" \| "linked" \| "inline" \| "external"`                      |
+| `minify`                             | `boolean`                 | `true`                 | Minify client bundles                                               |
+| `clientEnv`                          | `string[]`                | `[]`                   | `process.env` keys exposed to the client                            |
+| `plugins`                            | `BunPlugin[]`             | `[]`                   | Extra client-build plugins                                          |
+| `adapter`                            | `BractAdapter`            | `BunAdapter`           | Custom server adapter                                               |
+| `i18n`                               | `I18nConfig`              | —                      | Locale config consumed by the i18n utilities                        |
+| `ssr`                                | `boolean`                 | `true`                 | `false` → SPA mode: static shell for every document GET (§21)       |
+| `prerender`                          | `string[] \| () => paths` | —                      | Paths to prerender at build time (§21)                              |
+| `onStart` / `onShutdown` / `onError` | hooks                     | —                      | Lifecycle (§16)                                                     |
 
 `loadUserConfig()` validates these shapes and throws a clear error on an obvious mistake (e.g. a string `port`).
 
@@ -1416,12 +1528,12 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 BractJS ships secure defaults, but a few behaviors are worth understanding so you don't accidentally widen your attack surface.
 
-- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any *other* exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** (read the session, check the user). The CSRF gate only proves the call is same-origin; it does not authenticate the user.
+- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any _other_ exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** (read the session, check the user). The CSRF gate only proves the call is same-origin; it does not authenticate the user.
 - **`/_stream` calls actions with no arguments.** A streaming action invoked over `GET /_stream` receives no caller input. It must be safe to call with none and must authorize itself.
 - **Typed `/api` routes are CSRF-protected by default.** Mutating routes (`POST`/`PUT`/`PATCH`/`DELETE`) require a same-origin proof just like server actions; cross-site requests get `403`. Opt out with `route(..., { csrf: false })` **only** for endpoints that don't trust ambient credentials (webhooks, token-authenticated/public APIs). As with actions, the CSRF gate is not authentication — authorize inside the handler.
 - **Global middleware covers every endpoint.** Anything attached to `pipeline.use(...)` — `cors()`, `csp()`, `authGuard()`, a rate limiter, custom logging — runs for typed `/api` routes, `/_action`, `/_stream`, `/_image`, static assets, and SSR documents alike. (This was previously SSR-only; a cross-cutting guard you register globally now actually applies to your API surface.)
 - **CORS + credentials.** Listing an origin in `cors({ origin: [...], credentials: true })` fully trusts that origin for credentialed cross-origin reads. Only list origins you control. `credentials:true` with `origin:"*"` is refused at setup. **Never add `X-BractJS-Action` to `Access-Control-Allow-Headers`** — it is part of the CSRF gate; the built-in `cors()` deliberately omits it. If you write your own CORS layer and expose that header cross-origin, you defeat CSRF on both actions and `/api`; add a cryptographic double-submit token if you must. The header-based gate also assumes browsers send `Sec-Fetch-Site` — behind a proxy that strips it, rely on same-origin `Origin` (which `cors()` does not weaken).
-- **Error messages.** In production, loader/action/api errors are surfaced to the client as a generic message; the real message + stack appear only in dev (`NODE_ENV=development`). For user-facing structured errors throw an `HttpError` (its message *is* shown) — never put secrets in a raw `Error.message`.
+- **Error messages.** In production, loader/action/api errors are surfaced to the client as a generic message; the real message + stack appear only in dev (`NODE_ENV=development`). For user-facing structured errors throw an `HttpError` (its message _is_ shown) — never put secrets in a raw `Error.message`.
 - **CSP `style-src`.** The opt-in `csp()` middleware nonces all scripts, but its default `style-src` includes `'unsafe-inline'` for ergonomics. Pass `csp({ strict: true })` (or override `style-src` with a nonce/hash) if you want to block inline-style injection.
 - **Request body size.** Beyond the per-handler caps (1 MiB JSON for actions/api, 10 MiB route forms), the Bun adapter enforces a hard `maxRequestBodySize` ceiling (default 16 MiB) so no path can stream an unbounded body into memory. Raise it via the `maxRequestBodySize` config for a dedicated large-upload endpoint.
 - **Already handled for you:** path traversal + symlink escape on `/public` and `/_image`, open-redirect neutralization (`redirect()` requires `{ allowExternal: true }` to go off-origin), XSS-safe SSR data island (`safeStringify`), prototype-pollution rejection on action **and** `/api` JSON bodies plus null-prototype objects for form/search inputs, request body-size caps + global backstop, signed/constant-time-verified cookie sessions, CSP defaults (`script-src` nonce + `strict-dynamic`, `form-action`/`base-uri`/`frame-ancestors` `'self'`, `object-src 'none'`), and CSRF via layered `Sec-Fetch-Site` + custom-header + `Origin` checks across actions, `/_stream`, route mutations, and `/api`.

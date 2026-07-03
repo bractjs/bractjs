@@ -25,14 +25,14 @@ bun run css:watch    # (optional, 2nd terminal) live-recompile Tailwind on class
 
 ### Auth configuration (`.env`, all optional)
 
-| Var | Purpose |
-| --- | --- |
-| `SESSION_SECRET` | HMAC secret for the signed cookies (≥16 chars; set in prod). |
-| `ADMIN_EMAIL` | Email for the seeded admin's 2FA code. |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Real email delivery; omit for the console fallback. |
-| `APP_URL` | Public origin used to build OAuth redirect URIs (default `http://localhost:3200`). |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Enables "Continue with Google". Redirect URI: `${APP_URL}/api/auth/google/callback`. |
-| `MS_CLIENT_ID` / `MS_CLIENT_SECRET` / `MS_TENANT` | Enables "Continue with Microsoft". Redirect URI: `${APP_URL}/api/auth/microsoft/callback`. |
+| Var                                                                 | Purpose                                                                                    |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `SESSION_SECRET`                                                    | HMAC secret for the signed cookies (≥16 chars; set in prod).                               |
+| `ADMIN_EMAIL`                                                       | Email for the seeded admin's 2FA code.                                                     |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Real email delivery; omit for the console fallback.                                        |
+| `APP_URL`                                                           | Public origin used to build OAuth redirect URIs (default `http://localhost:3200`).         |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`                         | Enables "Continue with Google". Redirect URI: `${APP_URL}/api/auth/google/callback`.       |
+| `MS_CLIENT_ID` / `MS_CLIENT_SECRET` / `MS_TENANT`                   | Enables "Continue with Microsoft". Redirect URI: `${APP_URL}/api/auth/microsoft/callback`. |
 
 OAuth buttons only render for configured providers. OAuth is **authorization-gated
 by the user table**: an account must already exist with the provider's verified
@@ -92,7 +92,7 @@ bun run typecheck
   5-attempt cap) is emailed (factor 2). The real `cms_session` cookie is issued
   only after the code verifies — or after a successful OAuth sign-in. Issuing and
   verifying are rate-limited (`app/ratelimit.server.ts`). `/admin/verify` is
-  reachable without a full session precisely because it *is* the second factor.
+  reachable without a full session precisely because it _is_ the second factor.
 
 - **OAuth** (`app/oauth.server.ts`, `app/api/auth.ts`): typed `route()` GET
   endpoints under `/api/auth/<provider>/{start,callback}` run the authorization-
@@ -118,7 +118,7 @@ bun run typecheck
   `<Form>` submit, both of which carry BractJS's same-origin gate
   (`Sec-Fetch-Site` / `X-BractJS-Action` / `Origin`), so a cross-site page
   can't drive a logged-in admin's cookies to create/delete content — you don't
-  write any token-handling code. `requireAdmin` then handles *authorization* on
+  write any token-handling code. `requireAdmin` then handles _authorization_ on
   top of that. The same gate covers typed `/api` routes: the public
   `GET /api/posts` feed is CSRF-exempt (GETs are), but a mutating
   `route("POST", "/api/…")` would be CSRF-protected by default — opt out with

@@ -68,8 +68,7 @@ async function doPrefetch(path: string, manifest: ServerManifest): Promise<void>
     : null;
   const routeConfig = mod?.config as { staleTime?: number; gcTime?: number } | undefined;
   const loaderDepsFn = mod?.loaderDeps as
-    | ((args: { searchParams: URLSearchParams }) => unknown[])
-    | undefined;
+    ((args: { searchParams: URLSearchParams }) => unknown[]) | undefined;
   const dataPath = pathname + search;
   const deps = loaderDepsFn ? loaderDepsFn({ searchParams: new URLSearchParams(search) }) : [dataPath];
   const key = cacheKey(pathname, deps);

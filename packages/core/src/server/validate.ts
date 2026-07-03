@@ -99,8 +99,7 @@ export async function validate<T>(schema: Schema<T>, input: FormData | Record<st
 // ── Non-throwing validation (ergonomic action idiom) ───────────────────────
 
 export type SafeValidateResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; fieldErrors: FieldErrors; firstError: string };
+  { ok: true; data: T } | { ok: false; fieldErrors: FieldErrors; firstError: string };
 
 /**
  * Like {@link validate}, but returns a result instead of throwing — the

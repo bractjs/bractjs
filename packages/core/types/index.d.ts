@@ -196,7 +196,6 @@ export interface ApiRouteDefinition<TMethod extends HttpMethod, TPath extends st
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>;
   csrf: boolean;
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export declare function route<TMethod extends HttpMethod, TPath extends string, TInput, TOutput>(
   method: TMethod,
   path: TPath,
@@ -231,8 +230,7 @@ export declare function validate<T>(
 ): Promise<T>;
 
 export type SafeValidateResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; fieldErrors: FieldErrors; firstError: string };
+  { ok: true; data: T } | { ok: false; fieldErrors: FieldErrors; firstError: string };
 /** Non-throwing validate(): returns a result instead of throwing a 400. */
 export declare function safeValidate<T>(
   schema: { safeParse?(i: unknown): unknown } | { parse(i: unknown): T },
@@ -384,12 +382,7 @@ export interface Toast {
   ): Promise<T>;
 }
 export type ToastPosition =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-center"
-  | "bottom-right";
+  "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
 export interface ToasterProps {
   position?: ToastPosition;
   gap?: number;

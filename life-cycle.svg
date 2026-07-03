@@ -1,0 +1,369 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1900" viewBox="0 0 1500 1900" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowLoop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ea580c"/>
+    </marker>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .t   { font-weight:600; font-size:13px; fill:#0f172a; }
+      .t2  { font-weight:700; font-size:14px; fill:#0f172a; }
+      .s   { font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; fill:#64748b; }
+      .s2  { font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; fill:#475569; }
+      .pillT { font-weight:700; font-size:13px; fill:#ffffff; letter-spacing:.4px; }
+      .lbl { font-size:11px; fill:#64748b; font-style:italic; }
+      .edge { stroke:#94a3b8; stroke-width:1.6; fill:none; }
+      .box { rx:11; filter:url(#soft); }
+      .n-build  { fill:#faf7ff; stroke:#b39ddb; stroke-width:1.3; }
+      .n-boot   { fill:#effcff; stroke:#67c0d1; stroke-width:1.3; }
+      .n-req    { fill:#f3f9ff; stroke:#83abe8; stroke-width:1.3; }
+      .n-gate   { fill:#fff0f0; stroke:#e5484d; stroke-width:2.2; }
+      .n-resp   { fill:#f1fdf5; stroke:#5cbe7c; stroke-width:1.4; }
+      .n-client { fill:#fff8f0; stroke:#eaa259; stroke-width:1.3; }
+      .n-shut   { fill:#fff4f6; stroke:#e07890; stroke-width:1.3; }
+    </style>
+  </defs>
+
+  <rect width="1500" height="1900" fill="#ffffff"/>
+
+  <!-- ══════════════ HEADER ══════════════ -->
+  <text x="40" y="52" font-size="30" font-weight="800" fill="#0f172a">BractJS Lifecycle</text>
+  <text x="41" y="78" font-size="14" fill="#64748b">SSR framework for Bun + React 19 &#183; from build to boot, request &#8594; SSR &#8594; hydration &#8594; soft&#8209;nav, to shutdown</text>
+
+  <!-- legend -->
+  <g font-size="11" fill="#475569">
+    <rect x="1055" y="30" width="13" height="13" rx="3" fill="#faf7ff" stroke="#b39ddb"/><text x="1073" y="41">Build</text>
+    <rect x="1123" y="30" width="13" height="13" rx="3" fill="#effcff" stroke="#67c0d1"/><text x="1141" y="41">Boot</text>
+    <rect x="1185" y="30" width="13" height="13" rx="3" fill="#f3f9ff" stroke="#83abe8"/><text x="1203" y="41">Request</text>
+    <rect x="1262" y="30" width="13" height="13" rx="3" fill="#fff0f0" stroke="#e5484d"/><text x="1280" y="41">Gate</text>
+    <rect x="1322" y="30" width="13" height="13" rx="3" fill="#fff8f0" stroke="#eaa259"/><text x="1340" y="41">Client</text>
+    <rect x="1390" y="30" width="13" height="13" rx="3" fill="#fff4f6" stroke="#e07890"/><text x="1408" y="41">Shutdown</text>
+  </g>
+
+  <!-- ══════════════ 1. BUILD ══════════════ -->
+  <rect x="40" y="110" width="1420" height="118" rx="14" fill="#faf8ff" stroke="#e6def7"/>
+  <rect x="40" y="110" width="152" height="26" rx="13" fill="#7c3aed"/>
+  <text x="60" y="128" class="pillT">1 &#183; BUILD TIME</text>
+  <text x="200" y="128" class="lbl">bractjs build &#8901; bun build --compile</text>
+
+  <!-- build chips -->
+  <g>
+    <!-- chip helper: w=200 h=58 at y=150; xs: 40,284,528,772,1016,1260 -->
+    <rect class="box n-build" x="40"   y="150" width="200" height="58"/>
+    <text x="140"  y="176" class="t"  text-anchor="middle">Codegen</text>
+    <text x="140"  y="194" class="s"  text-anchor="middle">writeRouteTypes &#8901; _generated</text>
+
+    <rect class="box n-build" x="284"  y="150" width="200" height="58"/>
+    <text x="384"  y="176" class="t"  text-anchor="middle">Scan routes</text>
+    <text x="384"  y="194" class="s"  text-anchor="middle">scanRoutes(appDir)</text>
+
+    <rect class="box n-build" x="528"  y="150" width="200" height="58"/>
+    <text x="628"  y="176" class="t"  text-anchor="middle">Bundle</text>
+    <text x="628"  y="194" class="s"  text-anchor="middle">server + client (Bun.build)</text>
+
+    <rect class="box n-build" x="772"  y="150" width="200" height="58"/>
+    <text x="872"  y="172" class="t"  text-anchor="middle">Directive plugins</text>
+    <text x="872"  y="189" class="s"  text-anchor="middle">use client/server &#8901; stub</text>
+    <text x="872"  y="201" class="s"  text-anchor="middle">React dedupe</text>
+
+    <rect class="box n-build" x="1016" y="150" width="200" height="58"/>
+    <text x="1116" y="176" class="t"  text-anchor="middle">Hash + manifest</text>
+    <text x="1116" y="194" class="s"  text-anchor="middle">route-manifest.json</text>
+
+    <rect class="box n-build" x="1260" y="150" width="200" height="58"/>
+    <text x="1360" y="172" class="t"  text-anchor="middle">Prerender (SSG)</text>
+    <text x="1360" y="189" class="s"  text-anchor="middle">+ single binary</text>
+    <text x="1360" y="201" class="s"  text-anchor="middle">--compile</text>
+
+    <!-- arrows -->
+    <path class="edge" marker-end="url(#arrow)" d="M240,179 H281"/>
+    <path class="edge" marker-end="url(#arrow)" d="M484,179 H525"/>
+    <path class="edge" marker-end="url(#arrow)" d="M728,179 H769"/>
+    <path class="edge" marker-end="url(#arrow)" d="M972,179 H1013"/>
+    <path class="edge" marker-end="url(#arrow)" d="M1216,179 H1257"/>
+  </g>
+
+  <!-- ══════════════ 2. SERVER BOOT ══════════════ -->
+  <rect x="40" y="248" width="1420" height="118" rx="14" fill="#f4fdff" stroke="#d5f0f5"/>
+  <rect x="40" y="248" width="152" height="26" rx="13" fill="#0891b2"/>
+  <text x="60" y="266" class="pillT">2 &#183; SERVER BOOT</text>
+  <text x="200" y="266" class="lbl">createServer() &#8594; buildFetchHandler()</text>
+
+  <g>
+    <rect class="box n-boot" x="40"   y="288" width="200" height="58"/>
+    <text x="140"  y="314" class="t"  text-anchor="middle">createServer()</text>
+    <text x="140"  y="332" class="s"  text-anchor="middle">pick adapter (Bun&#8230;)</text>
+
+    <rect class="box n-boot" x="284"  y="288" width="200" height="58"/>
+    <text x="384"  y="310" class="t"  text-anchor="middle">Build trie</text>
+    <text x="384"  y="327" class="s"  text-anchor="middle">scanRoutes / routeFiles</text>
+    <text x="384"  y="339" class="s"  text-anchor="middle">&#8594; buildTrie</text>
+
+    <rect class="box n-boot" x="528"  y="288" width="200" height="58"/>
+    <text x="628"  y="314" class="t"  text-anchor="middle">Load actions</text>
+    <text x="628"  y="332" class="s"  text-anchor="middle">loadServerActions</text>
+
+    <rect class="box n-boot" x="772"  y="288" width="200" height="58"/>
+    <text x="872"  y="310" class="t"  text-anchor="middle">use-client stub</text>
+    <text x="872"  y="327" class="s"  text-anchor="middle">null-render client</text>
+    <text x="872"  y="339" class="s"  text-anchor="middle">modules on server</text>
+
+    <rect class="box n-boot" x="1016" y="288" width="200" height="58"/>
+    <text x="1116" y="314" class="t"  text-anchor="middle">adapter.listen()</text>
+    <text x="1116" y="332" class="s"  text-anchor="middle">bind port 3000/3200</text>
+
+    <rect class="box n-boot" x="1260" y="288" width="200" height="58"/>
+    <text x="1360" y="314" class="t"  text-anchor="middle">onStart()</text>
+    <text x="1360" y="332" class="s"  text-anchor="middle">warm caches / DB</text>
+
+    <path class="edge" marker-end="url(#arrow)" d="M240,317 H281"/>
+    <path class="edge" marker-end="url(#arrow)" d="M484,317 H525"/>
+    <path class="edge" marker-end="url(#arrow)" d="M728,317 H769"/>
+    <path class="edge" marker-end="url(#arrow)" d="M972,317 H1013"/>
+    <path class="edge" marker-end="url(#arrow)" d="M1216,317 H1257"/>
+  </g>
+
+  <!-- ══════════════ 3. REQUEST LIFECYCLE ══════════════ -->
+  <rect x="40" y="386" width="1420" height="782" rx="14" fill="#f5faff" stroke="#dce9fb"/>
+  <rect x="40" y="386" width="210" height="26" rx="13" fill="#2563eb"/>
+  <text x="60" y="404" class="pillT">3 &#183; REQUEST &#8594; RESPONSE</text>
+  <text x="262" y="404" class="lbl">per request &#183; fetch(request) &#8594; Promise&lt;Response&gt;</text>
+
+  <!-- spine nodes (center x = 430, w=440 -> x 210..650) -->
+  <rect class="box n-req" x="210" y="424" width="440" height="46"/>
+  <text x="430" y="447" class="t"  text-anchor="middle">fetch(request)</text>
+  <text x="430" y="462" class="s"  text-anchor="middle">adapter &#8594; core handler</text>
+
+  <rect class="box n-req" x="210" y="492" width="440" height="60"/>
+  <text x="430" y="515" class="t"  text-anchor="middle">Global middleware pipeline &#183; pipeline.run</text>
+  <text x="430" y="532" class="s"  text-anchor="middle">cors &#8901; csp &#8901; auth &#8901; logging &#8212; wraps the whole dispatch</text>
+  <text x="430" y="545" class="s"  text-anchor="middle">try/catch &#8594; generic 500 &#8901; fireOnError</text>
+
+  <rect class="box n-req" x="210" y="574" width="440" height="50"/>
+  <text x="430" y="597" class="t"  text-anchor="middle">dispatch(request, ctx)</text>
+  <text x="430" y="613" class="s"  text-anchor="middle">check fast paths, else fall through to SSR</text>
+
+  <rect class="box n-req" x="210" y="828" width="440" height="48"/>
+  <text x="430" y="850" class="t"  text-anchor="middle">handleRequest &#8594; route()</text>
+  <text x="430" y="866" class="s"  text-anchor="middle">SSR document &#8901; /_data soft-nav</text>
+
+  <rect class="box n-req" x="210" y="898" width="440" height="60"/>
+  <text x="430" y="920" class="t"  text-anchor="middle">Match &#183; resolve &#183; validate</text>
+  <text x="430" y="937" class="s"  text-anchor="middle">matchRoute(trie) &#8594; resolveRouteChain</text>
+  <text x="430" y="950" class="s"  text-anchor="middle">&#8594; validateSearch (throws 400)</text>
+
+  <!-- GATE -->
+  <rect class="box n-gate" x="176" y="980" width="508" height="96"/>
+  <text x="430" y="1002" class="t2" text-anchor="middle" fill="#b91c1c">&#9873; runRoutePipeline &#8212; SHARED GATE</text>
+  <text x="430" y="1021" class="s2" text-anchor="middle">nested middleware: root &#8594; layout &#8594; route</text>
+  <text x="430" y="1036" class="s2" text-anchor="middle">&#8594; defineContext() &#8594; buildLoaderArgs</text>
+  <text x="430" y="1051" class="s2" text-anchor="middle">&#8594; beforeLoad() &#8212; auth / redirect gate</text>
+  <text x="430" y="1067" class="s2" text-anchor="middle" fill="#b91c1c" font-weight="700">document &amp; /_data run the SAME gate = auth contract</text>
+
+  <!-- spine arrows -->
+  <path class="edge" marker-end="url(#arrow)" d="M430,470 V489"/>
+  <path class="edge" marker-end="url(#arrow)" d="M430,552 V571"/>
+  <path class="edge" marker-end="url(#arrow)" d="M430,624 V825"/>
+  <path class="edge" marker-end="url(#arrow)" d="M430,876 V895"/>
+  <path class="edge" marker-end="url(#arrow)" d="M430,958 V977"/>
+
+  <!-- fast-path panel -->
+  <rect x="716" y="490" width="720" height="320" rx="12" fill="#ffffff" stroke="#cddcf0" stroke-dasharray="5 4"/>
+  <text x="736" y="513" class="t2" fill="#1d4ed8">Fast paths &#183; first match wins &#8594; return early (bypass SSR)</text>
+  <text x="736" y="530" class="s" fill="#64748b">global middleware still runs; per-route gate does NOT</text>
+
+  <!-- fast path rows: two columns -->
+  <g>
+    <rect class="box n-req" x="736" y="546" width="330" height="52"/>
+    <text x="752" y="568" class="t">/api/*</text>
+    <text x="752" y="586" class="s">CSRF gate (pre-match) &#8594; typed bract.route()</text>
+
+    <rect class="box n-req" x="736" y="606" width="330" height="52"/>
+    <text x="752" y="628" class="t">/_action</text>
+    <text x="752" y="646" class="s">"use server" action registry</text>
+
+    <rect class="box n-req" x="736" y="666" width="330" height="52"/>
+    <text x="752" y="688" class="t">/_stream</text>
+    <text x="752" y="706" class="s">SSE &#8901; async-generator actions</text>
+
+    <rect class="box n-req" x="736" y="726" width="330" height="52"/>
+    <text x="752" y="748" class="t">/_image</text>
+    <text x="752" y="766" class="s">on-the-fly image optimize</text>
+
+    <rect class="box n-req" x="1086" y="546" width="330" height="52"/>
+    <text x="1102" y="568" class="t">/_hmr/module</text>
+    <text x="1102" y="586" class="s">dev only &#8901; HMR module swap</text>
+
+    <rect class="box n-req" x="1086" y="606" width="330" height="52"/>
+    <text x="1102" y="628" class="t">Static assets</text>
+    <text x="1102" y="646" class="s">build/ hashed &#8901; public/</text>
+
+    <rect class="box n-req" x="1086" y="666" width="330" height="52"/>
+    <text x="1102" y="688" class="t">SPA shell</text>
+    <text x="1102" y="706" class="s">ssr:false &#8594; static shell</text>
+
+    <rect class="box n-req" x="1086" y="726" width="330" height="52"/>
+    <text x="1102" y="748" class="t">Prerendered</text>
+    <text x="1102" y="766" class="s">prod &#8901; clean URL &#8594; disk HTML/_data</text>
+  </g>
+
+  <!-- dispatch -> fast-path panel -->
+  <path class="edge" marker-end="url(#arrow)" d="M650,599 H700 V560 H713"/>
+  <text x="672" y="592" class="lbl" font-size="10">match?</text>
+
+  <!-- ── response branches ── -->
+  <!-- Document branch (left) -->
+  <rect class="box n-resp" x="90" y="1108" width="560" height="48"/>
+  <text x="370" y="1130" class="t"  text-anchor="middle">Document request (GET / mutation)</text>
+  <text x="370" y="1146" class="s"  text-anchor="middle">POST? &#8594; CSRF check &#8594; runAction (redirect / JSON)</text>
+
+  <rect class="box n-resp" x="90" y="1170" width="560" height="60"/>
+  <text x="370" y="1192" class="t"  text-anchor="middle">Selective SSR &#8594; runLoaders &#8594; renderRoute</text>
+  <text x="370" y="1209" class="s"  text-anchor="middle">streaming SSR (React 19) &#8901; meta &#8901; headers()</text>
+  <text x="370" y="1223" class="s"  text-anchor="middle">&#8594; HTML + inlined window.__BRACTJS_DATA__</text>
+
+  <!-- _data branch (right) -->
+  <rect class="box n-resp" x="810" y="1108" width="530" height="48"/>
+  <text x="1075" y="1130" class="t"  text-anchor="middle">/_data soft-nav (GET only)</text>
+  <text x="1075" y="1146" class="s"  text-anchor="middle">405 on non-GET &#8901; same gate as document</text>
+
+  <rect class="box n-resp" x="810" y="1170" width="530" height="60"/>
+  <text x="1075" y="1192" class="t"  text-anchor="middle">runLoaders &#8594; JSON payload</text>
+  <text x="1075" y="1209" class="s"  text-anchor="middle">{ root, layouts, route, params,</text>
+  <text x="1075" y="1223" class="s"  text-anchor="middle">meta, search, matches }</text>
+
+  <!-- gate -> branches -->
+  <path class="edge" marker-end="url(#arrow)" d="M300,1076 V1092 H370 V1105"/>
+  <path class="edge" marker-end="url(#arrow)" d="M560,1076 V1092 H1075 V1105"/>
+  <path class="edge" marker-end="url(#arrow)" d="M370,1156 V1167"/>
+  <path class="edge" marker-end="url(#arrow)" d="M1075,1156 V1167"/>
+
+  <!-- ══════════════ 4. HYDRATION ══════════════ -->
+  <rect x="40" y="1188" width="1420" height="0" fill="none"/>
+  <rect x="40" y="1250" width="1420" height="118" rx="14" fill="#fff9f2" stroke="#f6e3cf"/>
+  <rect x="40" y="1250" width="176" height="26" rx="13" fill="#ea580c"/>
+  <text x="60" y="1268" class="pillT">4 &#183; HYDRATION</text>
+  <text x="226" y="1268" class="lbl">client/entry.tsx runs in the browser</text>
+
+  <g>
+    <rect class="box n-client" x="40"   y="1290" width="256" height="58"/>
+    <text x="168" y="1314" class="t"  text-anchor="middle">Receive HTML</text>
+    <text x="168" y="1332" class="s"  text-anchor="middle">read __BRACTJS_DATA__</text>
+
+    <rect class="box n-client" x="356"  y="1290" width="256" height="58"/>
+    <text x="484" y="1314" class="t"  text-anchor="middle">Import modules</text>
+    <text x="484" y="1332" class="s"  text-anchor="middle">root.tsx + route chunk</text>
+
+    <rect class="box n-client" x="672"  y="1290" width="256" height="58"/>
+    <text x="800" y="1314" class="t"  text-anchor="middle">hydrateRoot(document)</text>
+    <text x="800" y="1332" class="s"  text-anchor="middle">&lt;ClientRouter&gt; over SSR tree</text>
+
+    <rect class="box n-client" x="988"  y="1290" width="256" height="58"/>
+    <text x="1116" y="1314" class="t"  text-anchor="middle">Interactive</text>
+    <text x="1116" y="1332" class="s"  text-anchor="middle">router owns navigation</text>
+
+    <path class="edge" marker-end="url(#arrow)" d="M296,1319 H353"/>
+    <path class="edge" marker-end="url(#arrow)" d="M612,1319 H669"/>
+    <path class="edge" marker-end="url(#arrow)" d="M928,1319 H985"/>
+  </g>
+  <path class="edge" marker-end="url(#arrow)" d="M370,1230 V1244" />
+  <text x="386" y="1244" class="lbl" font-size="10">HTML to browser</text>
+
+  <!-- ══════════════ 5. CLIENT NAVIGATION LOOP ══════════════ -->
+  <rect x="40" y="1388" width="1420" height="196" rx="14" fill="#fff9f2" stroke="#f6e3cf"/>
+  <rect x="40" y="1388" width="240" height="26" rx="13" fill="#d97706"/>
+  <text x="60" y="1406" class="pillT">5 &#183; SOFT-NAV LOOP</text>
+  <text x="292" y="1406" class="lbl">ClientRouter &#183; no full page reload</text>
+
+  <!-- row A: navigation -->
+  <g>
+    <rect class="box n-client" x="60"  y="1428" width="210" height="52"/>
+    <text x="165" y="1450" class="t"  text-anchor="middle">&lt;Link&gt; / navigate()</text>
+    <text x="165" y="1468" class="s"  text-anchor="middle">intercept click</text>
+
+    <rect class="box n-client" x="322" y="1428" width="230" height="52"/>
+    <text x="437" y="1450" class="t"  text-anchor="middle">loadRoute</text>
+    <text x="437" y="1468" class="s"  text-anchor="middle">fetch /_data?path=&#8230;</text>
+
+    <rect class="box n-client" x="604" y="1428" width="230" height="52"/>
+    <text x="719" y="1450" class="t"  text-anchor="middle">commit payload</text>
+    <text x="719" y="1468" class="s"  text-anchor="middle">loaderData + module</text>
+
+    <rect class="box n-client" x="886" y="1428" width="250" height="52"/>
+    <text x="1011" y="1450" class="t"  text-anchor="middle">re-render + &lt;MetaTags&gt;</text>
+    <text x="1011" y="1468" class="s"  text-anchor="middle">scroll restore</text>
+
+    <rect class="box n-client" x="1188" y="1428" width="222" height="52"/>
+    <text x="1299" y="1450" class="t"  text-anchor="middle">history.pushState</text>
+    <text x="1299" y="1468" class="s"  text-anchor="middle">URL updated</text>
+
+    <path class="edge" marker-end="url(#arrow)" d="M270,1454 H319"/>
+    <path class="edge" marker-end="url(#arrow)" d="M552,1454 H601"/>
+    <path class="edge" marker-end="url(#arrow)" d="M834,1454 H883"/>
+    <path class="edge" marker-end="url(#arrow)" d="M1136,1454 H1185"/>
+  </g>
+
+  <!-- row B: mutation -->
+  <g>
+    <rect class="box n-client" x="60"  y="1500" width="210" height="52"/>
+    <text x="165" y="1522" class="t"  text-anchor="middle">&lt;Form&gt; submit</text>
+    <text x="165" y="1540" class="s"  text-anchor="middle">useFetcher / action</text>
+
+    <rect class="box n-client" x="322" y="1500" width="230" height="52"/>
+    <text x="437" y="1522" class="t"  text-anchor="middle">POST route / _action</text>
+    <text x="437" y="1540" class="s"  text-anchor="middle">CSRF-guarded mutation</text>
+
+    <rect class="box n-client" x="604" y="1500" width="230" height="52"/>
+    <text x="719" y="1522" class="t"  text-anchor="middle">actionData / redirect</text>
+    <text x="719" y="1540" class="s"  text-anchor="middle">toast &#8901; flash</text>
+
+    <rect class="box n-client" x="886" y="1500" width="250" height="52"/>
+    <text x="1011" y="1522" class="t"  text-anchor="middle">revalidate</text>
+    <text x="1011" y="1540" class="s"  text-anchor="middle">shouldRevalidate gate</text>
+
+    <path class="edge" marker-end="url(#arrow)" d="M270,1526 H319"/>
+    <path class="edge" marker-end="url(#arrow)" d="M552,1526 H601"/>
+    <path class="edge" marker-end="url(#arrow)" d="M834,1526 H883"/>
+    <!-- revalidate loops back to fetch /_data -->
+    <path class="edge" marker-end="url(#arrow)" d="M1011,1500 V1490 H437 V1482"/>
+  </g>
+
+  <!-- big loop arrow: soft-nav fetch /_data back up to the server /_data branch -->
+  <path stroke="#ea580c" stroke-width="2.2" fill="none" stroke-dasharray="7 5" marker-end="url(#arrowLoop)"
+        d="M437,1480 V1493 H1470 V1132 H1344"/>
+  <text x="1486" y="1250" class="lbl" font-size="11" fill="#ea580c" transform="rotate(90 1486 1250)">fetch /_data &#8594; re-runs the server gate</text>
+
+  <!-- ══════════════ 6. SHUTDOWN ══════════════ -->
+  <rect x="40" y="1604" width="1420" height="118" rx="14" fill="#fff5f6" stroke="#f6d5dd"/>
+  <rect x="40" y="1604" width="160" height="26" rx="13" fill="#e11d48"/>
+  <text x="60" y="1622" class="pillT">6 &#183; SHUTDOWN</text>
+  <text x="210" y="1622" class="lbl">graceful teardown &#183; each server keeps its own hooks</text>
+
+  <g>
+    <rect class="box n-shut" x="40"   y="1644" width="300" height="58"/>
+    <text x="190" y="1668" class="t"  text-anchor="middle">Signal / fatal error</text>
+    <text x="190" y="1686" class="s"  text-anchor="middle">SIGTERM &#8901; SIGINT &#8901; SIGUSR2 &#8901; uncaught</text>
+
+    <rect class="box n-shut" x="420"  y="1644" width="300" height="58"/>
+    <text x="570" y="1668" class="t"  text-anchor="middle">onShutdown()</text>
+    <text x="570" y="1686" class="s"  text-anchor="middle">close DB &#8901; flush queues</text>
+
+    <rect class="box n-shut" x="800"  y="1644" width="300" height="58"/>
+    <text x="950" y="1668" class="t"  text-anchor="middle">Stop listeners</text>
+    <text x="950" y="1686" class="s"  text-anchor="middle">adapter.stop()</text>
+
+    <rect class="box n-shut" x="1180" y="1644" width="280" height="58"/>
+    <text x="1320" y="1668" class="t"  text-anchor="middle">process.exit</text>
+    <text x="1320" y="1686" class="s"  text-anchor="middle">(signals only)</text>
+
+    <path class="edge" marker-end="url(#arrow)" d="M340,1673 H417"/>
+    <path class="edge" marker-end="url(#arrow)" d="M720,1673 H797"/>
+    <path class="edge" marker-end="url(#arrow)" d="M1100,1673 H1177"/>
+  </g>
+
+  <text x="40" y="1770" font-size="11" fill="#94a3b8">Traced from packages/core/src &#8212; server/serve.ts &#183; request-handler.ts &#183; client/entry.tsx &#183; ClientRouter.tsx &#183; build/bundler.ts</text>
+</svg>

@@ -1,5 +1,3 @@
-import type { Deferred } from "./deferred.ts";
-
 /**
  * A parsed navigation location. `key` is the stable identity of the history
  * entry (used by scroll restoration); `state` is the value passed via
@@ -31,8 +29,9 @@ export interface LoaderArgs<TSearch extends Record<string, unknown> = Record<str
   search: TSearch;
 }
 
-export interface ActionArgs<TSearch extends Record<string, unknown> = Record<string, unknown>>
-  extends LoaderArgs<TSearch> {
+export interface ActionArgs<
+  TSearch extends Record<string, unknown> = Record<string, unknown>,
+> extends LoaderArgs<TSearch> {
   formData: FormData;
 }
 

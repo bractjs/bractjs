@@ -43,7 +43,6 @@ export async function sendLoginCode(email: string, code: string): Promise<void> 
         "SMTP is not configured; refusing to issue a 2FA code without email delivery in production.",
       );
     }
-    // eslint-disable-next-line no-console
     console.log(`\n  ✉️  ${APP_NAME} sign-in code for ${email}: ${code}\n`);
     return;
   }
