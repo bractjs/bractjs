@@ -1,6 +1,6 @@
+import type { MetaDescriptor } from "../shared/route-types.ts";
 import type { LayoutChain } from "./layout.ts";
 import type { LoaderResults } from "./loader.ts";
-import type { MetaDescriptor } from "../shared/route-types.ts";
 
 type Params = Record<string, string>;
 
@@ -10,11 +10,7 @@ type Params = Record<string, string>;
  * Calls each route module's meta() in layout chain order (root → layouts → route),
  * passing the appropriate loaderData slice + params to each.
  */
-export function resolveMeta(
-  chain: LayoutChain,
-  loaderData: LoaderResults,
-  params: Params,
-): MetaDescriptor[] {
+export function resolveMeta(chain: LayoutChain, loaderData: LoaderResults, params: Params): MetaDescriptor[] {
   const all: MetaDescriptor[] = [];
 
   if (chain.root.meta) {

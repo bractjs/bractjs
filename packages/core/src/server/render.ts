@@ -1,10 +1,10 @@
-import { renderToReadableStream } from "react-dom/server";
 import { createElement, Fragment, type ReactNode } from "react";
-import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
-import { safeStringify, isDevRuntime, getDevHmrPort } from "./env.ts";
+import { renderToReadableStream } from "react-dom/server";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
-import { mergeMeta } from "./meta.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
+import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
+import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
+import { mergeMeta } from "./meta.ts";
 
 export interface ServerManifest {
   clientEntry: string;
@@ -44,15 +44,7 @@ export interface RenderOptions {
 }
 
 export async function renderRoute(options: RenderOptions): Promise<Response> {
-  const {
-    shell,
-    loaderData,
-    actionData,
-    params,
-    pathname,
-    manifest,
-    status = 200,
-  } = options;
+  const { shell, loaderData, actionData, params, pathname, manifest, status = 200 } = options;
 
   // In dev, publish the HMR port so the injected client connects to the
   // configured `hmrPort` rather than a hardcoded 3001. 0 → omit (client
@@ -66,19 +58,15 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   // The merged descriptor array is what the client reads to keep the document
   // head in sync on soft navigation — keep it shaped, not stringified HTML.
   const bootstrapScriptContent =
-    devOverlay + `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: options.matches, ssrMode: options.ssrMode })};`;
+    devOverlay +
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: options.matches, ssrMode: options.ssrMode })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers
   // and no-JS clients receive real meta tags. The client renders the same
   // <MetaTags> inside ClientRouter, so hydration matches and soft navigation
   // re-renders the head.
-  const tree = createElement(
-    Fragment,
-    null,
-    createElement(MetaTags, { meta: mergedMeta }),
-    shell,
-  );
+  const tree = createElement(Fragment, null, createElement(MetaTags, { meta: mergedMeta }), shell);
 
   let renderError: unknown;
 

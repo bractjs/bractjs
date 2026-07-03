@@ -1,0 +1,60 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/build",
+      "!**/_generated",
+      "!**/route-types.gen.ts",
+      "!pnpm-lock.yaml",
+      "!**/.tmp-*",
+      "!examples/*/src/client",
+      "!examples/cms/app/styles.css"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 110
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noConsole": "off",
+        "noEmptyInterface": "off",
+        "noAssignInExpressions": "warn",
+        "noArrayIndexKey": "warn",
+        "useIterableCallbackReturn": "warn",
+        "noImplicitAnyLet": "warn"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "warn"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "warn",
+        "noChildrenProp": "warn"
+      },
+      "a11y": "info",
+      "style": {
+        "noNonNullAssertion": "off"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
-import { test, expect, describe } from "bun:test";
-import { csp, getCspNonce, CSP_NONCE_KEY } from "../server/csp.ts";
-import { MiddlewarePipeline, type MiddlewareContext } from "../server/middleware.ts";
+import { describe, expect, test } from "bun:test";
+import { CSP_NONCE_KEY, csp, getCspNonce } from "../server/csp.ts";
+import { type MiddlewareContext, MiddlewarePipeline } from "../server/middleware.ts";
 import { renderRoute } from "../server/render.ts";
 
 async function runCsp(
@@ -47,9 +47,8 @@ describe("csp middleware", () => {
   });
 
   test("a null directive value removes that directive", async () => {
-    const { res } = await runCsp(
-      csp({ directives: { "object-src": null } }),
-      () => Promise.resolve(new Response("ok")),
+    const { res } = await runCsp(csp({ directives: { "object-src": null } }), () =>
+      Promise.resolve(new Response("ok")),
     );
     expect(res.headers.get("Content-Security-Policy")).not.toContain("object-src");
   });

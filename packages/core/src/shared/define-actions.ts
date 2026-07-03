@@ -1,5 +1,5 @@
-import type { ActionArgs } from "./route-types.ts";
 import { isExplicitDev } from "../server/env.ts";
+import type { ActionArgs } from "./route-types.ts";
 
 type IntentHandler = (args: ActionArgs) => unknown;
 

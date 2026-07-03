@@ -1,17 +1,17 @@
-import { test, expect, describe, beforeAll, afterAll, spyOn } from "bun:test";
-import { mkdir, rm, writeFile, symlink } from "node:fs/promises";
-import { resolve, join, relative, isAbsolute } from "node:path";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { createServer } from "../server/serve.ts";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { handleImageRequest } from "../image/handler.ts";
+import { cors } from "../middleware/cors.ts";
 import { handleActionRequest } from "../server/action-handler.ts";
 import { loadServerActions } from "../server/action-registry.ts";
-import { safeStringify } from "../server/env.ts";
-import { cors } from "../middleware/cors.ts";
-import { createCookieSession } from "../server/session.ts";
-import { MiddlewarePipeline, type MiddlewareContext } from "../server/middleware.ts";
-import { serveStatic } from "../server/static.ts";
-import { handleImageRequest } from "../image/handler.ts";
 import { isAllowedMutation } from "../server/csrf.ts";
+import { safeStringify } from "../server/env.ts";
+import { type MiddlewareContext, MiddlewarePipeline } from "../server/middleware.ts";
+import { createServer } from "../server/serve.ts";
+import { createCookieSession } from "../server/session.ts";
+import { serveStatic } from "../server/static.ts";
 
 const ACTION_TMP = resolve(import.meta.dir, ".tmp-security-action");
 let registeredActionId = "";
@@ -291,7 +291,9 @@ describe("CSRF — Sec-Fetch-Site (isAllowedMutation)", () => {
   });
 
   test("Sec-Fetch-Site: cross-site is rejected even with a matching Origin", () => {
-    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "cross-site", Origin: "http://localhost" }))).toBe(false);
+    expect(isAllowedMutation(req({ "Sec-Fetch-Site": "cross-site", Origin: "http://localhost" }))).toBe(
+      false,
+    );
   });
 
   test("Sec-Fetch-Site: same-origin with custom header is allowed", () => {
@@ -453,7 +455,9 @@ describe("middleware — double next()", () => {
       return next(); // illegal
     });
     const ctx: MiddlewareContext = { request: new Request("http://x/"), params: {}, context: {} };
-    await expect(pipeline.run(ctx, () => Promise.resolve(new Response("ok")))).rejects.toThrow(/more than once/);
+    await expect(pipeline.run(ctx, () => Promise.resolve(new Response("ok")))).rejects.toThrow(
+      /more than once/,
+    );
   });
 });
 
@@ -465,7 +469,7 @@ describe("symlink escape — static", () => {
   let buildDir: string;
 
   beforeAll(async () => {
-    const root = await Bun.file(tmpdir()).exists() ? tmpdir() : ".";
+    const root = (await Bun.file(tmpdir()).exists()) ? tmpdir() : ".";
     pub = join(root, `bract-sym-pub-${Date.now()}`);
     outside = join(root, `bract-sym-out-${Date.now()}`);
     buildDir = join(root, `bract-sym-build-${Date.now()}`);
@@ -497,4 +501,3 @@ describe("symlink escape — static", () => {
     await rm(cacheDir, { recursive: true, force: true });
   });
 });
-

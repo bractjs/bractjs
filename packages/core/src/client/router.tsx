@@ -1,6 +1,6 @@
-import { createContext, useContext, type ComponentType } from "react";
+import { type ComponentType, createContext, useContext } from "react";
 import type { ServerManifest } from "../server/render.ts";
-import type { RouterLocation, RouteMatch } from "../shared/route-types.ts";
+import type { RouteMatch, RouterLocation } from "../shared/route-types.ts";
 
 // ── Route module shape visible on the client ───────────────────────────────
 

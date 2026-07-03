@@ -2,7 +2,7 @@
 //   - `headers`  → Cache-Control on the document + /_data response
 //   - `handle`   → surfaced via useMatches() (asserted from the payload)
 //   - `middleware` → sets context (read by the loader) and stamps a header
-import type { RouteMiddlewareFunction, HeadersArgs } from "../../../../shared/route-types.ts";
+import type { HeadersArgs, RouteMiddlewareFunction } from "../../../../shared/route-types.ts";
 
 const setUser: RouteMiddlewareFunction = async (ctx, next) => {
   ctx.context.demoUser = "alice";

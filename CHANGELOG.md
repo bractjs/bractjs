@@ -1,10 +1,79 @@
 # Changelog
 
-All notable changes to Bract are documented here.
+All notable changes to BractJS are documented here.
 
 ---
 
 ## [Unreleased]
+
+### Added
+
+- **`bractjs codegen:seed [app]`** — seeds `<app>/_generated/` (route/action registries + typed routes + a manifest stub) so `app/server.ts` typechecks on a fresh clone without first running a build. This is the same seeding `bractjs new` does; the two now share one implementation.
+
+### Security
+
+- **`"use server"` / `"use client"` directive detection is unified** (`src/shared/directives.ts`) across the runtime action registry, the module-registry codegen, and the build plugins — three previously-divergent regexes. The build plugins used a multiline match, so (a) a `"use server"`-looking string at any line start mid-file could wrongly convert an innocent module's exports into fetch proxies, and (b) a real directive preceded by an indented comment could be registered server-side yet ship un-proxied source to the browser. Detection is now anchored to the file's directive prologue (whitespace/comments/BOM tolerated, mid-file matches rejected) everywhere.
+
+### Fixed
+
+- **Type surface reconciled with the runtime API.** `types/index.d.ts` is hand-maintained and had drifted: `serverModuleStubPlugin` (the client-bundle plugin the docs mark as required), `generateRouteRegistry`/`generateActionRegistry`/`generateManifestModule`, `runRouteMiddleware`/`collectRouteMiddleware`, and the i18n helpers (`wrapRoutesWithLocale`, `stripLocale`, `localizedDataPath`) existed at runtime but were invisible to TypeScript consumers; `RouteMiddleware`, `SessionLike`, `RouteDefinition`, `RouteMiddlewareFunction`, `ClientLoaderFunction`, and `ClientActionFunction` types were likewise missing. All are now declared.
+- **`ValidationError` is exported as a value.** The barrel exported it type-only while the declarations promised a class, so `err instanceof ValidationError` compiled but threw at runtime.
+- **`routesFingerprint` / `explainStaleness` are actually exported.** The 0.2.0 notes announced them but they never reached the public barrel.
+- **`StreamFetcherResult` is exported from source** (it was declared in the types but not exported at runtime); its `events` field deprecation now correctly says removal is planned for 0.3.
+- **Hydration payload type declares `matches`.** The server has always sent the matched-route chain in `__BRACTJS_DATA__`, but `BractJSClientData` didn't declare it — this also broke `tsc --noEmit` on the framework itself.
+
+- **`DevServer.stop()` actually releases everything.** The dev file watcher was started without keeping its handle, so a stopped programmatic dev server kept watching and rebuilding forever; `watchApp` now returns a closable handle (FSWatcher + pending debounce timer) and `stop()` closes it. A throwing/rejecting watch callback is logged instead of becoming an unhandled rejection.
+- **`createDevServer()` no longer calls `process.exit(1)` on a port conflict.** It throws a `DevServerError` (new export of the dev module); the CLI catches it and preserves the friendly message + non-zero exit.
+- **Multiple `createServer()` instances no longer clobber each other.** `onShutdown`/`onError` hooks and the signal handlers used module-level slots, so the last server's hooks replaced everyone's and stopping one server disabled every later `stop()`. Live servers are now tracked in a registry: each `stop()` runs its own hook once, and SIGTERM/SIGINT/uncaughtException shut down all of them.
+- **Unhandled promise rejections are now logged and routed to `onError`** (process keeps serving; fatal states still arrive via `uncaughtException`). Previously there was no `unhandledRejection` handler at all, so fire-and-forget failures bypassed the lifecycle hooks.
+- **Dev: adding or deleting a `"use server"` module now updates the action registry without a restart** (the registry was populated once at boot, so new action files 404'd at `/_action` and deleted ones lingered). Changed action *bodies* still require a restart. Route-file checks in the dev watcher also handle Windows path separators, and `<appDir>/lifecycle.ts` is resolved through the configured `appDir` instead of a hardcoded `app/`.
+
+### Internal refactors (no behavior change)
+
+- **The server route-gate sequence is single-sourced.** The document branch and the `/_data` soft-nav branch of the request handler each carried their own copy of the security-sensitive pipeline (nested middleware → per-route context → loader args → `beforeLoad`); both now run through one shared `runRoutePipeline`, with only the intentional differences (actions, selective-SSR loader stripping, HTML vs. JSON) remaining per-branch. Parity is pinned by `data-contract.test.ts`.
+- **ClientRouter applies `/_data` payloads through one helper.** The loaderData/params/search/meta/matches commit was repeated four times (navigation, SWR refetch, revalidation, SPA hydration) with per-site casts; a shared `applyPayload` + a pure `parseDataPayload` (unit-tested) now guarantee all five fields move together, and route-module introspection goes through one typed `moduleView` instead of scattered `as Record<string, unknown>` casts.
+
+### Tests / tooling
+
+- New `type-surface.test.ts` mechanically asserts every runtime export is declared in `types/*.d.ts` and every declared value exists at runtime — the hand-written declarations can no longer silently drift.
+- `pnpm typecheck` (core) now also typechecks the declaration files themselves via `tsconfig.types.json` (`skipLibCheck: false`); they were previously excluded from all typechecking.
+- **CI (GitHub Actions)**: lint, workspace typecheck, lockfile-drift check, full test suite (compile-smoke required via `CI_REQUIRE_COMPILE=1`), and an npm-tarball dry-run now gate every push/PR. There was previously no CI at all.
+- **Biome** is the repo's linter/formatter (`pnpm lint` / `pnpm format`); `.editorconfig` populated (it was tracked but empty).
+- `compile-smoke.test.ts` now reports a proper **skip** when `bun build --compile` is unavailable instead of silently passing empty tests, and can be forced to fail in CI.
+- **npm tarball no longer ships the test suite** (66 files) — `files` excludes `src/__tests__`; a new `prepublishOnly` gate (`scripts/verify-pack.ts`) asserts LICENSE/README/types/template presence and rejects generated or test files.
+- `typescript` is a real devDependency (so `bunx tsc` stops re-resolving it and rewriting `pnpm-lock.yaml` as a side effect) and `@types/bun` is pinned instead of `latest`.
+- **Test backfill for previously-untested areas**: the toast store (auto-dismiss, in-place updates, `toast.promise` transitions), the typed `createClient` RPC proxy (URL/method/CSRF-marker/error contract, via a captured fetch), the Cloudflare adapter, and a new `data-contract.test.ts` that pins the **document-vs-`/_data` parity contract** (beforeLoad short-circuit, middleware, `headers()`, 404s must agree across both branches of the request handler).
+
+---
+
+## [0.2.2] — 2026-06-23
+
+### Security
+
+- **Static responses now send `X-Content-Type-Options: nosniff`.** Both hashed client chunks (`/build/client/*`) and `/public/*` assets (including user-uploaded files) carry the header, so browsers can't MIME-sniff a static file into a more dangerous type (e.g. treating an uploaded asset as HTML/JS).
+
+### Types
+
+- The CSP middleware surface — `csp()`, `CspOptions`, `CSP_NONCE_KEY`, `getCspNonce` — is now declared in the public type surface (`types/index.d.ts`). It previously existed at runtime only, so TypeScript consumers couldn't import it without errors.
+
+---
+
+## [0.2.1] — 2026-06-21
+
+### Added
+
+- **Toast notifications** — `<Toaster />` component and `useToast()` hook backed by a shared toast store. Flash messages set by loaders/actions surface as toasts on the next render; `<Form>` integrates with the flash flow after redirects.
+
+### Security
+
+- **Adapter-agnostic catch-all for unhandled request errors.** An uncaught throw from a global middleware or from dispatch itself previously escaped to the adapter — which on Bun leaked `err.message` in production, and on Cloudflare/custom adapters wasn't handled at all. `buildFetchHandler` now catches, logs, fires the `onError` lifecycle hook, and returns a generic 500 (the real message is shown only in explicit dev mode).
+- **`BunAdapter`'s last-resort error handler no longer leaks internals.** Its 500 body now returns `"Internal Server Error"` in production; the underlying `err.message` is exposed only in dev, matching the gating used on every other path.
+
+---
+
+## [0.2.0] — 2026-06-16
+
+> **Consolidated notes.** Everything below shipped incrementally across the `0.1.24`–`0.1.29` patch releases and was finalized in `0.2.0` (see the per-tag highlights in the section that follows). `0.2.0` itself also added the published npm README for `@bractjs/bractjs`.
 
 ### Security
 
@@ -39,7 +108,7 @@ All notable changes to Bract are documented here.
 
 ### Deprecated
 
-- **`StreamFetcherResult.events`** — never emitted; use `connect(actionId)`. Removed in 0.2.
+- **`StreamFetcherResult.events`** — never emitted; use `connect(actionId)`. Removal planned for 0.3.
 
 ### Added
 
@@ -77,6 +146,19 @@ All notable changes to Bract are documented here.
 - `src/__tests__/server-module-stub.test.ts` — proves a route importing a `bun:sqlite`-backed `*.server.ts` builds, that no server source/secret/SQL reaches the client output, that named + default exports stay resolvable, that the stub throws when invoked, and that the legacy `serverOnlyPlugin` still hard-fails the same import.
 - `src/__tests__/integration.test.ts` — added regression tests asserting that a route action which *returns* `redirect()` yields a `302` + `Location` for both the `X-BractJS-Action` (`<Form>`) and full-page POST paths (fixture: `routes/redirect-action.tsx`); plus `/_data` now carrying merged `meta`.
 - New suites for this release: `nav-utils.test.ts` (parseTo/location keys), `scroll-restoration.test.ts`, `search-validation.test.ts` (unit + live-server searchSchema coercion/400s), `search-serializer.test.ts`, `fetcher-store.test.ts`, `revalidation.test.ts` (mutation → revalidate contract), `selective-ssr.test.ts` (Fallback SSR, loader skipping, beforeLoad parity), `spa-mode.test.ts` (shell serving + CSRF intact), `prerender.test.ts` (generation + production file serving). `typed-routing.test.ts` extended with `useSearch`/`useSetSearch`/`<Link search>` type-level assertions.
+
+---
+
+## [0.1.24 – 0.1.29] — 2026-05-20 → 2026-06-14
+
+Incremental patch releases; their changes are consolidated into the `[0.2.0]` notes above. Highlights per tag:
+
+- **0.1.24** — deferred framework source resolution until plugin execution.
+- **0.1.25** — concurrent loader execution; `bun build --compile` safety + smoke tests; `*.server.ts` stubbed in client bundles instead of hard-failing; action-returned redirects honored; CSS modules support + client-side React deduplication.
+- **0.1.26** — docs: README requirements + changelog section.
+- **0.1.27** — end-to-end typed routing (typed `Link` / `useNavigate` / `useParams`); typed, validated search params with serialization.
+- **0.1.28** — security-model hardening: CSRF protection, validation handling, CSP configuration.
+- **0.1.29** — per-route middleware + `headers` export; prototype-pollution guards; converted to a pnpm workspace monorepo; `new-app` template package.
 
 ---
 

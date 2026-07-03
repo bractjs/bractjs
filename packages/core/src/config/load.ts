@@ -26,7 +26,13 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
 
   check("port", typeof c.port === "number" && Number.isFinite(c.port), "a finite number");
   check("hmrPort", typeof c.hmrPort === "number" && Number.isFinite(c.hmrPort), "a finite number");
-  check("maxRequestBodySize", typeof c.maxRequestBodySize === "number" && Number.isFinite(c.maxRequestBodySize) && c.maxRequestBodySize > 0, "a positive finite number");
+  check(
+    "maxRequestBodySize",
+    typeof c.maxRequestBodySize === "number" &&
+      Number.isFinite(c.maxRequestBodySize) &&
+      c.maxRequestBodySize > 0,
+    "a positive finite number",
+  );
   check("appDir", typeof c.appDir === "string", "a string");
   check("publicDir", typeof c.publicDir === "string", "a string");
   check("buildDir", typeof c.buildDir === "string", "a string");

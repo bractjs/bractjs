@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
-import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
-export {}; // make this file a module
+import { join, resolve } from "node:path";
 
 const command = process.argv[2];
 
@@ -36,27 +35,12 @@ async function scaffoldNew(appName: string): Promise<void> {
   }
 
   // Seed `app/_generated/` so the template's `app/server.ts` typechecks
-  // before the user runs a build. Only the route/action registries can run
-  // here (no manifest yet — that needs `bractjs build` first). The manifest
-  // module is stubbed in below.
+  // before the user runs a build (route/action registries, typed routes, and
+  // a manifest stub). Shared with the `codegen:seed` command.
   console.log("Seeding _generated/ registries...");
   try {
-    const { writeModuleRegistries } = await import("../src/codegen/module-registry.ts");
-    await writeModuleRegistries(join(appDir, "app"));
-    // Generate typed routes so the scaffold has working <Link>/useParams typing
-    // out of the box (no manual `bractjs codegen` step before first dev run).
-    const { writeRouteTypes } = await import("../src/codegen/route-codegen.ts");
-    await writeRouteTypes(join(appDir, "app"));
-    // Manifest stub — overwritten by `bractjs codegen:manifest` after a build
-    const stubManifest = [
-      "// Stub manifest — replaced by `bractjs codegen:manifest` after running",
-      "// `bractjs build`. Allows `app/server.ts` to typecheck before the",
-      "// first build completes.",
-      `import type { ServerManifest } from "@bractjs/bractjs";`,
-      `export const manifest: ServerManifest = { clientEntry: "/build/client/client.js", routes: {} };`,
-      "",
-    ].join("\n");
-    await Bun.write(join(appDir, "app", "_generated", "manifest.ts"), stubManifest);
+    const { seedGenerated } = await import("../src/codegen/seed.ts");
+    await seedGenerated(join(appDir, "app"));
   } catch (err) {
     console.warn("[bract] codegen seed skipped:", err instanceof Error ? err.message : err);
   }
@@ -89,13 +73,24 @@ switch (command) {
     await scaffoldNew(process.argv[3]);
     break;
 
-  case "dev":
+  case "dev": {
     // Ensure dev-only handlers gated by isExplicitDev() (e.g. /_hmr/module,
     // /_bractjs/devtools.js) are reachable when the user hasn't set NODE_ENV.
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
-    const { createDevServer } = await import("../src/dev/server.ts");
-    await createDevServer();
+    const { createDevServer, DevServerError } = await import("../src/dev/server.ts");
+    try {
+      await createDevServer();
+    } catch (err) {
+      // User-actionable startup failures (port conflicts) get the message
+      // without a stack; anything else is a real bug and should blow up loud.
+      if (err instanceof DevServerError) {
+        console.error(`[bractjs] ${err.message}`);
+        process.exit(1);
+      }
+      throw err;
+    }
     break;
+  }
 
   case "build": {
     // Force production so React's conditional exports resolve to the prod
@@ -135,6 +130,18 @@ switch (command) {
     const appDir = resolve(process.cwd(), process.argv[3] ?? "./app");
     const outPath = process.argv[4] ? resolve(process.cwd(), process.argv[4]) : undefined;
     await writeRouteTypes(appDir, outPath);
+    break;
+  }
+
+  case "codegen:seed": {
+    // Seed `<appDir>/_generated/` (registries + typed routes + manifest stub)
+    // so `app/server.ts` typechecks without a prior build. The generated
+    // files are gitignored; run this after a fresh clone (it's the examples'
+    // `pretypecheck`). Same seeding `bractjs new` does.
+    const { seedGenerated } = await import("../src/codegen/seed.ts");
+    const appDir = resolve(process.cwd(), process.argv[3] ?? "./app");
+    await seedGenerated(appDir);
+    console.log("[bract] seeded", join(appDir, "_generated"));
     break;
   }
 
@@ -230,6 +237,7 @@ switch (command) {
         "  build                          Build for production (build/ dir)\n" +
         "  start                          Start production server\n" +
         "  codegen  [app] [out]           Generate typed route types\n" +
+        "  codegen:seed  [app]            Seed _generated/ so app/server.ts typechecks (no build needed)\n" +
         "  codegen:registry  [app]        Generate _generated/{routes,actions}.ts\n" +
         "  codegen:manifest  [app] [build]  Generate _generated/manifest.ts\n" +
         "  compile  [outfile] [entry]     Full single-binary pipeline",

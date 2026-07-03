@@ -23,6 +23,6 @@ export const MIME: Record<ImageFormat, string> = {
   webp: "image/webp",
   avif: "image/avif",
   jpeg: "image/jpeg",
-  png:  "image/png",
+  png: "image/png",
 };
 export const ALLOWED_FITS: ReadonlySet<ImageFit> = new Set(["cover", "contain", "fill"]);

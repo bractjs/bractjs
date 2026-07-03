@@ -1,9 +1,8 @@
-import { test, expect, describe, spyOn } from "bun:test";
-import { safeRun, runLoaders, buildLoaderArgs } from "../server/loader.ts";
-import { HttpError } from "../shared/errors.ts";
-import type { LoaderArgs } from "../shared/route-types.ts";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { LayoutChain } from "../server/layout.ts";
-import type { RouteModule } from "../shared/route-types.ts";
+import { buildLoaderArgs, runLoaders, safeRun } from "../server/loader.ts";
+import { HttpError } from "../shared/errors.ts";
+import type { LoaderArgs, RouteModule } from "../shared/route-types.ts";
 
 const stubArgs: LoaderArgs = {
   request: new Request("http://localhost/"),
@@ -26,7 +25,9 @@ describe("safeRun", () => {
   });
 
   test("wraps non-redirect errors in __error", async () => {
-    const result = await safeRun(async () => { throw new Error("boom"); }, stubArgs);
+    const result = await safeRun(async () => {
+      throw new Error("boom");
+    }, stubArgs);
     // safeRun now returns a sanitized __error object ({ message } in prod,
     // { message, stack } in dev) rather than the raw Error instance, to
     // prevent error-subclass fields from leaking into the SSR HTML payload.
@@ -34,19 +35,30 @@ describe("safeRun", () => {
   });
 
   test("re-throws HttpError (does not wrap)", async () => {
-    const fn = async () => { throw new HttpError(403, "Forbidden"); };
+    const fn = async () => {
+      throw new HttpError(403, "Forbidden");
+    };
     await expect(safeRun(fn, stubArgs)).rejects.toBeInstanceOf(HttpError);
   });
 
   test("re-throws redirect Response", async () => {
-    const fn = async () => { throw new Response(null, { status: 302, headers: { Location: "/" } }); };
+    const fn = async () => {
+      throw new Response(null, { status: 302, headers: { Location: "/" } });
+    };
     await expect(safeRun(fn, stubArgs)).rejects.toBeInstanceOf(Response);
   });
 
   test("includes the `where` location in the error log", async () => {
     const spy = spyOn(console, "error").mockImplementation(() => {});
     try {
-      await safeRun(async () => { throw new Error("boom"); }, stubArgs, undefined, "routes/x.tsx");
+      await safeRun(
+        async () => {
+          throw new Error("boom");
+        },
+        stubArgs,
+        undefined,
+        "routes/x.tsx",
+      );
       const logged = spy.mock.calls.map((c) => String(c[0])).join("\n");
       expect(logged).toContain("loader error in routes/x.tsx");
     } finally {
@@ -59,11 +71,25 @@ describe("safeRun", () => {
     const spy = spyOn(console, "error").mockImplementation(() => {});
     try {
       Bun.env.NODE_ENV = "development";
-      const dev = await safeRun(async () => { throw new Error("boom"); }, stubArgs, undefined, "routes/x.tsx");
+      const dev = await safeRun(
+        async () => {
+          throw new Error("boom");
+        },
+        stubArgs,
+        undefined,
+        "routes/x.tsx",
+      );
       expect(dev).toMatchObject({ __error: { routeFile: "routes/x.tsx" } });
 
       Bun.env.NODE_ENV = "production";
-      const prod = await safeRun(async () => { throw new Error("boom"); }, stubArgs, undefined, "routes/x.tsx") as { __error: Record<string, unknown> };
+      const prod = (await safeRun(
+        async () => {
+          throw new Error("boom");
+        },
+        stubArgs,
+        undefined,
+        "routes/x.tsx",
+      )) as { __error: Record<string, unknown> };
       expect(prod.__error.routeFile).toBeUndefined();
       expect(prod.__error.message).toBe("Internal Server Error");
     } finally {
@@ -100,7 +126,12 @@ describe("runLoaders", () => {
 
   test("isolates errors — one loader failure doesn't prevent others", async () => {
     const chain: LayoutChain = {
-      root: { ...emptyModule, loader: async () => { throw new Error("root fail"); } },
+      root: {
+        ...emptyModule,
+        loader: async () => {
+          throw new Error("root fail");
+        },
+      },
       layouts: [],
       route: { ...emptyModule, loader: async () => ({ ok: true }) },
     };
@@ -123,9 +154,29 @@ describe("runLoaders", () => {
       started--;
     };
     const chain: LayoutChain = {
-      root: { ...emptyModule, loader: async () => { await enter(); return { root: true }; } },
-      layouts: [{ ...emptyModule, loader: async () => { await enter(); return { layout: true }; } }],
-      route: { ...emptyModule, loader: async () => { await enter(); return { route: true }; } },
+      root: {
+        ...emptyModule,
+        loader: async () => {
+          await enter();
+          return { root: true };
+        },
+      },
+      layouts: [
+        {
+          ...emptyModule,
+          loader: async () => {
+            await enter();
+            return { layout: true };
+          },
+        },
+      ],
+      route: {
+        ...emptyModule,
+        loader: async () => {
+          await enter();
+          return { route: true };
+        },
+      },
     };
     await runLoaders(chain, stubArgs);
     // All three loaders must be in flight at the same time.

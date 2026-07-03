@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   filePathToPattern,
-  pathToSegments,
-  layoutDirsFromFilePath,
   isRouteGroupSegment,
+  layoutDirsFromFilePath,
+  pathToSegments,
 } from "../server/scanner.ts";
 
 describe("filePathToPattern", () => {
@@ -94,10 +94,6 @@ describe("pathToSegments", () => {
   });
 
   test("mixed static and param", () => {
-    expect(pathToSegments("users/[id]/posts")).toEqual([
-      "users",
-      { param: "id" },
-      "posts",
-    ]);
+    expect(pathToSegments("users/[id]/posts")).toEqual(["users", { param: "id" }, "posts"]);
   });
 });

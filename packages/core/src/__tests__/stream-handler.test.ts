@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { handleStreamRequest } from "../server/stream-handler.ts";
 
 const VALID_ID = "0123456789abcdef"; // 16 lowercase hex chars (passes the id regex)

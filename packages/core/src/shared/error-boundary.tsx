@@ -1,4 +1,4 @@
-import { Component, type ComponentType, type ReactNode, type ReactElement } from "react";
+import { Component, type ComponentType, type ReactElement, type ReactNode } from "react";
 
 // ── DefaultErrorBoundary ───────────────────────────────────────────────────
 
@@ -15,7 +15,11 @@ export function DefaultErrorBoundary({ error, requestId }: DefaultErrorBoundaryP
         <pre style={{ overflow: "auto", background: "#111", color: "#f8f8f8", padding: "1rem" }}>
           {error.stack}
         </pre>
-        <button onClick={() => { void navigator.clipboard.writeText(error.stack ?? error.message); }}>
+        <button
+          onClick={() => {
+            void navigator.clipboard.writeText(error.stack ?? error.message);
+          }}
+        >
           Copy stack
         </button>
       </div>

@@ -53,13 +53,9 @@ export interface MetaArgs<T = unknown> {
   params: Record<string, string>;
 }
 
-export type LoaderFunction<T = unknown> = (
-  args: LoaderArgs,
-) => Promise<T | Response> | T | Response;
+export type LoaderFunction<T = unknown> = (args: LoaderArgs) => Promise<T | Response> | T | Response;
 
-export type ActionFunction<T = unknown> = (
-  args: ActionArgs,
-) => Promise<T | Response> | T | Response;
+export type ActionFunction<T = unknown> = (args: ActionArgs) => Promise<T | Response> | T | Response;
 
 export type MetaFunction<T = unknown> = (args: MetaArgs<T>) => MetaDescriptor[];
 
@@ -97,9 +93,7 @@ export interface BeforeLoadArgs {
   search?: Record<string, unknown>;
 }
 
-export type BeforeLoadFunction = (
-  args: BeforeLoadArgs,
-) => void | Response | Promise<void | Response>;
+export type BeforeLoadFunction = (args: BeforeLoadArgs) => void | Response | Promise<void | Response>;
 
 /**
  * Decide whether loader data should be refetched (SWR background refetch and
@@ -182,11 +176,16 @@ export interface RouteMatch<TData = unknown, THandle = Record<string, unknown>> 
   handle: THandle | undefined;
 }
 
-export type Segment =
-  | string
-  | { param: string }
-  | { optional: string }
-  | { catchAll: string };
+/** A route's identity in the resolved route tree (id = appDir-relative file path). */
+export interface RouteDefinition {
+  id: string;
+  path: string;
+  filePath: string;
+  parentId?: string;
+  index?: boolean;
+}
+
+export type Segment = string | { param: string } | { optional: string } | { catchAll: string };
 
 export interface RouteFile {
   filePath: string;

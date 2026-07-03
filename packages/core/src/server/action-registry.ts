@@ -1,10 +1,16 @@
-import { join, relative, resolve, isAbsolute } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { hasServerDirective } from "../shared/directives.ts";
 
-// Anchored at start-of-file. Allow whitespace and line/block comments before
-// the "use server" string literal. This prevents false matches from a "use
-// server" found inside template literals or runtime strings.
-const SERVER_RE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use server["']/;
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
+
+/**
+ * Internal: empty the action registry. Used by the dev watcher before a
+ * re-scan (so deleted/renamed "use server" modules don't linger) and by tests
+ * for isolation. Not part of the public API.
+ */
+export function clearActionRegistry(): void {
+  registry.clear();
+}
 
 // SECURITY(high): exporting a function from a `"use server"` module publishes
 // it as an unauthenticated RPC endpoint reachable via POST /_action and
@@ -81,12 +87,16 @@ export async function loadServerActions(appDir: string): Promise<void> {
     if (!isEligible(rel)) continue;
     const filePath = join(appDir, rel);
     let src: string;
-    try { src = await Bun.file(filePath).text(); } catch { continue; }
-    if (!SERVER_RE.test(src)) continue;
+    try {
+      src = await Bun.file(filePath).text();
+    } catch {
+      continue;
+    }
+    if (!hasServerDirective(src)) continue;
 
     let mod: Record<string, unknown>;
     try {
-      mod = await import(filePath) as Record<string, unknown>;
+      mod = (await import(filePath)) as Record<string, unknown>;
     } catch (err) {
       console.error("[bractjs] failed to load server actions from", rel, err);
       continue;

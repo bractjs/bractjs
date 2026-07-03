@@ -1,12 +1,12 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { createServer } from "../server/serve.ts";
-import { pipeline } from "../server/middleware.ts";
-import { route, handleApiRequest } from "../server/api-route.ts";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
+import { handleApiRequest, route } from "../server/api-route.ts";
 import { csp } from "../server/csp.ts";
+import { pipeline } from "../server/middleware.ts";
 import { hasForbiddenKey, nullProtoFromEntries } from "../server/proto-guard.ts";
 import { searchParamsToObject } from "../server/search.ts";
+import { createServer } from "../server/serve.ts";
 import { validate } from "../server/validate.ts";
-import { resolve } from "node:path";
 
 const PORT = 3989;
 const BASE = `http://localhost:${PORT}`;
@@ -194,7 +194,10 @@ describe("M-2: proto-guard", () => {
   });
 
   test("nullProtoFromEntries builds a null-prototype object", () => {
-    const out = nullProtoFromEntries([["__proto__", 1], ["a", 2]]);
+    const out = nullProtoFromEntries([
+      ["__proto__", 1],
+      ["a", 2],
+    ]);
     expect(Object.getPrototypeOf(out)).toBeNull();
     expect(out["a"]).toBe(2);
   });

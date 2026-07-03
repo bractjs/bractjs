@@ -47,9 +47,7 @@ export function hasForbiddenKey(value: unknown, depth = 0): boolean {
  * "__proto__" lands as a plain own property instead of mutating the prototype,
  * so downstream spreads/merges of the result are pollution-safe.
  */
-export function nullProtoFromEntries<V>(
-  entries: Iterable<readonly [string, V]>,
-): Record<string, V> {
+export function nullProtoFromEntries<V>(entries: Iterable<readonly [string, V]>): Record<string, V> {
   const out = Object.create(null) as Record<string, V>;
   for (const [k, v] of entries) out[k] = v;
   return out;

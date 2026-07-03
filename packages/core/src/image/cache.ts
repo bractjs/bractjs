@@ -1,6 +1,6 @@
-import { join } from "node:path";
 import { mkdir, rename, unlink } from "node:fs/promises";
-import type { ImageTransformParams, TransformResult, ImageFormat } from "./types.ts";
+import { join } from "node:path";
+import type { ImageFormat, ImageTransformParams, TransformResult } from "./types.ts";
 
 const MAX_MEM = 200;
 const mem = new Map<string, { result: TransformResult; hits: number }>();
@@ -35,7 +35,10 @@ export async function setInMemory(
     let minKey = "";
     let minHits = Infinity;
     for (const [k, v] of mem) {
-      if (v.hits < minHits) { minHits = v.hits; minKey = k; }
+      if (v.hits < minHits) {
+        minHits = v.hits;
+        minKey = k;
+      }
     }
     if (minKey) mem.delete(minKey);
   }
@@ -86,10 +89,7 @@ export async function setOnDisk(
     await Promise.all([rename(jsonTmp, jsonFinal), rename(binTmp, binFinal)]);
   } catch (err) {
     // Best-effort cleanup so failed writes don't leak .tmp files indefinitely.
-    await Promise.all([
-      unlink(jsonTmp).catch(() => {}),
-      unlink(binTmp).catch(() => {}),
-    ]);
+    await Promise.all([unlink(jsonTmp).catch(() => {}), unlink(binTmp).catch(() => {})]);
     throw err;
   }
 }

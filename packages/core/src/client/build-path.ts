@@ -8,10 +8,7 @@
 //
 // Patterns without a `:` (static routes, or already-built hrefs) pass straight
 // through, so this is safe to call unconditionally.
-export function buildPath(
-  pattern: string,
-  params: Record<string, string | number>,
-): string {
+export function buildPath(pattern: string, params: Record<string, string | number>): string {
   if (!pattern.includes(":")) return pattern;
   return pattern
     .split("/")

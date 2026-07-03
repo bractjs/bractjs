@@ -22,9 +22,9 @@
  * `@bractjs/bractjs` import self-resolves to the in-repo framework via the root
  * tsconfig `paths` mapping.
  */
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { join, resolve } from "node:path";
 import { generateRouteTypes } from "../codegen/route-codegen.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../..");

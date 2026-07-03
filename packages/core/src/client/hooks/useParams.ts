@@ -1,7 +1,7 @@
 import { useContext } from "react";
-import { RouterContext } from "../router.tsx";
 import { BractJSContext } from "../../shared/context.ts";
 import type { ParamsFor } from "../registry.ts";
+import { RouterContext } from "../router.tsx";
 
 /**
  * Returns the current route's URL params (e.g. `{ id: "42" }`).

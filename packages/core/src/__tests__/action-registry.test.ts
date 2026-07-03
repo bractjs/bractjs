@@ -1,7 +1,11 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { resolve, relative, isAbsolute } from "node:path";
-import { loadServerActions, loadServerActionsFromRegistry, resolveAction } from "../server/action-registry.ts";
+import { isAbsolute, relative, resolve } from "node:path";
+import {
+  loadServerActions,
+  loadServerActionsFromRegistry,
+  resolveAction,
+} from "../server/action-registry.ts";
 
 const TMP = resolve(import.meta.dir, ".tmp-action-registry");
 
@@ -99,9 +103,7 @@ describe("loadServerActionsFromRegistry", () => {
       sendEmail: async (to: string) => `sent ${to}`,
       __ignored: 42, // non-function — must be skipped
     };
-    await loadServerActionsFromRegistry([
-      { relPath: "routes/contact.server.ts", mod: fakeMod },
-    ]);
+    await loadServerActionsFromRegistry([{ relPath: "routes/contact.server.ts", mod: fakeMod }]);
     const id = await rawId("routes/contact.server.ts", "sendEmail");
     const fn = resolveAction(id);
     expect(fn).not.toBeNull();

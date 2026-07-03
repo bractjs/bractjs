@@ -1,4 +1,4 @@
-import { lazy, type LazyExoticComponent, type ComponentType } from "react";
+import { type ComponentType, type LazyExoticComponent, lazy } from "react";
 
 // ── Route Cache ────────────────────────────────────────────────────────────
 

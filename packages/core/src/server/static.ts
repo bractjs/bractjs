@@ -1,5 +1,5 @@
-import { join, resolve, sep } from "node:path";
 import { realpath } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { isDevRuntime } from "./env.ts";
 
 const IMMUTABLE = "public, max-age=31536000, immutable";

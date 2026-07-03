@@ -1,5 +1,5 @@
-import { useContext, type FormEvent, type ReactNode, type FormHTMLAttributes } from "react";
-import { RouterContext, NavigationContext } from "../router.tsx";
+import { type FormEvent, type FormHTMLAttributes, type ReactNode, useContext } from "react";
+import { NavigationContext, RouterContext } from "../router.tsx";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -24,9 +24,8 @@ export function Form({ method = "post", action, intent, children, ...rest }: For
   const navCtx = useContext(NavigationContext);
   // The hidden intent input, rendered first so it's part of every submission
   // (JS and native). `key` keeps React happy alongside arbitrary children.
-  const intentInput = intent !== undefined
-    ? <input key="__bract_intent" type="hidden" name="intent" value={intent} />
-    : null;
+  const intentInput =
+    intent !== undefined ? <input key="__bract_intent" type="hidden" name="intent" value={intent} /> : null;
 
   // SSR: render a plain form — no JS submit handler needed
   if (!routerCtx || !navCtx) {
@@ -61,7 +60,14 @@ export function Form({ method = "post", action, intent, children, ...rest }: For
   // the client markup match the server's and avoids a hydration mismatch for any
   // <Form action="…"> (e.g. a logout form posting to a different route).
   return (
-    <form method={method} action={action} onSubmit={(e) => { void handleSubmit(e); }} {...rest}>
+    <form
+      method={method}
+      action={action}
+      onSubmit={(e) => {
+        void handleSubmit(e);
+      }}
+      {...rest}
+    >
       {intentInput}
       {children}
     </form>

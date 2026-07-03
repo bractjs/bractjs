@@ -1,6 +1,6 @@
 import type { BunPlugin } from "bun";
-import type { RouteFile, RouteModule } from "./route.d.ts";
 import type { BractAdapter, I18nConfig, OnErrorHook } from "./index.d.ts";
+import type { RouteFile, RouteModule } from "./route.d.ts";
 
 export interface BractJSConfig {
   /** TCP port to listen on. Default: 3000. */

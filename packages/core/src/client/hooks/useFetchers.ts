@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { fetcherStore, EMPTY_FETCHERS, type FetcherEntry } from "../fetcher-store.ts";
+import { EMPTY_FETCHERS, type FetcherEntry, fetcherStore } from "../fetcher-store.ts";
 
 /**
  * Every active fetcher (keyed and mounted-unkeyed alike) — the cross-component
@@ -15,9 +15,5 @@ import { fetcherStore, EMPTY_FETCHERS, type FetcherEntry } from "../fetcher-stor
  * SSR-safe: renders an empty list on the server.
  */
 export function useFetchers(): FetcherEntry[] {
-  return useSyncExternalStore(
-    fetcherStore.subscribe,
-    fetcherStore.getSnapshot,
-    () => EMPTY_FETCHERS,
-  );
+  return useSyncExternalStore(fetcherStore.subscribe, fetcherStore.getSnapshot, () => EMPTY_FETCHERS);
 }

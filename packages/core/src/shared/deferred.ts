@@ -13,15 +13,12 @@ export type DeferredData<T extends Record<string, unknown>> = {
   [K in keyof T]: T[K] extends Promise<infer V> ? Deferred<V> : T[K];
 };
 
-export function defer<T extends Record<string, unknown>>(
-  data: T
-): DeferredData<T> {
+export function defer<T extends Record<string, unknown>>(data: T): DeferredData<T> {
   const result: Record<string, unknown> = {};
 
   for (const key of Object.keys(data)) {
     const value = data[key];
-    result[key] =
-      value instanceof Promise ? new Deferred(value) : value;
+    result[key] = value instanceof Promise ? new Deferred(value) : value;
   }
 
   return result as DeferredData<T>;
@@ -32,9 +29,7 @@ export function isDeferred<T>(value: unknown): value is Deferred<T> {
 }
 
 /** Returns only the already-resolved (non-Promise) values from a DeferredData object. */
-export function stripDeferred<T extends Record<string, unknown>>(
-  data: T
-): Record<string, unknown> {
+export function stripDeferred<T extends Record<string, unknown>>(data: T): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const key of Object.keys(data)) {
     if (!isDeferred(data[key])) result[key] = data[key];
@@ -43,9 +38,7 @@ export function stripDeferred<T extends Record<string, unknown>>(
 }
 
 /** Returns only the deferred promises from a DeferredData object, keyed by field name. */
-export function promisesOf<T extends Record<string, unknown>>(
-  data: T
-): Record<string, Promise<unknown>> {
+export function promisesOf<T extends Record<string, unknown>>(data: T): Record<string, Promise<unknown>> {
   const result: Record<string, Promise<unknown>> = {};
   for (const key of Object.keys(data)) {
     const value = data[key];

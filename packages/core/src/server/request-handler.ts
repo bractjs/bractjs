@@ -1,21 +1,21 @@
 import { createElement } from "react";
+import { BractJSProvider } from "../shared/context.ts";
+import { isHttpError, isRedirect } from "../shared/errors.ts";
+import { getCspNonce } from "./csp.ts";
+import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
+import { isExplicitDev } from "./env.ts";
+import { resolveHeaders } from "./headers.ts";
+import { type ModuleRegistry, resolveRouteChain } from "./layout.ts";
+import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
+import { buildLoaderArgs, runAction, runBeforeLoad, runLoaders, runRouteContext } from "./loader.ts";
 import type { TrieNode } from "./matcher.ts";
 import { matchRoute } from "./matcher.ts";
-import { resolveRouteChain, type ModuleRegistry } from "./layout.ts";
-import { runLoaders, runAction, buildLoaderArgs, runRouteContext, runBeforeLoad } from "./loader.ts";
-import { validateSearch } from "./search.ts";
-import { renderRoute, type ServerManifest } from "./render.ts";
-import { resolveMeta, mergeMeta } from "./meta.ts";
-import { resolveHeaders } from "./headers.ts";
 import { buildMatches } from "./matches.ts";
-import { json, error, sanitizeRedirect } from "./response.ts";
-import { isRedirect, isHttpError } from "../shared/errors.ts";
-import { isExplicitDev } from "./env.ts";
-import { runRouteMiddleware, collectRouteMiddleware, type MiddlewareContext } from "./middleware.ts";
-import { BractJSProvider } from "../shared/context.ts";
-import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
-import { getCspNonce } from "./csp.ts";
-import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
+import { mergeMeta, resolveMeta } from "./meta.ts";
+import { collectRouteMiddleware, type MiddlewareContext, runRouteMiddleware } from "./middleware.ts";
+import { renderRoute, type ServerManifest } from "./render.ts";
+import { error, json, sanitizeRedirect } from "./response.ts";
+import { validateSearch } from "./search.ts";
 
 export interface HandlerConfig {
   appDir: string;
@@ -36,6 +36,45 @@ const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 // single client cannot exhaust memory. Multipart uploads of legitimate
 // large files should use a dedicated upload endpoint configured separately.
 const MAX_FORM_BYTES = 10 * 1_048_576; // 10 MiB
+
+type RouteChain = Awaited<ReturnType<typeof resolveRouteChain>>;
+type PipelineLoaderArgs = ReturnType<typeof buildLoaderArgs>;
+
+/**
+ * SECURITY(high): the shared route-gate pipeline — nested middleware
+ * (root → layout → route, shared mutable `context`, may short-circuit) →
+ * per-route context factory → loader args → beforeLoad gate. BOTH the
+ * document branch and the /_data soft-nav branch run requests through this
+ * single function; that equivalence IS the auth contract (a gate that held
+ * for the document but not for /_data would leak loader data to soft
+ * navigations, and vice versa). `data-contract.test.ts` pins the parity.
+ *
+ * What happens *after* the gates — actions, selective-SSR loader stripping,
+ * HTML render vs. JSON payload — intentionally differs per branch and lives
+ * in the `work` continuation.
+ */
+async function runRoutePipeline(
+  request: Request,
+  params: Record<string, string>,
+  chain: RouteChain,
+  search: Record<string, unknown>,
+  context: Record<string, unknown>,
+  work: (args: PipelineLoaderArgs, mwCtx: MiddlewareContext) => Promise<Response>,
+): Promise<Response> {
+  const mwCtx: MiddlewareContext = { request, params, context };
+  return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
+    const routeContext = await runRouteContext(
+      chain.route as Parameters<typeof runRouteContext>[0],
+      request,
+      params,
+      mwCtx.context,
+    );
+    const args = buildLoaderArgs(request, params, routeContext, search);
+    const beforeLoadResponse = await runBeforeLoad(chain.route, args);
+    if (beforeLoadResponse) return beforeLoadResponse;
+    return work(args, mwCtx);
+  });
+}
 
 export async function handleRequest(
   request: Request,
@@ -98,31 +137,29 @@ async function route(
       // SECURITY(high): /_data must run the same auth/redirect gates as a full
       // page request — otherwise a SPA-style soft navigation to a protected
       // route would bypass nested middleware / beforeLoad() / defineContext()
-      // and leak loader data. Run the route middleware chain around the work,
-      // sharing the same mutable `context` so a gate can set/clear fields.
-      const mwCtx: MiddlewareContext = { request: loaderRequest, params: match.params, context };
+      // and leak loader data. runRoutePipeline is the single shared gate
+      // sequence for both branches.
       // `return await` (not bare `return`): a loader/gate inside the middleware
       // work can throw a redirect (e.g. requireAdmin). Without awaiting here the
       // returned promise rejects *after* this try block, so the catch below never
       // runs isRedirect() and the redirect escapes to the top-level handler as a
       // 500 instead of being returned as a 302 for the soft-nav client.
-      return await runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
-        const routeContext = await runRouteContext(
-          chain.route as Parameters<typeof runRouteContext>[0],
-          loaderRequest,
-          match.params,
-          mwCtx.context,
-        );
-        const args = buildLoaderArgs(loaderRequest, match.params, routeContext, search);
-        const beforeLoadResponse = await runBeforeLoad(chain.route, args);
-        if (beforeLoadResponse) return beforeLoadResponse;
+      return await runRoutePipeline(loaderRequest, match.params, chain, search, context, async (args) => {
         const results = await runLoaders(chain, args, onError);
         // Merged meta must ride along: ClientRouter re-renders the document head
         // from this payload on soft navigation, and the initial __BRACTJS_DATA__
         // already carries the merged shape.
         const meta = mergeMeta(resolveMeta(chain, results, match.params));
         const matches = buildMatches(chain, results, match.params, targetPathname);
-        const dataRes = json({ root: results.root, layouts: results.layouts, route: results.route, params: match.params, meta, search, matches });
+        const dataRes = json({
+          root: results.root,
+          layouts: results.layouts,
+          route: results.route,
+          params: match.params,
+          meta,
+          search,
+          matches,
+        });
         // Apply the route `headers()` chain so a soft navigation gets the same
         // Cache-Control/ETag/Vary as the full document load (renderRoute applies
         // them there). Content-Type stays application/json.
@@ -163,111 +200,94 @@ async function route(
     throw err;
   }
 
-  // Nested route middleware (root → layout → route) wraps the action, loaders,
-  // and render. It shares the same mutable `context` object, runs *inside* the
-  // global pipeline, and can short-circuit (auth gate / redirect) by returning
-  // a Response. Empty chains call the work directly (no overhead).
-  const mwCtx: MiddlewareContext = { request, params: match.params, context };
-  return runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
+  // Middleware → context → args → beforeLoad run in runRoutePipeline (the
+  // shared gate sequence with the /_data branch); everything below is the
+  // document-specific work: actions, selective SSR, and the HTML render.
+  return runRoutePipeline(request, match.params, chain, search, context, async (args, mwCtx) => {
+    // ── Action (mutating methods) ─────────────────────────────────────────
+    let actionData: unknown = null;
+    if (MUTATING_METHODS.has(request.method)) {
+      if (!isAllowedMutation(request)) return csrfForbiddenResponse();
+      // Reject up front if the client advertises an oversized body.
+      const clRaw = request.headers.get("Content-Length");
+      if (clRaw) {
+        const cl = Number(clRaw);
+        if (Number.isFinite(cl) && cl > MAX_FORM_BYTES) {
+          return error("Payload Too Large", 413);
+        }
+      }
+      try {
+        const ct = request.headers.get("Content-Type") ?? "";
+        const isFormLike =
+          ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded");
+        const formData = isFormLike ? await request.formData() : new FormData();
+        actionData = await runAction(chain.route, { ...args, formData });
+      } catch (err) {
+        if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
+        if (isHttpError(err)) return error(err.message, err.status);
+        // Name the failing route so the log points at the right file.
+        console.error(`[bractjs] action error in ${chain.files?.route ?? match.routeFile.filePath}:`, err);
+        await fireOnError(onError, err, request);
+        if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
+        return error("Internal Server Error", 500);
+      }
 
-  // Run per-route context factory (defineContext export) before loaders.
-  const routeContext = await runRouteContext(
-    chain.route as Parameters<typeof runRouteContext>[0],
-    request,
-    match.params,
-    mwCtx.context,
-  );
-  const args = buildLoaderArgs(request, match.params, routeContext, search);
+      // An action may *return* (not just throw) a redirect or any Response —
+      // the documented pattern is `return redirect("/")`. Propagate it verbatim
+      // so the browser/`<Form>` sees a real 3xx (and follows it) instead of a
+      // 200 with the Response serialized into a JSON body. sanitizeRedirect()
+      // neutralizes an off-origin Location that didn't go through redirect()'s
+      // allowExternal opt-in (e.g. a raw `new Response(…,{Location:"//evil"})`).
+      if (actionData instanceof Response) return sanitizeRedirect(actionData, request.url);
 
-  // ── beforeLoad ────────────────────────────────────────────────────────
-  const beforeLoadResponse = await runBeforeLoad(chain.route, args);
-  if (beforeLoadResponse) return beforeLoadResponse;
-
-  // ── Action (mutating methods) ─────────────────────────────────────────
-  let actionData: unknown = null;
-  if (MUTATING_METHODS.has(request.method)) {
-    if (!isAllowedMutation(request)) return csrfForbiddenResponse();
-    // Reject up front if the client advertises an oversized body.
-    const clRaw = request.headers.get("Content-Length");
-    if (clRaw) {
-      const cl = Number(clRaw);
-      if (Number.isFinite(cl) && cl > MAX_FORM_BYTES) {
-        return error("Payload Too Large", 413);
+      // Client-side Form submits with this header — return JSON, not HTML.
+      if (request.headers.get("X-BractJS-Action")) {
+        return json(actionData ?? null);
       }
     }
+
+    // ── Selective SSR ─────────────────────────────────────────────────────
+    // `ssr: false` skips the ROUTE loader during document SSR (root/layout
+    // loaders still run — they render the shell). beforeLoad already ran above:
+    // it is the auth gate and must hold for every mode. The client completes
+    // the render via /_data after hydration, where the loader DOES run.
+    const routeSsr = chain.route.ssr ?? true;
+    const loaderChain =
+      routeSsr === false ? { ...chain, route: { ...chain.route, loader: undefined } } : chain;
+
+    // ── Loaders ───────────────────────────────────────────────────────────
+    let loaderResults;
     try {
-      const ct = request.headers.get("Content-Type") ?? "";
-      const isFormLike = ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded");
-      const formData = isFormLike ? await request.formData() : new FormData();
-      actionData = await runAction(chain.route, { ...args, formData });
+      loaderResults = await runLoaders(loaderChain, args, onError);
     } catch (err) {
       if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
       if (isHttpError(err)) return error(err.message, err.status);
-      // Name the failing route so the log points at the right file.
-      console.error(`[bractjs] action error in ${chain.files?.route ?? match.routeFile.filePath}:`, err);
       await fireOnError(onError, err, request);
       if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
       return error("Internal Server Error", 500);
     }
 
-    // An action may *return* (not just throw) a redirect or any Response —
-    // the documented pattern is `return redirect("/")`. Propagate it verbatim
-    // so the browser/`<Form>` sees a real 3xx (and follows it) instead of a
-    // 200 with the Response serialized into a JSON body. sanitizeRedirect()
-    // neutralizes an off-origin Location that didn't go through redirect()'s
-    // allowExternal opt-in (e.g. a raw `new Response(…,{Location:"//evil"})`).
-    if (actionData instanceof Response) return sanitizeRedirect(actionData, request.url);
+    const loaderData = {
+      root: loaderResults.root,
+      layouts: loaderResults.layouts,
+      route: loaderResults.route,
+    };
 
-    // Client-side Form submits with this header — return JSON, not HTML.
-    if (request.headers.get("X-BractJS-Action")) {
-      return json(actionData ?? null);
-    }
-  }
+    // ── SSR render ────────────────────────────────────────────────────────
+    const RootComponent = chain.root.default ?? (() => null);
+    // Non-default SSR modes render the Fallback (or nothing) in the component's
+    // place; the client swaps in the real component after hydration.
+    const RouteComponent = routeSsr === true ? chain.route.default : chain.route.Fallback;
+    const ssrMode =
+      routeSsr === true ? undefined : routeSsr === false ? ("client-only" as const) : ("data-only" as const);
 
-  // ── Selective SSR ─────────────────────────────────────────────────────
-  // `ssr: false` skips the ROUTE loader during document SSR (root/layout
-  // loaders still run — they render the shell). beforeLoad already ran above:
-  // it is the auth gate and must hold for every mode. The client completes
-  // the render via /_data after hydration, where the loader DOES run.
-  const routeSsr = chain.route.ssr ?? true;
-  const loaderChain = routeSsr === false
-    ? { ...chain, route: { ...chain.route, loader: undefined } }
-    : chain;
+    // useMatches() payload — the chain's handle + data, for breadcrumbs etc.
+    // Built from loaderChain so the loader slices line up with what ran.
+    const matches = buildMatches(loaderChain, loaderResults, match.params, pathname);
 
-  // ── Loaders ───────────────────────────────────────────────────────────
-  let loaderResults;
-  try {
-    loaderResults = await runLoaders(loaderChain, args, onError);
-  } catch (err) {
-    if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
-    if (isHttpError(err)) return error(err.message, err.status);
-    await fireOnError(onError, err, request);
-    if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
-    return error("Internal Server Error", 500);
-  }
-
-  const loaderData = {
-    root: loaderResults.root,
-    layouts: loaderResults.layouts,
-    route: loaderResults.route,
-  };
-
-  // ── SSR render ────────────────────────────────────────────────────────
-  const RootComponent = chain.root.default ?? (() => null);
-  // Non-default SSR modes render the Fallback (or nothing) in the component's
-  // place; the client swaps in the real component after hydration.
-  const RouteComponent = routeSsr === true ? chain.route.default : chain.route.Fallback;
-  const ssrMode = routeSsr === true ? undefined : routeSsr === false ? "client-only" as const : "data-only" as const;
-
-  // useMatches() payload — the chain's handle + data, for breadcrumbs etc.
-  // Built from loaderChain so the loader slices line up with what ran.
-  const matches = buildMatches(loaderChain, loaderResults, match.params, pathname);
-
-  // Wrap root in BractJSProvider so <Outlet> can render the route component
-  // server-side without needing a ClientRouter.
-  const shell = createElement(
-    BractJSProvider,
-    {
+    // Wrap root in BractJSProvider so <Outlet> can render the route component
+    // server-side without needing a ClientRouter.
+    const shell = createElement(BractJSProvider, {
       value: {
         loaderData: loaderData as Record<string, unknown>,
         actionData,
@@ -280,31 +300,29 @@ async function route(
         matches,
       },
       children: createElement(RootComponent),
-    },
-  );
+    });
 
-  const meta = resolveMeta(chain, loaderResults, match.params);
-  // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
-  // baseline document headers in renderRoute. Uses the loaders that actually
-  // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
-  const routeHeaders = resolveHeaders(loaderChain, loaderResults, match.params, request);
+    const meta = resolveMeta(chain, loaderResults, match.params);
+    // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
+    // baseline document headers in renderRoute. Uses the loaders that actually
+    // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
+    const routeHeaders = resolveHeaders(loaderChain, loaderResults, match.params, request);
 
-  return renderRoute({
-    shell,
-    loaderData,
-    actionData,
-    params: match.params,
-    pathname,
-    search,
-    manifest,
-    meta,
-    matches,
-    headers: routeHeaders,
-    routeFile: match.routeFile.filePath,
-    // Set by the opt-in csp() middleware; undefined otherwise.
-    nonce: getCspNonce(mwCtx.context),
-    ssrMode,
-  });
-
+    return renderRoute({
+      shell,
+      loaderData,
+      actionData,
+      params: match.params,
+      pathname,
+      search,
+      manifest,
+      meta,
+      matches,
+      headers: routeHeaders,
+      routeFile: match.routeFile.filePath,
+      // Set by the opt-in csp() middleware; undefined otherwise.
+      nonce: getCspNonce(mwCtx.context),
+      ssrMode,
+    });
   });
 }

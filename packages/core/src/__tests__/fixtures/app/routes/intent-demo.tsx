@@ -1,13 +1,15 @@
 // Exercises defineActions + <Form intent> + safeValidate end to end.
-import { defineActions, safeValidate, formText } from "../../../../index.ts";
+
 import { Form } from "../../../../client/components/Form.tsx";
+import { defineActions, formText, safeValidate } from "../../../../index.ts";
 import type { Schema } from "../../../../server/validate.ts";
 
 const TitleSchema: Schema<{ title: string }> = {
   safeParse(input: unknown) {
-    const t = typeof (input as { title?: unknown })?.title === "string"
-      ? ((input as { title: string }).title).trim()
-      : "";
+    const t =
+      typeof (input as { title?: unknown })?.title === "string"
+        ? (input as { title: string }).title.trim()
+        : "";
     return t
       ? { success: true, data: { title: t } }
       : { success: false, error: { issues: [{ path: ["title"], message: "Title required" }] } };

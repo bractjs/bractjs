@@ -1,6 +1,6 @@
+import type { RouteMatch } from "../shared/route-types.ts";
 import type { LayoutChain } from "./layout.ts";
 import type { LoaderResults } from "./loader.ts";
-import type { RouteMatch } from "../shared/route-types.ts";
 
 /**
  * Build the `useMatches()` payload: one entry per module in the chain

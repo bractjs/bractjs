@@ -48,8 +48,13 @@ class ToastStore {
     this.clearTimer(id);
     const prev = this.entries.get(id);
     this.entries.set(id, {
-      id, type, message, description: opts.description, duration,
-      action: opts.action, createdAt: prev?.createdAt ?? Date.now(),
+      id,
+      type,
+      message,
+      description: opts.description,
+      duration,
+      action: opts.action,
+      createdAt: prev?.createdAt ?? Date.now(),
     });
     this.schedule(id, duration);
     this.emit();
@@ -63,22 +68,33 @@ class ToastStore {
 
   clear(): void {
     for (const id of [...this.timers.keys()]) this.clearTimer(id);
-    if (this.entries.size) { this.entries.clear(); this.emit(); }
+    if (this.entries.size) {
+      this.entries.clear();
+      this.emit();
+    }
   }
 
   private schedule(id: string, duration: number): void {
     if (!Number.isFinite(duration) || duration <= 0) return;
-    this.timers.set(id, setTimeout(() => this.dismiss(id), duration));
+    this.timers.set(
+      id,
+      setTimeout(() => this.dismiss(id), duration),
+    );
   }
 
   private clearTimer(id: string): void {
     const t = this.timers.get(id);
-    if (t !== undefined) { clearTimeout(t); this.timers.delete(id); }
+    if (t !== undefined) {
+      clearTimeout(t);
+      this.timers.delete(id);
+    }
   }
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
 
   getSnapshot = (): ToastEntry[] => this.snapshot;
@@ -95,9 +111,11 @@ export const toastStore = new ToastStore();
 export const EMPTY_TOASTS: ToastEntry[] = [];
 
 type Msg<T> = string | ((value: T) => string);
-const resolve = <T,>(m: Msg<T>, v: T): string => (typeof m === "function" ? m(v) : m);
-const typed = (type: ToastType) =>
-  (message: string, opts?: Omit<ToastOptions, "type">): string => toastStore.add(message, { ...opts, type });
+const resolve = <T>(m: Msg<T>, v: T): string => (typeof m === "function" ? m(v) : m);
+const typed =
+  (type: ToastType) =>
+  (message: string, opts?: Omit<ToastOptions, "type">): string =>
+    toastStore.add(message, { ...opts, type });
 
 /**
  * Fire a toast from anywhere. Use the typed helpers for status feedback:

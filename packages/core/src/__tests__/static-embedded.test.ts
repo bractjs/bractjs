@@ -1,6 +1,6 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { mkdir, rm, writeFile, symlink } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { serveStatic } from "../server/static.ts";
 
 const TMP = resolve(import.meta.dir, ".tmp-static-embedded");
@@ -46,9 +46,7 @@ describe("serveStatic — normal filesystem path", () => {
   });
 
   test("blocks .. traversal segments", async () => {
-    expect(
-      await serveStatic("/build/client/../secret.txt", BUILD, PUBLIC),
-    ).toBeNull();
+    expect(await serveStatic("/build/client/../secret.txt", BUILD, PUBLIC)).toBeNull();
   });
 
   test("blocks symlink that escapes the root after realpath", async () => {
@@ -64,11 +62,7 @@ describe("serveStatic — embedded-binary fallback", () => {
     // `/build/client/__definitely_missing__.js` doesn't exist → realpath
     // throws → fallback runs → Bun.file().exists() returns false → null.
     // Guarantees the fallback doesn't accidentally serve nonexistent paths.
-    const res = await serveStatic(
-      "/build/client/__definitely_missing__.js",
-      BUILD,
-      PUBLIC,
-    );
+    const res = await serveStatic("/build/client/__definitely_missing__.js", BUILD, PUBLIC);
     expect(res).toBeNull();
   });
 });

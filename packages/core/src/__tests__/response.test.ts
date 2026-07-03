@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { redirect, json, error, sanitizeRedirect } from "../server/response.ts";
+import { describe, expect, test } from "bun:test";
+import { error, json, redirect, sanitizeRedirect } from "../server/response.ts";
 
 describe("redirect", () => {
   test("returns 302 by default with Location header", () => {
@@ -111,7 +111,7 @@ describe("json", () => {
 
   test("serializes data to JSON body", async () => {
     const res = json({ name: "bract", version: 1 });
-    const body = await res.json() as { name: string; version: number };
+    const body = (await res.json()) as { name: string; version: number };
     expect(body.name).toBe("bract");
     expect(body.version).toBe(1);
   });
@@ -132,7 +132,7 @@ describe("json", () => {
 
   test("serializes arrays", async () => {
     const res = json([1, 2, 3]);
-    const body = await res.json() as number[];
+    const body = (await res.json()) as number[];
     expect(body).toEqual([1, 2, 3]);
   });
 
@@ -149,7 +149,7 @@ describe("error", () => {
 
   test("body is JSON with error field", async () => {
     const res = error("something failed");
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe("something failed");
   });
 

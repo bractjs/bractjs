@@ -1,10 +1,6 @@
-import { test, expect, describe } from "bun:test";
-import {
-  runRouteMiddleware,
-  collectRouteMiddleware,
-  type RouteMiddleware,
-} from "../server/middleware.ts";
+import { describe, expect, test } from "bun:test";
 import type { MiddlewareContext } from "../server/middleware.ts";
+import { collectRouteMiddleware, type RouteMiddleware, runRouteMiddleware } from "../server/middleware.ts";
 
 function makeCtx(): MiddlewareContext {
   return { request: new Request("http://localhost/"), params: {}, context: {} };
@@ -15,7 +11,12 @@ const ok = async () => new Response("ok", { status: 200 });
 describe("collectRouteMiddleware", () => {
   test("orders root → layouts → route and flattens arrays", () => {
     const order: string[] = [];
-    const mk = (label: string): RouteMiddleware => async (_c, n) => { order.push(label); return n(); };
+    const mk =
+      (label: string): RouteMiddleware =>
+      async (_c, n) => {
+        order.push(label);
+        return n();
+      };
     const chain = {
       root: { middleware: mk("root") },
       layouts: [{ middleware: [mk("l0a"), mk("l0b")] }, { middleware: mk("l1") }],
@@ -32,7 +33,7 @@ describe("collectRouteMiddleware", () => {
     const chain = {
       root: {},
       layouts: [{ middleware: undefined }, { middleware: ["nope" as unknown] }],
-      route: { middleware: (async (_c: MiddlewareContext, n: () => Promise<Response>) => n()) },
+      route: { middleware: async (_c: MiddlewareContext, n: () => Promise<Response>) => n() },
     };
     expect(collectRouteMiddleware(chain)).toHaveLength(1);
   });
@@ -57,7 +58,10 @@ describe("runRouteMiddleware", () => {
 
   test("shares a mutable context across the chain and into the handler", async () => {
     const ctx = makeCtx();
-    const setUser: RouteMiddleware = async (c, n) => { c.context.user = "alice"; return n(); };
+    const setUser: RouteMiddleware = async (c, n) => {
+      c.context.user = "alice";
+      return n();
+    };
     let seenInHandler: unknown;
     await runRouteMiddleware([setUser], ctx, async () => {
       seenInHandler = ctx.context.user;
@@ -67,7 +71,10 @@ describe("runRouteMiddleware", () => {
   });
 
   test("rejects if a middleware calls next() twice", async () => {
-    const bad: RouteMiddleware = async (_c, n) => { await n(); return n(); };
+    const bad: RouteMiddleware = async (_c, n) => {
+      await n();
+      return n();
+    };
     await expect(runRouteMiddleware([bad], makeCtx(), ok)).rejects.toThrow(/more than once/);
   });
 

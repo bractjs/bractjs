@@ -1,20 +1,20 @@
-import { scanRoutes, type RouteFile } from "./scanner.ts";
-import { buildTrie, matchRoute } from "./matcher.ts";
-import { handleRequest, type HandlerConfig } from "./request-handler.ts";
-import { pipeline, type MiddlewareContext } from "./middleware.ts";
-import { renderSpaShell } from "./spa.ts";
-import { type ServerManifest } from "./render.ts";
-import { isDevRuntime, isExplicitDev } from "./env.ts";
+import { join, resolve } from "node:path";
 import { loadManifest } from "../build/manifest.ts";
-import { serveStatic } from "./static.ts";
 import { handleImageRequest } from "../image/handler.ts";
-import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
 import { handleActionRequest } from "./action-handler.ts";
-import { BunAdapter, type BractAdapter } from "./adapter.ts";
+import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
+import { type BractAdapter, BunAdapter } from "./adapter.ts";
+import { isDevRuntime, isExplicitDev } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
-import { resolve, join } from "node:path";
-import { error } from "./response.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
+import { buildTrie, matchRoute } from "./matcher.ts";
+import { type MiddlewareContext, pipeline } from "./middleware.ts";
+import type { ServerManifest } from "./render.ts";
+import { type HandlerConfig, handleRequest } from "./request-handler.ts";
+import { error } from "./response.ts";
+import { type RouteFile, scanRoutes } from "./scanner.ts";
+import { renderSpaShell } from "./spa.ts";
+import { serveStatic } from "./static.ts";
 import { installUseClientServerStub } from "./use-client-runtime.ts";
 
 export interface I18nConfig {
@@ -102,7 +102,11 @@ const DEFAULT_MANIFEST: ServerManifest = {
 async function readDevManifest(buildDir: string): Promise<ServerManifest> {
   const f = Bun.file(join(buildDir, "route-manifest.json"));
   if (!(await f.exists())) return DEFAULT_MANIFEST;
-  const m = await f.json() as { clientEntry?: string; rootChunk?: string; routes?: Record<string, { chunk?: string }> };
+  const m = (await f.json()) as {
+    clientEntry?: string;
+    rootChunk?: string;
+    routes?: Record<string, { chunk?: string }>;
+  };
   return {
     clientEntry: m.clientEntry ?? DEFAULT_MANIFEST.clientEntry,
     rootChunk: m.rootChunk,
@@ -123,15 +127,16 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   const buildDir = resolve(config.buildDir ?? "./build");
   const imageCacheDir = resolve(config.imageCacheDir ?? ".bract-image-cache");
 
-  const manifestReady: Promise<ServerManifest> = !isDevRuntime() && !config.manifest
-    ? loadManifest(buildDir).then((m) => ({
-        clientEntry: m.clientEntry,
-        rootChunk: m.rootChunk,
-        routes: Object.fromEntries(
-          Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk }]),
-        ),
-      }))
-    : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);
+  const manifestReady: Promise<ServerManifest> =
+    !isDevRuntime() && !config.manifest
+      ? loadManifest(buildDir).then((m) => ({
+          clientEntry: m.clientEntry,
+          rootChunk: m.rootChunk,
+          routes: Object.fromEntries(
+            Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk }]),
+          ),
+        }))
+      : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);
 
   // When routes are imported from SOURCE at runtime (dev server AND
   // `bractjs start`, which fall back to scanRoutes + dynamic import rather than
@@ -339,25 +344,64 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
 async function warnIfStaleBuild(buildDir: string): Promise<void> {
   const f = Bun.file(join(buildDir, "route-manifest.json"));
   if (!(await f.exists())) {
-    console.warn(`[bract] No build found at ${buildDir}/route-manifest.json. Run \`bractjs build\` before \`bractjs start\`.`);
+    console.warn(
+      `[bract] No build found at ${buildDir}/route-manifest.json. Run \`bractjs build\` before \`bractjs start\`.`,
+    );
     return;
   }
   try {
     const m = (await f.json()) as { mode?: string };
     if (m.mode !== "production") {
-      console.warn(`[bract] Build at ${buildDir} was not produced by \`bractjs build\` (mode=${m.mode ?? "unset"}). Re-run \`bractjs build\` for a production-ready manifest.`);
+      console.warn(
+        `[bract] Build at ${buildDir} was not produced by \`bractjs build\` (mode=${m.mode ?? "unset"}). Re-run \`bractjs build\` for a production-ready manifest.`,
+      );
     }
   } catch {
     // Malformed manifest — the request path will surface the real error.
   }
 }
 
-// Module-level guards so signal handlers are registered exactly once across
-// HMR restarts and multiple createServer() calls in the same process.
+// Module-level registry of live servers. Signal handlers are registered
+// exactly once per process and iterate this set, so multiple createServer()
+// calls (tests, multi-port setups, HMR restarts) each keep their own
+// onShutdown/onError hooks — previously the last server's hooks clobbered
+// everyone's, and the signal path could only stop the first adapter.
+interface ActiveServerRecord {
+  onShutdown?: () => Promise<void> | void;
+  onError?: OnErrorHook;
+  stopAdapter: () => void;
+  stopped: boolean;
+}
+const activeServers = new Set<ActiveServerRecord>();
 let signalsRegistered = false;
-let isShuttingDown = false;
-let activeOnShutdown: (() => Promise<void> | void) | undefined;
-let activeOnError: OnErrorHook | undefined;
+let processShutdownStarted = false;
+
+async function shutdownServer(rec: ActiveServerRecord): Promise<void> {
+  if (rec.stopped) return;
+  rec.stopped = true;
+  activeServers.delete(rec);
+  try {
+    const result = rec.onShutdown?.();
+    if (result instanceof Promise) {
+      try {
+        await result;
+      } catch (err) {
+        console.error("[bract] onShutdown error:", err);
+      }
+    }
+  } catch (err) {
+    console.error("[bract] onShutdown error:", err);
+  } finally {
+    rec.stopAdapter();
+  }
+}
+
+async function shutdownAll(signal?: string): Promise<void> {
+  if (processShutdownStarted) return;
+  processShutdownStarted = true;
+  if (signal) console.log(`\n[bract] Received ${signal}, shutting down…`);
+  await Promise.all([...activeServers].map((rec) => shutdownServer(rec)));
+}
 
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
@@ -378,65 +422,63 @@ export function createServer(config?: Partial<BractJSConfig>): {
     adapter.listen(port);
   } else {
     // Custom adapter: wire fetch handler in and call listen if available.
-    if ("setHandler" in adapter && typeof (adapter as unknown as { setHandler: unknown }).setHandler === "function") {
-      (adapter as unknown as { setHandler: (h: (r: Request) => Promise<Response>) => void }).setHandler(fetchHandler);
+    if (
+      "setHandler" in adapter &&
+      typeof (adapter as unknown as { setHandler: unknown }).setHandler === "function"
+    ) {
+      (adapter as unknown as { setHandler: (h: (r: Request) => Promise<Response>) => void }).setHandler(
+        fetchHandler,
+      );
     }
     adapter.listen?.(port);
   }
 
-  activeOnShutdown = config?.onShutdown;
-  activeOnError = config?.onError;
+  const rec: ActiveServerRecord = {
+    onShutdown: config?.onShutdown,
+    onError: config?.onError,
+    stopAdapter: () => {
+      if (adapter instanceof BunAdapter) {
+        adapter.stop();
+      } else if ("stop" in adapter && typeof (adapter as unknown as { stop: unknown }).stop === "function") {
+        (adapter as unknown as { stop: () => void }).stop();
+      }
+    },
+    stopped: false,
+  };
+  activeServers.add(rec);
 
   console.log(`[bract] Server running at http://localhost:${port}`);
 
-  const stopAdapter = () => {
-    if (adapter instanceof BunAdapter) {
-      adapter.stop();
-    } else if ("stop" in adapter && typeof (adapter as unknown as { stop: unknown }).stop === "function") {
-      (adapter as unknown as { stop: () => void }).stop();
-    }
-  };
-
-  // Programmatic / beforeExit path — runs the user hook, stops the adapter,
-  // and returns. Does NOT call process.exit() so callers (tests, parent
-  // supervisors) can keep running. `gracefulShutdown` below wraps this and
-  // adds an explicit exit for signal handlers, where termination is the
-  // whole point.
-  const shutdownOnce = async (signal?: string): Promise<void> => {
-    if (isShuttingDown) return;
-    isShuttingDown = true;
-    if (signal) console.log(`\n[bract] Received ${signal}, shutting down…`);
-    try {
-      const result = activeOnShutdown?.();
-      if (result instanceof Promise) {
-        try { await result; }
-        catch (err) { console.error("[bract] onShutdown error:", err); }
-      }
-    } catch (err) {
-      console.error("[bract] onShutdown error:", err);
-    } finally {
-      stopAdapter();
-    }
-  };
-
   const gracefulShutdown = (signal?: string, exitCode = 0): void => {
-    void shutdownOnce(signal).finally(() => process.exit(exitCode));
+    void shutdownAll(signal).finally(() => process.exit(exitCode));
   };
 
   if (!signalsRegistered) {
     signalsRegistered = true;
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-    process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
     process.on("SIGUSR2", () => gracefulShutdown("SIGUSR2"));
     // `beforeExit` fires when the event loop is naturally draining — we
-    // already shut down the adapter at that point, but we must NOT call
+    // already shut down the adapters at that point, but we must NOT call
     // process.exit(). Doing so re-enters the lifecycle and prevents test
     // runners (and any parent process supervising us) from observing a
-    // clean exit code. Just run the user hook + stop the listener.
-    process.on("beforeExit", () => { void shutdownOnce(); });
+    // clean exit code. Just run the user hooks + stop the listeners.
+    process.on("beforeExit", () => {
+      void shutdownAll();
+    });
     process.on("uncaughtException", (err) => {
       console.error("[bract] Uncaught exception:", err);
-      void fireOnError(activeOnError, err).then(() => gracefulShutdown("uncaughtException", 1));
+      void Promise.all([...activeServers].map((s) => fireOnError(s.onError, err))).then(() =>
+        gracefulShutdown("uncaughtException", 1),
+      );
+    });
+    // Unhandled rejections are routed to onError and logged, but do NOT bring
+    // the process down: a stray fire-and-forget promise (cache write, prefetch)
+    // must not kill a serving production process. Genuinely fatal states still
+    // arrive via uncaughtException above.
+    process.on("unhandledRejection", (reason) => {
+      console.error("[bract] Unhandled promise rejection:", reason);
+      for (const s of activeServers) void fireOnError(s.onError, reason);
     });
   }
 
@@ -445,12 +487,14 @@ export function createServer(config?: Partial<BractJSConfig>): {
   });
 
   return {
-    // Programmatic stop — runs `onShutdown`, then closes the listener. Does
-    // NOT call `process.exit()`. Tests rely on this so the runner can print
-    // its summary; long-running supervisors rely on it so a stop() doesn't
-    // tear down the whole worker. Use SIGTERM/SIGINT if you actually want
-    // the process to exit.
-    stop() { void shutdownOnce(); },
+    // Programmatic stop — runs THIS server's `onShutdown`, then closes its
+    // listener. Does NOT call `process.exit()`. Tests rely on this so the
+    // runner can print its summary; long-running supervisors rely on it so a
+    // stop() doesn't tear down the whole worker. Use SIGTERM/SIGINT if you
+    // actually want the process to exit.
+    stop() {
+      void shutdownServer(rec);
+    },
   };
 }
 

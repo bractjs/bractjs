@@ -1,14 +1,16 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { createServer } from "../server/serve.ts";
 import { registerRevalidator, triggerRevalidation } from "../client/revalidation.ts";
+import { createServer } from "../server/serve.ts";
 
 // ── Unit: revalidator seam (router ↔ fetcher bridge) ───────────────────────
 
 describe("revalidation seam", () => {
   test("triggerRevalidation forwards info to the registered revalidator", async () => {
     const calls: unknown[] = [];
-    registerRevalidator(async (info) => { calls.push(info); });
+    registerRevalidator(async (info) => {
+      calls.push(info);
+    });
     await triggerRevalidation({ formMethod: "POST", actionStatus: 200 });
     expect(calls).toEqual([{ formMethod: "POST", actionStatus: 200 }]);
     registerRevalidator(null);
@@ -45,7 +47,9 @@ afterAll(() => {
 
 describe("mutation → revalidation contract", () => {
   test("action mutates, JSON reply carries actionData, /_data reflects the new state", async () => {
-    const before = await (await fetch(`${BASE}/_data?path=/counter`)).json() as { route: { count: number } };
+    const before = (await (await fetch(`${BASE}/_data?path=/counter`)).json()) as {
+      route: { count: number };
+    };
 
     const post = await fetch(`${BASE}/counter`, {
       method: "POST",
@@ -59,7 +63,7 @@ describe("mutation → revalidation contract", () => {
     expect(actionData.count).toBe(before.route.count + 1);
 
     // The revalidation fetch ClientRouter issues after the action:
-    const after = await (await fetch(`${BASE}/_data?path=/counter`)).json() as { route: { count: number } };
+    const after = (await (await fetch(`${BASE}/_data?path=/counter`)).json()) as { route: { count: number } };
     expect(after.route.count).toBe(before.route.count + 1);
   });
 });

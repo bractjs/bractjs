@@ -17,10 +17,7 @@ export function formText(formData: FormData, key: string): string {
  * with `keys`, only those fields (each defaulting to `""`). Handy for passing a
  * typed subset of a form to a model function.
  */
-export function formValues(
-  formData: FormData,
-  keys?: string[],
-): Record<string, string> {
+export function formValues(formData: FormData, keys?: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   if (keys) {
     for (const key of keys) out[key] = formText(formData, key);

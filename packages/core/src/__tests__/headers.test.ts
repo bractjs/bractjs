@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { resolveHeaders, applyRouteHeaders } from "../server/headers.ts";
+import { describe, expect, test } from "bun:test";
+import { applyRouteHeaders, resolveHeaders } from "../server/headers.ts";
 import type { LayoutChain } from "../server/layout.ts";
 import type { LoaderResults } from "../server/loader.ts";
 import type { HeadersFunction } from "../shared/route-types.ts";

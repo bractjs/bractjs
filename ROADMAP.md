@@ -66,8 +66,8 @@
 
 ## Phase 3 — Dev Experience
 
-- [x] `Bun.watch()` file watcher with 50ms debounce
-- [x] HMR WebSocket server (port 3001)
+- [x] `node:fs` `watch()` file watcher with 50ms debounce
+- [x] HMR WebSocket server (configurable via `hmrPort`, default 3001)
 - [x] HMR browser client (auto-reload on `hmr` message)
 - [x] Dev error overlay (injected into HTML shell)
 - [x] `DefaultErrorBoundary` (stack trace in dev, generic message in prod)
@@ -88,7 +88,7 @@
 - [x] Client bundle (`Bun.build()` — target `browser`, code splitting)
 - [x] Route code splitting (one chunk per route)
 - [x] Asset renaming with content hash
-- [x] Production server (`tidewake start` loads manifest)
+- [x] Production server (`bractjs start` loads manifest)
 - [x] `Cache-Control: immutable` for hashed client assets
 
 ---
@@ -255,3 +255,26 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] Optional segments `[[id]]` — match with/without the segment (param unset when absent); ranked above catch-all, below required param/static (`src/server/scanner.ts`, `src/server/matcher.ts` `optionalChild`, `src/codegen/route-codegen.ts`)
 - [x] Nested route middleware — `export const middleware` (fn or array) runs root → layout → route before `beforeLoad`/action/loaders with a shared mutable `context`; short-circuits via a returned `Response`; protects the document and `/_data`; runs inside the global `pipeline` (`src/server/middleware.ts` `runRouteMiddleware`/`collectRouteMiddleware`, `src/server/request-handler.ts`)
 - [x] `clientLoader` / `clientAction` — RR7-style browser-side data with `serverLoader()`/`serverAction()` escape hatches; `clientLoader.hydrate = true` opts into running on the initial hydration of an SSR'd document (`src/client/ClientRouter.tsx`; `ClientLoaderFunction`/`ClientActionFunction` in `src/shared/route-types.ts`)
+
+---
+
+## v0.2.x — Shipped
+
+> Released as 0.2.0 (2026-06-16), 0.2.1 (2026-06-21), 0.2.2 (2026-06-23). See `CHANGELOG.md` for details.
+
+- [x] pnpm workspace monorepo layout finalized; framework published unchanged from `packages/core` (0.2.0)
+- [x] Toast notifications — `<Toaster />`, `useToast()`, shared toast store, flash-message integration (0.2.1)
+- [x] Security: adapter-agnostic catch-all for unhandled request errors; `BunAdapter` no longer leaks `err.message` in production (0.2.1)
+- [x] Security: `X-Content-Type-Options: nosniff` on all static responses (0.2.2)
+- [x] CSP middleware surface (`csp()`, `CspOptions`, `CSP_NONCE_KEY`, `getCspNonce`) declared in the public types (0.2.2)
+
+---
+
+## v0.3 — Planned
+
+- [ ] Remove deprecated `StreamFetcherResult.events` (deprecated since 0.2)
+- [ ] **Known gap:** `app/lifecycle.ts` is auto-loaded by `bractjs dev` but NOT by `bractjs start` — production hooks must live in `bractjs.config.ts` today. Fix needs a codegen'd static import to stay compatible with `bun build --compile` (dynamic user-file imports break the single-binary path)
+- [ ] Deno / Node.js adapters — validate the adapter contract beyond Bun + Cloudflare (carried from Phase D)
+- [ ] Built-in i18n routing wired end-to-end as a one-line opt-in (carried from Phase E)
+- [ ] Prerender assets embedded inside the compiled binary (carried from Phase G)
+- [ ] CI (GitHub Actions), lint/format (Biome), and a type-surface drift guard for the hand-maintained `types/*.d.ts`

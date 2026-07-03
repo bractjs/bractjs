@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
-import { layoutDirsFromFilePath, type RouteFile } from "./scanner.ts";
 import type { RouteModule } from "../shared/route-types.ts";
+import { layoutDirsFromFilePath, type RouteFile } from "./scanner.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,10 +30,7 @@ export type ModuleRegistry = Record<string, RouteModule | Record<string, unknown
 
 // ── resolveLayoutChain ─────────────────────────────────────────────────────
 
-export async function resolveLayoutChain(
-  routeFile: RouteFile,
-  appDir: string
-): Promise<ResolvedRoute> {
+export async function resolveLayoutChain(routeFile: RouteFile, appDir: string): Promise<ResolvedRoute> {
   const layoutFiles: string[] = [];
 
   // root.tsx is always first — resolve to absolute so dynamic import works
@@ -177,16 +174,12 @@ export async function resolveRouteChain(
 
   const resolved = await resolveLayoutChain(routeFile, appDir);
 
-  const [rootMod, ...layoutMods] = await Promise.all(
-    resolved.layoutFiles.map(importRouteModule)
-  );
-  const routeMod = await importRouteModule(
-    resolve(join(appDir, routeFile.filePath))
-  );
+  const [rootMod, ...layoutMods] = await Promise.all(resolved.layoutFiles.map(importRouteModule));
+  const routeMod = await importRouteModule(resolve(join(appDir, routeFile.filePath)));
 
   // Relativize the absolute layout paths back to appDir-relative for messages.
   const appRoot = resolve(appDir);
-  const rel = (abs: string) => abs.startsWith(appRoot + "/") ? abs.slice(appRoot.length + 1) : abs;
+  const rel = (abs: string) => (abs.startsWith(appRoot + "/") ? abs.slice(appRoot.length + 1) : abs);
   const [rootFile, ...layoutFiles] = resolved.layoutFiles.map(rel);
 
   return {

@@ -1,8 +1,8 @@
-import { useContext, useCallback } from "react";
-import { NavigationContext } from "../router.tsx";
+import { useCallback, useContext } from "react";
 import { buildPath } from "../build-path.ts";
+import type { ParamsFor, RegisteredRoutes, SearchOutputFor } from "../registry.ts";
+import { NavigationContext } from "../router.tsx";
 import { withSearch } from "../search-serializer.ts";
-import type { RegisteredRoutes, ParamsFor, SearchOutputFor } from "../registry.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,12 +17,10 @@ export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes
   state?: unknown;
 }
 
-export interface NavigateFn {
-  <TTo extends RegisteredRoutes>(
-    to: TTo | (string & {}),
-    options?: NavigateOptions<TTo>,
-  ): Promise<void>;
-}
+export type NavigateFn = <TTo extends RegisteredRoutes>(
+  to: TTo | (string & {}),
+  options?: NavigateOptions<TTo>,
+) => Promise<void>;
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 

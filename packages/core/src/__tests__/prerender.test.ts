@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { resolve, join } from "node:path";
-import { tmpdir } from "node:os";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import { runPrerender, prerenderPaths } from "../build/prerender.ts";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { prerenderPaths, runPrerender } from "../build/prerender.ts";
 import { createServer } from "../server/serve.ts";
 
 const FIXTURE_APP = resolve(import.meta.dir, "fixtures/app");
@@ -15,7 +15,10 @@ describe("prerenderPaths", () => {
   test("maps / and nested paths to index.html + _data.json", () => {
     expect(prerenderPaths("/")).toEqual({ html: "index.html", data: "_data.json" });
     expect(prerenderPaths("/about")).toEqual({ html: "about/index.html", data: "about/_data.json" });
-    expect(prerenderPaths("/blog/intro")).toEqual({ html: "blog/intro/index.html", data: "blog/intro/_data.json" });
+    expect(prerenderPaths("/blog/intro")).toEqual({
+      html: "blog/intro/index.html",
+      data: "blog/intro/_data.json",
+    });
   });
 
   test("rejects route patterns instead of silently writing junk", () => {
@@ -48,7 +51,10 @@ describe("runPrerender + production serving", () => {
 
     // Overwrite one artifact with a sentinel so the serving test below can
     // prove the FILE was served, not a fresh SSR pass.
-    await Bun.write(join(TMP_BUILD, "client", "_prerender", "counter", "index.html"), "<!-- PRERENDERED-SENTINEL -->");
+    await Bun.write(
+      join(TMP_BUILD, "client", "_prerender", "counter", "index.html"),
+      "<!-- PRERENDERED-SENTINEL -->",
+    );
 
     handle = createServer({
       port: PORT,
@@ -66,7 +72,9 @@ describe("runPrerender + production serving", () => {
   test("writes real SSR output at build time", async () => {
     const html = await Bun.file(join(TMP_BUILD, "client", "_prerender", "index.html")).text();
     expect(html).toContain("hello from bractjs"); // loader ran during prerender
-    const data = await Bun.file(join(TMP_BUILD, "client", "_prerender", "_data.json")).json() as { route: { message: string } };
+    const data = (await Bun.file(join(TMP_BUILD, "client", "_prerender", "_data.json")).json()) as {
+      route: { message: string };
+    };
     expect(data.route.message).toBe("hello from bractjs");
   });
 

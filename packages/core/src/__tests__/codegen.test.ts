@@ -1,12 +1,8 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import {
-  generateRouteTypes,
-  routesFingerprint,
-  readFingerprint,
-} from "../codegen/route-codegen.ts";
+import { join } from "node:path";
+import { generateRouteTypes, readFingerprint, routesFingerprint } from "../codegen/route-codegen.ts";
 
 let appDir = "";
 
@@ -27,8 +23,8 @@ describe("route-codegen — output shape", () => {
     await writeFile(join(routesDir, "users", "[id].tsx"), "export default () => null;");
 
     const out = await generateRouteTypes(appDir);
-    expect(out).toContain("\"/\":");
-    expect(out).toContain("\"/users/:id\":");
+    expect(out).toContain('"/":');
+    expect(out).toContain('"/users/:id":');
     // The pattern key in the literal union must also be JSON-quoted.
     expect(out).toMatch(/\| "\/users\/:id"/);
   });
@@ -66,13 +62,15 @@ describe("route-codegen — output shape", () => {
     // re-declared as bare top-level interfaces in the app file.
     expect(out).not.toMatch(/^export interface RouteSearchParamsMap/m);
     expect(out).not.toMatch(/^export interface RouteContextMap/m);
-    expect(out).toContain('import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs"');
+    expect(out).toContain(
+      'import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs"',
+    );
 
     // The Register seam carries the route union and a per-route params map.
     expect(out).toContain("interface Register {");
     expect(out).toContain("routes: AppRoutes;");
     expect(out).toMatch(/"\/users\/:id": \{ id: string \};/); // dynamic route → typed params
-    expect(out).toMatch(/"\/about": \{\};/);                   // static route → no params
+    expect(out).toMatch(/"\/about": \{\};/); // static route → no params
 
     // Schema-inferred search shapes: a per-route map derived from each route
     // module's `searchSchema` export, registered under `searchOutput`.

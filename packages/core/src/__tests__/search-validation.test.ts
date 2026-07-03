@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { searchParamsToObject, validateSearch } from "../server/search.ts";
 import { createServer } from "../server/serve.ts";

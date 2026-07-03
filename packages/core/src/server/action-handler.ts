@@ -1,7 +1,7 @@
 import { resolveAction } from "./action-registry.ts";
-import { json } from "./response.ts";
-import { isAllowedMutation, csrfForbiddenResponse } from "./csrf.ts";
+import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
 import { hasForbiddenKey } from "./proto-guard.ts";
+import { json } from "./response.ts";
 
 // Cap action JSON bodies. Anything over this looks like an abuse attempt;
 // FormData uploads (large files) take the multipart branch and bypass this.

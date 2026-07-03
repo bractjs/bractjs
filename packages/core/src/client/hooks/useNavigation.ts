@@ -1,6 +1,6 @@
 import { useContext } from "react";
-import { NavigationContext } from "../router.tsx";
 import type { NavigationState } from "../router.tsx";
+import { NavigationContext } from "../router.tsx";
 
 /**
  * Returns the current navigation state.

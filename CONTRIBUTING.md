@@ -67,6 +67,10 @@ constraints these enforce.
 
 ## Releasing `@bractjs/bractjs`
 
+> The full step-by-step release guide (GitHub PR flow, tagging rules, npm
+> publish, verification, troubleshooting) lives in
+> [PUBLISH_GUIDE.md](PUBLISH_GUIDE.md). The short version follows.
+
 The framework is the **only** published package; publish it from
 `packages/core/`. The repo root is `"private": true` and cannot be published
 (this is intentional — it prevents publishing the workspace by accident).
@@ -81,7 +85,7 @@ cd packages/core
 npm version patch        # or: minor / major
 
 # 3. (Recommended) confirm the tarball contents before publishing
-npm publish --dry-run    # expect files: src, bin, types, templates (+ package.json, LICENSE)
+npm publish --dry-run    # expect files: src, bin, types, templates, LICENSE (+ package.json, README.md)
 
 # 4. Publish
 npm publish              # publishConfig.access is already "public"

@@ -1,12 +1,12 @@
-import type { BractJSConfig } from "../server/serve.ts";
+import { mkdir, rename, rm } from "node:fs/promises";
+import { basename, extname, join, resolve } from "node:path";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
-import { serverModuleStubPlugin, clientEnvPlugin } from "../build/env-plugin.ts";
+import { clientEnvPlugin, serverModuleStubPlugin } from "../build/env-plugin.ts";
+import { generateManifest, writeManifest } from "../build/manifest.ts";
 import { cssModulesPlugin } from "../build/plugins/css-modules.ts";
 import { reactDedupePlugin } from "../build/react-dedupe.ts";
 import { scanRoutes } from "../server/scanner.ts";
-import { generateManifest, writeManifest } from "../build/manifest.ts";
-import { mkdir, rename, rm } from "node:fs/promises";
-import { join, resolve, basename, extname } from "node:path";
+import type { BractJSConfig } from "../server/serve.ts";
 
 // Shim filename written inside the demo app's CWD during build (then deleted).
 // The framework's entry.tsx lives outside CWD. When Bun sees entrypoints outside
@@ -16,9 +16,7 @@ import { join, resolve, basename, extname } from "node:path";
 // keeps all entrypoints under one root so chunk refs stay flat and correct.
 const SHIM = ".bractjs-entry.tsx";
 
-export async function rebuildClient(
-  config?: Partial<BractJSConfig>,
-): Promise<{ duration: number }> {
+export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ duration: number }> {
   const start = Date.now();
   const appDir = config?.appDir ?? "./app";
   const pkgRoot = resolve(import.meta.dirname, "../..");

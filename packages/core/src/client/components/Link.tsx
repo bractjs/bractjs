@@ -1,12 +1,9 @@
-import {
-  useContext, useEffect, useRef, useCallback,
-  type AnchorHTMLAttributes, type ReactNode,
-} from "react";
-import { NavigationContext, RouterContext } from "../router.tsx";
-import { prefetchRoute, observeOnce } from "../prefetch.ts";
+import { type AnchorHTMLAttributes, type ReactNode, useCallback, useContext, useEffect, useRef } from "react";
 import { buildPath } from "../build-path.ts";
+import { observeOnce, prefetchRoute } from "../prefetch.ts";
+import type { ParamsFor, RegisteredRoutes, SearchOutputFor } from "../registry.ts";
+import { NavigationContext, RouterContext } from "../router.tsx";
 import { withSearch } from "../search-serializer.ts";
-import type { RegisteredRoutes, ParamsFor, SearchOutputFor } from "../registry.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -93,9 +90,12 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
   }, [prefetch, triggerPrefetch]);
 
   // Cancel a pending intent timer on unmount.
-  useEffect(() => () => {
-    if (intentTimer.current) clearTimeout(intentTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (intentTimer.current) clearTimeout(intentTimer.current);
+    },
+    [],
+  );
 
   function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
     if (!navCtx) return; // SSR: let browser handle naturally
@@ -103,9 +103,9 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
     e.preventDefault();
 
     if (viewTransition && supportsViewTransitions) {
-      (document as Document & { startViewTransition(cb: () => void): void }).startViewTransition(
-        () => { void navCtx.navigate(href, { replace }); },
-      );
+      (document as Document & { startViewTransition(cb: () => void): void }).startViewTransition(() => {
+        void navCtx.navigate(href, { replace });
+      });
     } else {
       void navCtx.navigate(href, { replace });
     }

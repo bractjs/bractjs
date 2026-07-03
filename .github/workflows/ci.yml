@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm manages dependencies (version pinned via package.json#packageManager);
+      # Bun is the runtime, test runner, and bundler.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (Biome)
+        run: pnpm exec biome ci .
+
+      - name: Typecheck (framework + types + examples)
+        run: pnpm -r typecheck
+
+      - name: Lockfile unchanged
+        # bunx tsc used to re-resolve TypeScript and rewrite pnpm-lock.yaml as a
+        # side effect; typescript is a devDependency now, so any diff here is a
+        # real drift and should fail.
+        run: git diff --exit-code pnpm-lock.yaml
+
+      - name: Test (bun test, compile-smoke required)
+        env:
+          CI_REQUIRE_COMPILE: "1"
+        run: pnpm test
+
+      - name: Publish dry-run (tarball contents)
+        working-directory: packages/core
+        run: bun run scripts/verify-pack.ts

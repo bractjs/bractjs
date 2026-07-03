@@ -65,9 +65,7 @@ function generateNonce(): string {
  */
 export function csp(options: CspOptions = {}): MiddlewareFn {
   const reportOnly = options.reportOnly === true;
-  const headerName = reportOnly
-    ? "Content-Security-Policy-Report-Only"
-    : "Content-Security-Policy";
+  const headerName = reportOnly ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy";
 
   return async (ctx, next) => {
     const nonce = generateNonce();

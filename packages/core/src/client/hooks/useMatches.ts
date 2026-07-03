@@ -1,7 +1,7 @@
 import { useContext } from "react";
-import { RouterContext } from "../router.tsx";
 import { BractJSContext } from "../../shared/context.ts";
 import type { RouteMatch } from "../../shared/route-types.ts";
+import { RouterContext } from "../router.tsx";
 
 /**
  * Returns the matched route chain, outermost → innermost: the root, then each

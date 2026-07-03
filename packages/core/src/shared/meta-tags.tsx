@@ -1,4 +1,4 @@
-import { Fragment, createElement, type ReactElement } from "react";
+import { createElement, Fragment, type ReactElement } from "react";
 import type { MetaDescriptor } from "./route-types.ts";
 
 /**
@@ -30,9 +30,7 @@ export function MetaTags({ meta }: { meta: MetaDescriptor[] }): ReactElement {
       children.push(createElement("meta", { key: `prop:${property}`, property, content }));
     } else {
       // Arbitrary descriptor: render each string field as a meta attribute set.
-      const entries = Object.entries(d).filter(
-        ([, v]) => typeof v === "string",
-      ) as Array<[string, string]>;
+      const entries = Object.entries(d).filter(([, v]) => typeof v === "string") as Array<[string, string]>;
       if (entries.length > 0) {
         const props: Record<string, string> = {};
         for (const [k, v] of entries) props[k] = v;

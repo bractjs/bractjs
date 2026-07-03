@@ -48,7 +48,7 @@ export function csrfHint(): string {
   return (
     "Blocked a cross-site or unattributed mutation (CSRF protection). " +
     "Same-origin browser requests are allowed automatically; a manual fetch() " +
-    'must send the header `X-BractJS-Action: 1` (BractJS\'s <Form> and ' +
+    "must send the header `X-BractJS-Action: 1` (BractJS's <Form> and " +
     "useFetcher do this for you)."
   );
 }

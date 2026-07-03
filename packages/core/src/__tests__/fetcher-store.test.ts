@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { fetcherStore, EMPTY_FETCHERS } from "../client/fetcher-store.ts";
+import { describe, expect, test } from "bun:test";
+import { EMPTY_FETCHERS, fetcherStore } from "../client/fetcher-store.ts";
 
 // The store is a module-level singleton — use unique keys per test so cases
 // stay independent.

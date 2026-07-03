@@ -21,14 +21,11 @@
  * The whole suite is skipped gracefully if `bun build --compile` isn't usable
  * in the current environment (it is intentionally heavyweight).
  */
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { resolve, join } from "node:path";
-import {
-  writeModuleRegistries,
-  writeManifestModule,
-} from "../codegen/module-registry.ts";
+import { join, resolve } from "node:path";
 import { runBuild } from "../build/bundler.ts";
+import { writeManifestModule, writeModuleRegistries } from "../codegen/module-registry.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../..");
 // Inside the repo tree so the app's `@bractjs/bractjs` import resolves to the
@@ -39,7 +36,6 @@ const APP = join(TMP, "app");
 const BIN = join(TMP, "bin", "app");
 const PORT = 3987;
 
-let compileAvailable = false;
 let serverProc: Bun.Subprocess | null = null;
 const originalCwd = process.cwd();
 
@@ -59,6 +55,22 @@ async function probeCompile(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Probed at module load so the suite can skipIf() — a silent `return` inside
+// each test would report "pass" while asserting nothing. In CI, set
+// CI_REQUIRE_COMPILE=1 to turn "compile unavailable" into a hard failure
+// instead of a skip.
+await rm(TMP, { recursive: true, force: true });
+await mkdir(TMP, { recursive: true });
+const compileAvailable = await probeCompile();
+if (!compileAvailable) {
+  if (process.env.CI_REQUIRE_COMPILE) {
+    throw new Error(
+      "[compile-smoke] `bun build --compile` unavailable, but CI_REQUIRE_COMPILE is set — failing instead of skipping.",
+    );
+  }
+  console.warn("[compile-smoke] `bun build --compile` unavailable — skipping e2e binary test.");
 }
 
 async function scaffoldApp(): Promise<void> {
@@ -166,13 +178,7 @@ async function waitForServer(url: string, timeoutMs = 15_000): Promise<boolean> 
 }
 
 beforeAll(async () => {
-  await rm(TMP, { recursive: true, force: true });
-  await mkdir(TMP, { recursive: true });
-  compileAvailable = await probeCompile();
-  if (!compileAvailable) {
-    console.warn("[compile-smoke] `bun build --compile` unavailable — skipping e2e binary test.");
-    return;
-  }
+  if (!compileAvailable) return;
 
   await scaffoldApp();
 
@@ -190,15 +196,7 @@ beforeAll(async () => {
     // D) bun build --compile (mirror bin/cli.ts: dev NODE_ENV avoids the React
     // TSX jsxDEV miscompile; --compile-autoload-tsconfig keeps JSX settings).
     const compile = Bun.spawn(
-      [
-        "bun",
-        "build",
-        "--compile",
-        "--compile-autoload-tsconfig",
-        "app/server.ts",
-        "--outfile",
-        BIN,
-      ],
+      ["bun", "build", "--compile", "--compile-autoload-tsconfig", "app/server.ts", "--outfile", BIN],
       {
         cwd: TMP,
         env: { ...process.env, NODE_ENV: "development" },
@@ -231,21 +229,23 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  try { serverProc?.kill(); } catch { /* already dead */ }
+  try {
+    serverProc?.kill();
+  } catch {
+    /* already dead */
+  }
   process.chdir(originalCwd);
   await rm(TMP, { recursive: true, force: true });
 });
 
-describe("bun build --compile single-binary", () => {
+describe.skipIf(!compileAvailable)("bun build --compile single-binary", () => {
   test("compiled binary serves SSR HTML with 200", async () => {
-    if (!compileAvailable) return;
     const res = await fetch(`http://localhost:${PORT}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
   });
 
   test("compiled binary renders meta() <title> and <meta> into the SSR head", async () => {
-    if (!compileAvailable) return;
     const res = await fetch(`http://localhost:${PORT}/`);
     const html = await res.text();
     // Strip the data island so we assert on the rendered document, not the
@@ -256,7 +256,6 @@ describe("bun build --compile single-binary", () => {
   });
 
   test("compiled binary embeds loader data + bootstrap island", async () => {
-    if (!compileAvailable) return;
     const res = await fetch(`http://localhost:${PORT}/`);
     const html = await res.text();
     expect(html).toContain("__BRACTJS_DATA__");
@@ -264,7 +263,6 @@ describe("bun build --compile single-binary", () => {
   });
 
   test("compiled binary did not fall back to a runtime fs scan (registry mode)", async () => {
-    if (!compileAvailable) return;
     // A 404 for an unmapped path proves routing came from the embedded trie,
     // not a crash from a missing appDir scan.
     const res = await fetch(`http://localhost:${PORT}/definitely-not-a-route`);

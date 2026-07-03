@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { defineActions } from "../shared/define-actions.ts";
 import type { ActionArgs } from "../shared/route-types.ts";
 
@@ -25,7 +25,10 @@ describe("defineActions", () => {
   test("dispatches to the matching handler with full args", async () => {
     let seen: ActionArgs | null = null;
     const action = defineActions({
-      add: (args) => { seen = args; return { ok: true, who: "add" }; },
+      add: (args) => {
+        seen = args;
+        return { ok: true, who: "add" };
+      },
       remove: () => ({ ok: true, who: "remove" }),
     });
     const result = await action(argsWith("add", { title: "x" }));
@@ -39,7 +42,7 @@ describe("defineActions", () => {
     const res = await action(argsWith("nope"));
     expect(res).toBeInstanceOf(Response);
     expect((res as Response).status).toBe(400);
-    const body = await (res as Response).json() as { error: string };
+    const body = (await (res as Response).json()) as { error: string };
     expect(body.error).toContain("add");
     expect(body.error).toContain("remove");
     expect(body.error).toContain("nope");
@@ -48,21 +51,24 @@ describe("defineActions", () => {
   test("unknown intent → terse 400 in production", async () => {
     Bun.env.NODE_ENV = "production";
     const action = defineActions({ add: () => ({}) });
-    const res = await action(argsWith("nope")) as Response;
+    const res = (await action(argsWith("nope"))) as Response;
     expect(res.status).toBe(400);
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe("Unknown action intent.");
   });
 
   test("missing intent → 400", async () => {
     const action = defineActions({ add: () => ({}) });
-    const res = await action(argsWith(undefined)) as Response;
+    const res = (await action(argsWith(undefined))) as Response;
     expect(res.status).toBe(400);
   });
 
   test("awaits async handlers", async () => {
     const action = defineActions({
-      slow: async () => { await Promise.resolve(); return { done: true }; },
+      slow: async () => {
+        await Promise.resolve();
+        return { done: true };
+      },
     });
     expect(await action(argsWith("slow"))).toEqual({ done: true });
   });

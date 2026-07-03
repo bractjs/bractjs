@@ -80,8 +80,10 @@ function patternScore(pattern: string): number {
   let score = 0;
   for (const seg of pattern.split("/")) {
     score *= 10;
-    if (seg.startsWith("[...") && seg.endsWith("]")) score += 1; // catch-all
-    else if (seg.startsWith("[") && seg.endsWith("]")) score += 2; // dynamic
+    if (seg.startsWith("[...") && seg.endsWith("]"))
+      score += 1; // catch-all
+    else if (seg.startsWith("[") && seg.endsWith("]"))
+      score += 2; // dynamic
     else score += 3; // static
   }
   return score;
@@ -90,10 +92,7 @@ function patternScore(pattern: string): number {
 // ── Export ─────────────────────────────────────────────────────────────────
 
 /** Returns the highest-priority manifest pattern that matches pathname, or null. */
-export function matchPatternForPath(
-  pathname: string,
-  manifest: ServerManifest,
-): string | null {
+export function matchPatternForPath(pathname: string, manifest: ServerManifest): string | null {
   // Exact static match wins outright (most specific) — also a fast path.
   const normalized = pathname.replace(/^\//, "");
   if (normalized in manifest.routes) return normalized;

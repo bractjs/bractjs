@@ -1,47 +1,56 @@
 import { join } from "node:path";
-import { scanRoutes } from "../server/scanner.ts";
-import type { Segment } from "../server/scanner.ts";
 import { hashString } from "../build/hash.ts";
+import type { Segment } from "../server/scanner.ts";
+import { scanRoutes } from "../server/scanner.ts";
 
 // Convert [param] / [[optional]] / [...catchAll] notation to :param colon-style.
 function patternToColon(urlPattern: string): string {
   if (urlPattern === "") return "/";
-  return "/" + urlPattern.split("/").map((seg) => {
-    if (seg.startsWith("[...") && seg.endsWith("]")) return ":" + seg.slice(4, -1);
-    if (seg.startsWith("[[") && seg.endsWith("]]")) return ":" + seg.slice(2, -2);
-    if (seg.startsWith("[") && seg.endsWith("]")) return ":" + seg.slice(1, -1);
-    return seg;
-  }).join("/");
+  return (
+    "/" +
+    urlPattern
+      .split("/")
+      .map((seg) => {
+        if (seg.startsWith("[...") && seg.endsWith("]")) return ":" + seg.slice(4, -1);
+        if (seg.startsWith("[[") && seg.endsWith("]]")) return ":" + seg.slice(2, -2);
+        if (seg.startsWith("[") && seg.endsWith("]")) return ":" + seg.slice(1, -1);
+        return seg;
+      })
+      .join("/")
+  );
 }
 
 function paramsFromSegments(segments: Segment[]): string[] {
   return segments.flatMap((seg) =>
-    typeof seg === "string" ? [] :
-    "param" in seg ? [seg.param] :
-    "optional" in seg ? [seg.optional] :
-    [seg.catchAll],
+    typeof seg === "string"
+      ? []
+      : "param" in seg
+        ? [seg.param]
+        : "optional" in seg
+          ? [seg.optional]
+          : [seg.catchAll],
   );
 }
 
 // Replace each :paramName segment with ${params.paramName} for template literals.
 function substituteParams(pattern: string, params: string[]): string {
   const set = new Set(params);
-  return pattern.split("/").map((seg) =>
-    seg.startsWith(":") && set.has(seg.slice(1))
-      ? "${params." + seg.slice(1) + "}"
-      : seg,
-  ).join("/");
+  return pattern
+    .split("/")
+    .map((seg) => (seg.startsWith(":") && set.has(seg.slice(1)) ? "${params." + seg.slice(1) + "}" : seg))
+    .join("/");
 }
 
 // Allowed pattern: "/" + (segment | ":ident") (segments are filename-derived).
 // Restricting upfront removes any chance that a hostile filename injects a
 // backtick, ${ }, or quote into the generated TS source.
-const SAFE_PATTERN_RE = /^\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*)(?:\/(?:[A-Za-z0-9_\-]+|:[A-Za-z_][A-Za-z0-9_]*))*$|^\/$/;
+const SAFE_PATTERN_RE =
+  /^\/(?:[A-Za-z0-9_-]+|:[A-Za-z_][A-Za-z0-9_]*)(?:\/(?:[A-Za-z0-9_-]+|:[A-Za-z_][A-Za-z0-9_]*))*$|^\/$/;
 const SAFE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Same guard the module-registry codegen applies before emitting import paths.
 // Parens are permitted for route-group folders like `(marketing)`; they are
 // inert inside the double-quoted import string the codegen emits.
-const SAFE_FILEPATH_RE = /^[A-Za-z0-9._\/\-\[\]()]+$/;
+const SAFE_FILEPATH_RE = /^[A-Za-z0-9._/\-[\]()]+$/;
 
 function assertSafePattern(pattern: string): void {
   if (!SAFE_PATTERN_RE.test(pattern)) {
@@ -76,9 +85,13 @@ function paramsTypeLines(routes: Array<{ pattern: string; params: string[] }>): 
     .map((r) => {
       assertSafePattern(r.pattern);
       r.params.forEach(assertSafeParam);
-      return "  T extends " + JSON.stringify(r.pattern) + " ? { "
-        + r.params.map((p) => p + ": string").join("; ")
-        + " } :";
+      return (
+        "  T extends " +
+        JSON.stringify(r.pattern) +
+        " ? { " +
+        r.params.map((p) => p + ": string").join("; ") +
+        " } :"
+      );
     })
     .join("\n");
   return "export type RouteParams<T extends AppRoutes> =\n" + branches + "\n  Record<never, never>;";
@@ -110,13 +123,18 @@ function searchParamsTypeLines(routes: Array<{ pattern: string }>): string {
       // empty interface — even inside a `K extends keyof M` guard — trips
       // TS2538 "cannot be used as an index type". The Record-infer form resolves
       // V only when the route is augmented, and falls back otherwise.
-      return "  T extends " + key +
-        " ? (RouteSearchParamsMap extends Record<" + key + ", infer V> ? V : Record<string, string>) :";
+      return (
+        "  T extends " +
+        key +
+        " ? (RouteSearchParamsMap extends Record<" +
+        key +
+        ", infer V> ? V : Record<string, string>) :"
+      );
     })
     .join("\n");
   return [
     "// Augment RouteSearchParamsMap (on the package) to type a route's search params:",
-    "//   declare module \"@bractjs/bractjs\" { interface RouteSearchParamsMap { \"/blog\": { page: string } } }",
+    '//   declare module "@bractjs/bractjs" { interface RouteSearchParamsMap { "/blog": { page: string } } }',
     "export type SearchParams<T extends AppRoutes> =",
     branches,
     "  Record<string, string>;",
@@ -138,9 +156,17 @@ function searchOutputTypeLines(routes: Array<{ pattern: string; filePath: string
       assertSafeFilePath(r.filePath);
       const key = JSON.stringify(r.pattern);
       const spec = JSON.stringify("./" + r.filePath.split("\\").join("/"));
-      return "  " + key + ": typeof import(" + spec + ") extends { searchSchema: infer S }\n" +
+      return (
+        "  " +
+        key +
+        ": typeof import(" +
+        spec +
+        ") extends { searchSchema: infer S }\n" +
         "    ? InferSchemaOutput<S>\n" +
-        "    : (RouteSearchParamsMap extends Record<" + key + ", infer V> ? V : Record<string, unknown>);";
+        "    : (RouteSearchParamsMap extends Record<" +
+        key +
+        ", infer V> ? V : Record<string, unknown>);"
+      );
     })
     .join("\n");
   return [
@@ -164,13 +190,18 @@ function contextTypeLines(routes: Array<{ pattern: string }>): string {
       assertSafePattern(r.pattern);
       const key = JSON.stringify(r.pattern);
       // See SearchParams above for why this uses `extends Record<K, infer V>`.
-      return "  T extends " + key +
-        " ? (RouteContextMap extends Record<" + key + ", infer V> ? V : Record<string, unknown>) :";
+      return (
+        "  T extends " +
+        key +
+        " ? (RouteContextMap extends Record<" +
+        key +
+        ", infer V> ? V : Record<string, unknown>) :"
+      );
     })
     .join("\n");
   return [
     "// Augment RouteContextMap (on the package) to type a route's context:",
-    "//   declare module \"@bractjs/bractjs\" { interface RouteContextMap { \"/blog\": { user: User } } }",
+    '//   declare module "@bractjs/bractjs" { interface RouteContextMap { "/blog": { user: User } } }',
     "export type Context<T extends AppRoutes> =",
     branches,
     "  Record<string, unknown>;",
@@ -184,16 +215,15 @@ function registerAugmentationLines(routes: Array<{ pattern: string; params: stri
     .map((r) => {
       assertSafePattern(r.pattern);
       r.params.forEach(assertSafeParam);
-      const shape = r.params.length === 0
-        ? "{}"
-        : "{ " + r.params.map((p) => p + ": string").join("; ") + " }";
+      const shape =
+        r.params.length === 0 ? "{}" : "{ " + r.params.map((p) => p + ": string").join("; ") + " }";
       return "      " + JSON.stringify(r.pattern) + ": " + shape + ";";
     })
     .join("\n");
   return [
     "// Registers this app's routes with BractJS. After this augmentation, <Link>,",
     "// useNavigate, useParams, and useSearchParams are type-safe against AppRoutes.",
-    "declare module \"@bractjs/bractjs\" {",
+    'declare module "@bractjs/bractjs" {',
     "  interface Register {",
     "    routes: {",
     "      routes: AppRoutes;",
@@ -233,18 +263,13 @@ export function readFingerprint(src: string | null): string | null {
  * fresh. `patterns` must be colon-style (the form the generated file embeds);
  * prefer {@link explainStalenessForApp} which derives them for you.
  */
-export async function explainStaleness(
-  oldSrc: string | null,
-  patterns: string[],
-): Promise<string | null> {
+export async function explainStaleness(oldSrc: string | null, patterns: string[]): Promise<string | null> {
   if (!oldSrc) return "route-types.gen.ts is missing — generating it";
   const current = await routesFingerprint(patterns);
   if (readFingerprint(oldSrc) === current) return null;
   // Recover the old pattern set from the union members to report add/remove
   // counts. The last member ends with `;`, so allow an optional trailing `;`.
-  const old = new Set(
-    [...oldSrc.matchAll(/^ {2}\| "([^"]+)";?$/gm)].map((m) => m[1]),
-  );
+  const old = new Set([...oldSrc.matchAll(/^ {2}\| "([^"]+)";?$/gm)].map((m) => m[1]));
   const now = new Set(patterns);
   const added = patterns.filter((p) => !old.has(p)).length;
   const removed = [...old].filter((p) => !now.has(p)).length;
@@ -262,12 +287,11 @@ export async function routePatternsForApp(appDir: string): Promise<string[]> {
 }
 
 /** {@link explainStaleness} against the current generated file + route set on disk. */
-export async function explainStalenessForApp(
-  appDir: string,
-  outPath?: string,
-): Promise<string | null> {
+export async function explainStalenessForApp(appDir: string, outPath?: string): Promise<string | null> {
   const dest = outPath ?? join(appDir, "route-types.gen.ts");
-  const existing = await Bun.file(dest).text().catch(() => null);
+  const existing = await Bun.file(dest)
+    .text()
+    .catch(() => null);
   return explainStaleness(existing, await routePatternsForApp(appDir));
 }
 
@@ -283,12 +307,15 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
     // is byte-identical across machines (and the idempotent write works).
     .sort((a, b) => a.pattern.localeCompare(b.pattern));
 
-  const union = routes.length > 0
-    ? routes.map((r) => {
-        assertSafePattern(r.pattern);
-        return "  | " + JSON.stringify(r.pattern);
-      }).join("\n")
-    : "  never";
+  const union =
+    routes.length > 0
+      ? routes
+          .map((r) => {
+            assertSafePattern(r.pattern);
+            return "  | " + JSON.stringify(r.pattern);
+          })
+          .join("\n")
+      : "  never";
 
   const builderEntries = routes.map((r) => builderEntry(r.pattern, r.params)).join("\n");
 
@@ -296,7 +323,8 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
   // the local `SearchParams<T>` / `Context<T>` reference the same interfaces the
   // user augments via `declare module "@bractjs/bractjs"`. `InferSchemaOutput`
   // derives each route's validated search shape from its `searchSchema` export.
-  const IMPORTS = 'import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs";';
+  const IMPORTS =
+    'import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs";';
 
   // Freshness breadcrumb: lets the dev server detect drift without re-deriving
   // the whole file, and lets writeRouteTypes skip identical writes.
@@ -328,9 +356,9 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
     "export type TypedActionArgs<T extends AppRoutes> =",
     "  TypedLoaderArgs<T> & { formData: FormData };",
     "",
-    "/** Loader args fully typed for a route literal: `loader(args: LoaderArgsFor<\"/posts\">)`. */",
+    '/** Loader args fully typed for a route literal: `loader(args: LoaderArgsFor<"/posts">)`. */',
     "export type LoaderArgsFor<T extends AppRoutes> = TypedLoaderArgs<T>;",
-    "/** Action args fully typed for a route literal: `action(args: ActionArgsFor<\"/posts\">)`. */",
+    '/** Action args fully typed for a route literal: `action(args: ActionArgsFor<"/posts">)`. */',
     "export type ActionArgsFor<T extends AppRoutes> = TypedActionArgs<T>;",
     "",
     "/** A locale-prefixed variant of a route (E2 i18n routing). */",
@@ -354,7 +382,9 @@ export async function writeRouteTypes(
   const next = await generateRouteTypes(appDir);
   // Skip the write (and the log, and the resulting file-watcher event) when the
   // content is unchanged — otherwise auto-codegen in dev would loop the editor.
-  const existing = await Bun.file(dest).text().catch(() => null);
+  const existing = await Bun.file(dest)
+    .text()
+    .catch(() => null);
   if (existing === next) return { dest, written: false };
   await Bun.write(dest, next);
   console.log("[bract] codegen →", dest);

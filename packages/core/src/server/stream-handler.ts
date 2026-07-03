@@ -1,6 +1,6 @@
 import { resolveAction } from "./action-registry.ts";
-import { isExplicitDev } from "./env.ts";
 import { csrfHint } from "./csrf.ts";
+import { isExplicitDev } from "./env.ts";
 
 // ── SSE helpers ────────────────────────────────────────────────────────────
 
@@ -100,7 +100,9 @@ export async function handleStreamRequest(request: Request): Promise<Response | 
       } catch (err) {
         // Never expose internal error details to clients in production.
         const message = isExplicitDev()
-          ? (err instanceof Error ? err.message : String(err))
+          ? err instanceof Error
+            ? err.message
+            : String(err)
           : "Internal server error";
         console.error("[bractjs] stream action error:", err);
         controller.enqueue(encoder.encode(sseChunk("error", { message })));

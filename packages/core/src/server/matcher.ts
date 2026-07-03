@@ -64,12 +64,7 @@ export function matchRoute(pathname: string, trie: TrieNode): MatchResult {
   return walk(trie, parts, 0, {});
 }
 
-function walk(
-  node: TrieNode,
-  parts: string[],
-  idx: number,
-  params: Record<string, string>
-): MatchResult {
+function walk(node: TrieNode, parts: string[], idx: number, params: Record<string, string>): MatchResult {
   // All parts consumed — check for route at this node
   if (idx === parts.length) {
     if (node.routeFile) return { routeFile: node.routeFile, params };

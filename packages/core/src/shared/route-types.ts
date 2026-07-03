@@ -63,17 +63,11 @@ export interface MetaArgs<T = unknown> {
   params: Record<string, string>;
 }
 
-export type LoaderFunction<T = unknown> = (
-  args: LoaderArgs
-) => Promise<T | Response> | T | Response;
+export type LoaderFunction<T = unknown> = (args: LoaderArgs) => Promise<T | Response> | T | Response;
 
-export type ActionFunction<T = unknown> = (
-  args: ActionArgs
-) => Promise<T | Response> | T | Response;
+export type ActionFunction<T = unknown> = (args: ActionArgs) => Promise<T | Response> | T | Response;
 
-export type MetaFunction<T = unknown> = (
-  args: MetaArgs<T>
-) => MetaDescriptor[];
+export type MetaFunction<T = unknown> = (args: MetaArgs<T>) => MetaDescriptor[];
 
 export interface HeadersArgs<T = unknown> {
   /** This route's loader data (the route slice, already awaited). */
@@ -95,9 +89,7 @@ export interface HeadersArgs<T = unknown> {
  * innermost value wins per key. Returns a `HeadersInit` (object, array of
  * tuples, or `Headers`).
  */
-export type HeadersFunction<T = unknown> = (
-  args: HeadersArgs<T>
-) => HeadersInit;
+export type HeadersFunction<T = unknown> = (args: HeadersArgs<T>) => HeadersInit;
 
 /**
  * A nested route-middleware function. Runs on the server in chain order
@@ -118,9 +110,7 @@ export interface BeforeLoadArgs {
   search?: Record<string, unknown>;
 }
 
-export type BeforeLoadFunction = (
-  args: BeforeLoadArgs,
-) => void | Response | Promise<void | Response>;
+export type BeforeLoadFunction = (args: BeforeLoadArgs) => void | Response | Promise<void | Response>;
 
 /**
  * Decide whether loader data should be refetched. Evaluated on the CLIENT for

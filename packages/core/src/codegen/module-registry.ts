@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
-import { scanRoutes, layoutDirsFromFilePath, type RouteFile } from "../server/scanner.ts";
+import { layoutDirsFromFilePath, type RouteFile, scanRoutes } from "../server/scanner.ts";
+import { hasServerDirective } from "../shared/directives.ts";
 
 // Codegen entry-points: `bun build --compile` can't statically trace
 // `Bun.Glob` scans or `import(absPath)` calls, so we materialise the route /
@@ -16,7 +17,7 @@ import { scanRoutes, layoutDirsFromFilePath, type RouteFile } from "../server/sc
 // against a hostile filename containing a backtick, $, quote, backslash, or
 // whitespace breaking out of the generated literal. `..` as a whole segment is
 // rejected separately below (path-traversal guard).
-const SAFE_FILEPATH_RE = /^[A-Za-z0-9._\/\-\[\]()]+$/;
+const SAFE_FILEPATH_RE = /^[A-Za-z0-9._/\-[\]()]+$/;
 
 function assertSafeFilePath(filePath: string): void {
   if (!SAFE_FILEPATH_RE.test(filePath)) {
@@ -63,8 +64,6 @@ async function collectLayouts(appDir: string, routes: RouteFile[]): Promise<stri
 
 // ── Action discovery ───────────────────────────────────────────────────────
 
-const SERVER_DIRECTIVE_RE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use server["']/;
-
 function isEligibleActionPath(rel: string): boolean {
   return (
     rel.endsWith(".server.ts") ||
@@ -88,7 +87,7 @@ async function collectActionFiles(appDir: string): Promise<string[]> {
     } catch {
       continue;
     }
-    if (!SERVER_DIRECTIVE_RE.test(src)) continue;
+    if (!hasServerDirective(src)) continue;
     // Normalise Windows separators to POSIX for the registry key.
     found.push(rel.split("\\").join("/"));
   }
@@ -108,7 +107,7 @@ export interface RouteRegistryInput {
   appDir: string;
   routes: RouteFile[];
   layoutRelPaths: string[]; // e.g. ["routes/blog/layout.tsx"]
-  hasRoot: boolean;         // true if appDir/root.tsx exists
+  hasRoot: boolean; // true if appDir/root.tsx exists
 }
 
 export function generateRouteRegistry(input: RouteRegistryInput): string {
@@ -200,7 +199,7 @@ export function generateActionRegistry(input: ActionRegistryInput): string {
     "",
     "// Server-action modules, statically imported so `bun build --compile`",
     "// traces them. The framework iterates this list and registers each",
-    "// exported function under SHA-256(relPath + \"#\" + name) — identical to",
+    '// exported function under SHA-256(relPath + "#" + name) — identical to',
     "// the ID the client proxy plugin embeds in the bundled JS.",
     "export const actionModules: Array<{ relPath: string; mod: Record<string, unknown> }> = [",
     entries.join("\n"),
@@ -259,10 +258,7 @@ export function generateManifestModule(disk: DiskManifest): string {
  * `<appDir>/_generated/manifest.ts`. Must run AFTER the client `Bun.build()`
  * step — chunk filenames are content-hashed and not known until then.
  */
-export async function writeManifestModule(
-  appDir: string,
-  buildDir: string,
-): Promise<string> {
+export async function writeManifestModule(appDir: string, buildDir: string): Promise<string> {
   const absAppDir = resolve(appDir);
   const absBuildDir = resolve(buildDir);
   const src = join(absBuildDir, "route-manifest.json");

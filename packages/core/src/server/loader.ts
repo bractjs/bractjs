@@ -1,8 +1,8 @@
-import type { LoaderArgs, ActionArgs, RouteModule } from "../shared/route-types.ts";
-import type { LayoutChain } from "./layout.ts";
-import { isRedirect, isHttpError } from "../shared/errors.ts";
-import { isExplicitDev } from "./env.ts";
+import { isHttpError, isRedirect } from "../shared/errors.ts";
+import type { ActionArgs, LoaderArgs, RouteModule } from "../shared/route-types.ts";
 import type { ContextFactory } from "./context.ts";
+import { isExplicitDev } from "./env.ts";
+import type { LayoutChain } from "./layout.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -58,12 +58,14 @@ export async function safeRun<T>(
  * Returns a Response if beforeLoad wants to short-circuit (redirect / 403),
  * or null to continue normally.
  */
-export async function runBeforeLoad(
-  routeModule: RouteModule,
-  args: LoaderArgs,
-): Promise<Response | null> {
+export async function runBeforeLoad(routeModule: RouteModule, args: LoaderArgs): Promise<Response | null> {
   const fn = routeModule.beforeLoad as
-    | ((a: { params: Record<string,string>; context: Record<string,unknown>; location: { pathname: string; search: string }; search?: Record<string, unknown> }) => unknown)
+    | ((a: {
+        params: Record<string, string>;
+        context: Record<string, unknown>;
+        location: { pathname: string; search: string };
+        search?: Record<string, unknown>;
+      }) => unknown)
     | undefined;
   if (!fn) return null;
   const url = new URL(args.request.url);
@@ -89,12 +91,27 @@ export async function runLoaders(
   // one, so it must not be serialized behind the layout wave.
   const files = chain.files;
   const layoutLoaders = chain.layouts.map((mod, i) =>
-    safeRun(mod.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError, files?.layouts[i])
+    safeRun(
+      mod.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined,
+      args,
+      onError,
+      files?.layouts[i],
+    ),
   );
 
   const [root, route, ...layoutResults] = await Promise.all([
-    safeRun(chain.root.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError, files?.root),
-    safeRun(chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined, args, onError, files?.route),
+    safeRun(
+      chain.root.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined,
+      args,
+      onError,
+      files?.root,
+    ),
+    safeRun(
+      chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined,
+      args,
+      onError,
+      files?.route,
+    ),
     ...layoutLoaders,
   ]);
 
@@ -103,10 +120,7 @@ export async function runLoaders(
 
 // ── runAction ──────────────────────────────────────────────────────────────
 
-export async function runAction(
-  routeModule: RouteModule,
-  args: ActionArgs
-): Promise<unknown> {
+export async function runAction(routeModule: RouteModule, args: ActionArgs): Promise<unknown> {
   if (!routeModule.action) return null;
 
   try {

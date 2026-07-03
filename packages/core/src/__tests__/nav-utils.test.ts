@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { parseTo, createLocationKey } from "../client/nav-utils.ts";
+import { describe, expect, test } from "bun:test";
+import { createLocationKey, parseTo } from "../client/nav-utils.ts";
 
 describe("parseTo", () => {
   test("plain pathname", () => {
@@ -19,7 +19,11 @@ describe("parseTo", () => {
   });
 
   test("hash containing a question mark stays in the hash", () => {
-    expect(parseTo("/docs#frag?notsearch")).toEqual({ pathname: "/docs", search: "", hash: "#frag?notsearch" });
+    expect(parseTo("/docs#frag?notsearch")).toEqual({
+      pathname: "/docs",
+      search: "",
+      hash: "#frag?notsearch",
+    });
   });
 
   test("empty string falls back to root", () => {

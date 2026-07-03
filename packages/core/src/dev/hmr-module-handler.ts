@@ -1,7 +1,7 @@
-import { resolve, join, sep } from "node:path";
 import { realpath } from "node:fs/promises";
-import { serverModuleStubPlugin } from "../build/env-plugin.ts";
+import { join, resolve, sep } from "node:path";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
+import { serverModuleStubPlugin } from "../build/env-plugin.ts";
 
 /**
  * Dev-only HTTP handler for /_hmr/module?file=routes/about.tsx
@@ -11,10 +11,7 @@ import { createUseServerProxyPlugin } from "../build/directives.ts";
  *
  * Security: rejects any path that resolves outside appDir.
  */
-export async function handleHmrModuleRequest(
-  url: URL,
-  appDir: string,
-): Promise<Response> {
+export async function handleHmrModuleRequest(url: URL, appDir: string): Promise<Response> {
   const file = url.searchParams.get("file");
   if (!file) {
     return new Response("Missing file param", { status: 400 });

@@ -13,7 +13,11 @@ export function defineLifecycle(hooks: LifecycleHooks): LifecycleHooks {
 }
 
 /** Safely invokes the onError hook. Errors thrown inside the hook are caught and logged so they never mask the original error or alter the response. */
-export async function fireOnError(hook: OnErrorHook | undefined, err: unknown, request?: Request): Promise<void> {
+export async function fireOnError(
+  hook: OnErrorHook | undefined,
+  err: unknown,
+  request?: Request,
+): Promise<void> {
   if (!hook) return;
   try {
     await hook(err, request);
