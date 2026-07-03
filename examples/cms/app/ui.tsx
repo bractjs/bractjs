@@ -139,6 +139,7 @@ function useFlashToast(flash: FlashLite | null | undefined) {
     if (key === last.current) return;
     last.current = key;
     toast[flash.type](flash.message);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: key on the primitive flash fields, not the `flash` object identity (new each render)
   }, [flash?.type, flash?.message]);
 }
 

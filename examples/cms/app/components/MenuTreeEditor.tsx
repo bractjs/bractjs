@@ -74,9 +74,9 @@ export function MenuTreeEditor({ items }: { items: EditorNode[] }) {
   // Re-sync only when the server item-SET changes (e.g. after Add revalidates the
   // loader), keyed on ids — so a local drag/edit (no server change) is never clobbered.
   const sig = ids(items).join(",");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setTree(items);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: re-sync only when the server item-set (sig) changes, never on local drag/edit
   }, [sig]);
   if (!mounted) return null;
 

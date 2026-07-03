@@ -296,6 +296,7 @@ async function route(
 
     // Wrap root in BractJSProvider so <Outlet> can render the route component
     // server-side without needing a ClientRouter.
+    // eslint-disable-next-line react/no-children-prop -- children passed via createElement props object is the intended SSR shell shape
     const shell = createElement(BractJSProvider, {
       value: {
         loaderData: loaderData as Record<string, unknown>,

@@ -196,7 +196,6 @@ export interface ApiRouteDefinition<TMethod extends HttpMethod, TPath extends st
   handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>;
   csrf: boolean;
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export declare function route<TMethod extends HttpMethod, TPath extends string, TInput, TOutput>(
   method: TMethod,
   path: TPath,

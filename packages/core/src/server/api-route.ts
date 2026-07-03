@@ -41,7 +41,6 @@ export interface ApiRouteDefinition<TMethod extends HttpMethod, TPath extends st
 }
 
 // Collect all registered routes into a union type.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const routeRegistry: ApiRouteDefinition<HttpMethod, string, any, any>[] = [];
 
 /**
@@ -169,7 +168,6 @@ function pathMatches(pattern: string, pathname: string): boolean {
 
 // ── AppRoutes type extraction ─────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AppApiRoutes =
   (typeof routeRegistry)[number] extends ApiRouteDefinition<infer M, infer P, infer I, infer O>
     ? { method: M; path: P; input: I; output: O }

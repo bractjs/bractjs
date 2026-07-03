@@ -1,4 +1,4 @@
-import type { RouteFile, Segment } from "./scanner.ts";
+import type { RouteFile } from "./scanner.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

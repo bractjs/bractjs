@@ -33,6 +33,7 @@ export async function renderSpaShell(
   }
 
   const loaderData = { root: null, layouts: [], route: null };
+  // eslint-disable-next-line react/no-children-prop -- children passed via createElement props object is the intended SSR shell shape
   const shell = createElement(BractJSProvider, {
     value: {
       loaderData: loaderData as unknown as Record<string, unknown>,

@@ -1,4 +1,4 @@
-import { basename, extname, join, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { lintRouteModuleSource } from "../build/route-lint.ts";
 import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
 import { loadUserConfig } from "../config/load.ts";

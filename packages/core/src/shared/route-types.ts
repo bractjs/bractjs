@@ -1,5 +1,3 @@
-import type { Deferred } from "./deferred.ts";
-
 /**
  * A parsed navigation location. `key` is the stable identity of the history
  * entry (used by scroll restoration); `state` is the value passed via

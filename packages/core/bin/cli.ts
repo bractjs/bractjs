@@ -56,8 +56,6 @@ async function copyDir(src: string, dest: string, appName: string, bractPath: st
   for await (const rel of glob.scan({ cwd: src, onlyFiles: true })) {
     const srcPath = join(src, rel);
     const destPath = join(dest, rel);
-    // Ensure parent directory exists
-    const parentDir = destPath.slice(0, destPath.lastIndexOf("/"));
     await Bun.write(destPath, ""); // creates parent dirs
     let content = await Bun.file(srcPath).text();
     content = content.replaceAll("{{APP_NAME}}", appName);

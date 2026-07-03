@@ -112,6 +112,29 @@ export default tseslint.config(
     ),
   },
 
+  // Example apps are demonstration code, not shipped framework. A CMS
+  // legitimately renders trusted stored HTML (no-danger), autofocuses its auth
+  // inputs as deliberate UX (no-autofocus), and keys static demo lists by index
+  // (no-array-index-key). Relax those advisory rules here so real framework
+  // findings aren't buried under example noise.
+  {
+    files: ["examples/**/*.{ts,tsx,js,jsx,mjs}"],
+    rules: {
+      "react/no-danger": "off",
+      "jsx-a11y/no-autofocus": "off",
+      "react/no-array-index-key": "off",
+    },
+  },
+
+  // Test fixtures are minimal SSR stand-ins, not real documents — a fixture
+  // <html> shell doesn't need a lang attribute.
+  {
+    files: ["packages/core/src/__tests__/fixtures/**/*.{ts,tsx,js,jsx}"],
+    rules: {
+      "jsx-a11y/html-has-lang": "off",
+    },
+  },
+
   // Must come last: turns off every stylistic rule that would fight Prettier.
   prettier,
 );
