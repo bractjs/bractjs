@@ -231,8 +231,7 @@ export declare function validate<T>(
 ): Promise<T>;
 
 export type SafeValidateResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; fieldErrors: FieldErrors; firstError: string };
+  { ok: true; data: T } | { ok: false; fieldErrors: FieldErrors; firstError: string };
 /** Non-throwing validate(): returns a result instead of throwing a 400. */
 export declare function safeValidate<T>(
   schema: { safeParse?(i: unknown): unknown } | { parse(i: unknown): T },
@@ -384,12 +383,7 @@ export interface Toast {
   ): Promise<T>;
 }
 export type ToastPosition =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-center"
-  | "bottom-right";
+  "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
 export interface ToasterProps {
   position?: ToastPosition;
   gap?: number;

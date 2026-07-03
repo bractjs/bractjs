@@ -31,8 +31,9 @@ export interface LoaderArgs<TSearch extends Record<string, unknown> = Record<str
   search: TSearch;
 }
 
-export interface ActionArgs<TSearch extends Record<string, unknown> = Record<string, unknown>>
-  extends LoaderArgs<TSearch> {
+export interface ActionArgs<
+  TSearch extends Record<string, unknown> = Record<string, unknown>,
+> extends LoaderArgs<TSearch> {
   formData: FormData;
 }
 

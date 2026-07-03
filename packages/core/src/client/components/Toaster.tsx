@@ -4,12 +4,7 @@ import type { ToastEntry, ToastType } from "../toast-store.ts";
 import { toast } from "../toast-store.ts";
 
 export type ToastPosition =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-center"
-  | "bottom-right";
+  "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
 export interface ToasterProps {
   position?: ToastPosition;

@@ -160,7 +160,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <Link to="/admin" className="admin-brand">
-          <Newspaper size={20} className="text-[var(--admin-accent)]" /> Bract<span className="dot">·</span>
+          <Newspaper size={20} className="text-(--admin-accent)" /> Bract<span className="dot">·</span>
           CMS
         </Link>
         <nav className="admin-nav" aria-label="Admin">
@@ -208,7 +208,7 @@ export function Breadcrumb({ items }: { items: Array<{ label: string; to?: strin
         <span key={i}>
           {i > 0 ? <span className="mx-1.5">/</span> : null}
           {it.to ? (
-            <Link to={it.to} className="text-[var(--accent)] no-underline">
+            <Link to={it.to} className="text-(--accent) no-underline">
               {it.label}
             </Link>
           ) : (
@@ -335,7 +335,7 @@ export function PostCard({ post }: { post: PostCardData }) {
     day: "numeric",
   });
   return (
-    <article className="grid gap-2 border-b border-[var(--line)] pb-6">
+    <article className="grid gap-2 border-b border-(--line) pb-6">
       {post.featuredMedia ? (
         <Link to={`/posts/${post.slug}`} className="block">
           <Image
@@ -354,14 +354,14 @@ export function PostCard({ post }: { post: PostCardData }) {
             <span>·</span>
             <Link
               to={`/category/${post.category.slug}`}
-              className="text-[var(--accent)] no-underline [font-variant:small-caps]"
+              className="text-(--accent) no-underline [font-variant:small-caps]"
             >
               {post.category.name}
             </Link>
           </>
         ) : null}
       </div>
-      <h2 className="m-0 font-[var(--display)] text-[1.7rem] leading-tight">
+      <h2 className="m-0 font-(--display) text-[1.7rem] leading-tight">
         <Link to={`/posts/${post.slug}`} className="no-underline">
           {post.title}
         </Link>

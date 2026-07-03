@@ -277,4 +277,4 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [ ] Deno / Node.js adapters — validate the adapter contract beyond Bun + Cloudflare (carried from Phase D)
 - [ ] Built-in i18n routing wired end-to-end as a one-line opt-in (carried from Phase E)
 - [ ] Prerender assets embedded inside the compiled binary (carried from Phase G)
-- [ ] CI (GitHub Actions), lint/format (Biome), and a type-surface drift guard for the hand-maintained `types/*.d.ts`
+- [ ] CI (GitHub Actions), lint/format (ESLint + Prettier), and a type-surface drift guard for the hand-maintained `types/*.d.ts`

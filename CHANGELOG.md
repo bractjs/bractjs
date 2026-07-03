@@ -26,7 +26,7 @@ All notable changes to BractJS are documented here.
 - **`createDevServer()` no longer calls `process.exit(1)` on a port conflict.** It throws a `DevServerError` (new export of the dev module); the CLI catches it and preserves the friendly message + non-zero exit.
 - **Multiple `createServer()` instances no longer clobber each other.** `onShutdown`/`onError` hooks and the signal handlers used module-level slots, so the last server's hooks replaced everyone's and stopping one server disabled every later `stop()`. Live servers are now tracked in a registry: each `stop()` runs its own hook once, and SIGTERM/SIGINT/uncaughtException shut down all of them.
 - **Unhandled promise rejections are now logged and routed to `onError`** (process keeps serving; fatal states still arrive via `uncaughtException`). Previously there was no `unhandledRejection` handler at all, so fire-and-forget failures bypassed the lifecycle hooks.
-- **Dev: adding or deleting a `"use server"` module now updates the action registry without a restart** (the registry was populated once at boot, so new action files 404'd at `/_action` and deleted ones lingered). Changed action *bodies* still require a restart. Route-file checks in the dev watcher also handle Windows path separators, and `<appDir>/lifecycle.ts` is resolved through the configured `appDir` instead of a hardcoded `app/`.
+- **Dev: adding or deleting a `"use server"` module now updates the action registry without a restart** (the registry was populated once at boot, so new action files 404'd at `/_action` and deleted ones lingered). Changed action _bodies_ still require a restart. Route-file checks in the dev watcher also handle Windows path separators, and `<appDir>/lifecycle.ts` is resolved through the configured `appDir` instead of a hardcoded `app/`.
 
 ### Internal refactors (no behavior change)
 
@@ -38,7 +38,7 @@ All notable changes to BractJS are documented here.
 - New `type-surface.test.ts` mechanically asserts every runtime export is declared in `types/*.d.ts` and every declared value exists at runtime — the hand-written declarations can no longer silently drift.
 - `pnpm typecheck` (core) now also typechecks the declaration files themselves via `tsconfig.types.json` (`skipLibCheck: false`); they were previously excluded from all typechecking.
 - **CI (GitHub Actions)**: lint, workspace typecheck, lockfile-drift check, full test suite (compile-smoke required via `CI_REQUIRE_COMPILE=1`), and an npm-tarball dry-run now gate every push/PR. There was previously no CI at all.
-- **Biome** is the repo's linter/formatter (`pnpm lint` / `pnpm format`); `.editorconfig` populated (it was tracked but empty).
+- **ESLint (flat config) + Prettier** are the repo's linter/formatter (`pnpm lint` / `pnpm format`; `pnpm format:check` in CI); `eslint-config-prettier` keeps the two from fighting and `.editorconfig` is populated (it was tracked but empty). The linter is non-type-checked for speed, and the flat config reactivates the `eslint-disable` directives already present in the source.
 - `compile-smoke.test.ts` now reports a proper **skip** when `bun build --compile` is unavailable instead of silently passing empty tests, and can be forced to fail in CI.
 - **npm tarball no longer ships the test suite** (66 files) — `files` excludes `src/__tests__`; a new `prepublishOnly` gate (`scripts/verify-pack.ts`) asserts LICENSE/README/types/template presence and rejects generated or test files.
 - `typescript` is a real devDependency (so `bunx tsc` stops re-resolving it and rewriting `pnpm-lock.yaml` as a side effect) and `@types/bun` is pinned instead of `latest`.
@@ -89,7 +89,7 @@ All notable changes to BractJS are documented here.
 - **`useMatches()`** — returns the matched route chain (root → layouts → route) as `RouteMatch[]` (`{ id, pathname, params, data, handle }`), for breadcrumbs and conditional chrome driven by each route's `handle` export. SSR-safe; updates on soft navigation and revalidation. `handle` must be JSON-serializable (it travels in the SSR bootstrap + `/_data`). New exports `useMatches`, `RouteMatch`.
 - **Route groups `(group)/`** — a parenthesized folder segment groups files (and their `layout.tsx`) **without** adding a URL segment: `routes/(marketing)/about.tsx` → `/about`, wrapped by `routes/(marketing)/layout.tsx`. Layout resolution now derives ancestor dirs from the file path, so a folder's `_index` is also correctly wrapped by that folder's layout.
 - **Optional segments `[[id]]`** — `routes/users/[[id]].tsx` matches both `/users` and `/users/42` (param unset when absent). Ranks above catch-all, below a required param / static sibling. Codegen types the route accordingly.
-- **Nested route middleware** — `export const middleware = [...]` (a fn or array) runs on the server in chain order (root → layout → route) before `beforeLoad`/action/loaders, with a shared mutable `context`, and can short-circuit by returning a `Response`. Runs *inside* the global `pipeline`; protects the document **and** `/_data`. The cleaner successor to `beforeLoad` + a single global pipeline (both still supported). New exports `RouteMiddlewareFunction`, `RouteMiddleware`, `runRouteMiddleware`, `collectRouteMiddleware`.
+- **Nested route middleware** — `export const middleware = [...]` (a fn or array) runs on the server in chain order (root → layout → route) before `beforeLoad`/action/loaders, with a shared mutable `context`, and can short-circuit by returning a `Response`. Runs _inside_ the global `pipeline`; protects the document **and** `/_data`. The cleaner successor to `beforeLoad` + a single global pipeline (both still supported). New exports `RouteMiddlewareFunction`, `RouteMiddleware`, `runRouteMiddleware`, `collectRouteMiddleware`.
 - **`clientLoader` / `clientAction`** — RR7-style browser-side data. `clientLoader({ request, params, search, serverLoader })` runs on navigation and its result becomes `useLoaderData()`; set `clientLoader.hydrate = true` to also run on the initial hydration of an SSR'd document. `clientAction({ request, params, formData, serverAction })` runs on `<Form>`/fetcher submit and decides whether/how to hit the server. New exports `ClientLoaderFunction`, `ClientActionFunction`.
 
 ### Added — Developer experience
@@ -123,7 +123,7 @@ All notable changes to BractJS are documented here.
 - **SPA mode** — `ssr: false` in `bractjs.config.ts` serves one static shell for every document GET ("no document SSR", not "no server": loaders, actions + CSRF, images, API routes all keep working). `bractjs build` emits `build/client/__spa.html`; dev renders the shell on the fly.
 - **Prerendering (SSG)** — `prerender: ["/", "/about"]` (or a function) in config; `bractjs build` runs real loaders in-process and writes HTML + `/_data` payloads under `build/client/_prerender/`; production serves them for clean URLs before dynamic SSR (query strings stay dynamic). Exported as `runPrerender()`.
 - **`serverModuleStubPlugin`** (client bundle) — replaces every export of a `*.server.ts` module with an inert, throwing stub instead of hard-failing the build.
-  - BractJS ships the *entire* route module (loader + action included) to the client, so a route that does `import { db } from "./db.server.ts"` inside its loader pulls the server module into the client graph. The previous `serverOnlyPlugin` hard-failed that import, which made the documented "import a server module in a loader" pattern (README §17) impossible.
+  - BractJS ships the _entire_ route module (loader + action included) to the client, so a route that does `import { db } from "./db.server.ts"` inside its loader pulls the server module into the client graph. The previous `serverOnlyPlugin` hard-failed that import, which made the documented "import a server module in a loader" pattern (README §17) impossible.
   - Stubbing keeps named/default imports resolvable so the route module compiles, guarantees **zero** server source (DB drivers, secrets, `bun:sqlite`) reaches the browser, and throws a clear error if a stub is ever actually invoked on the client.
   - Now used by the production build (`src/build/bundler.ts`), the dev rebuilder (`src/dev/rebuilder.ts`), and the dev HMR per-module handler (`src/dev/hmr-module-handler.ts`).
   - Exported from the public API; `extractExports` is now exported from `src/build/directives.ts` for reuse.
@@ -138,13 +138,13 @@ All notable changes to BractJS are documented here.
 - **`safeStringify` only flags true cycles.** A shared (non-cyclic) reference — e.g. a loader echoing `args.search` — was serialized as `"[Circular]"`, corrupting `__BRACTJS_DATA__`. Cycle detection now tracks the ancestor chain (MDN replacer pattern).
 - **SECURITY: dev client builds now apply the same guard plugins as production.** `src/dev/rebuilder.ts` was missing `serverOnlyPlugin`/`clientEnvPlugin` entirely — a route importing a `*.server.ts` module (without a Bun builtin to trip the bundler) would have had that server source compiled and served to the browser over `/build/client` in dev, and `clientEnv` allow-listing was not applied. The rebuilder now runs `serverModuleStubPlugin`, `createUseServerProxyPlugin`, `clientEnvPlugin`, and `cssModulesPlugin`, matching `src/build/bundler.ts`.
 - A `*.server.ts` import that pulled in a Bun builtin (e.g. `bun:sqlite`) previously surfaced a confusing raw `Browser build cannot import Bun builtin` error in dev instead of the intended server-only guard. It now stubs cleanly.
-- **An action that *returns* a redirect now produces a real 3xx.** Previously only a *thrown* `redirect()` was honored; `return redirect("/")` (the documented pattern in README §5/§6/§15) was captured as `actionData` and wrapped into a `200` JSON body. The route handler (`src/server/request-handler.ts`) now propagates any `Response` an action returns — so the browser and `<Form>` see the 302 and follow it. Surfaced by manual (Playwright) testing of the todo example's "delete → redirect to board" flow.
+- **An action that _returns_ a redirect now produces a real 3xx.** Previously only a _thrown_ `redirect()` was honored; `return redirect("/")` (the documented pattern in README §5/§6/§15) was captured as `actionData` and wrapped into a `200` JSON body. The route handler (`src/server/request-handler.ts`) now propagates any `Response` an action returns — so the browser and `<Form>` see the 302 and follow it. Surfaced by manual (Playwright) testing of the todo example's "delete → redirect to board" flow.
 - **`<Form>` now normalizes the post-redirect URL to a path before soft-navigating.** After following a redirect, `fetch().url` is absolute (e.g. `http://localhost:3000/`); the client router matches route patterns against a pathname, so the absolute URL produced a `/_data?path=http%3A%2F%2F…` 404 and the navigation silently failed. `src/client/components/Form.tsx` now converts a same-origin absolute redirect URL to `pathname + search + hash`.
 
 ### Tests
 
 - `src/__tests__/server-module-stub.test.ts` — proves a route importing a `bun:sqlite`-backed `*.server.ts` builds, that no server source/secret/SQL reaches the client output, that named + default exports stay resolvable, that the stub throws when invoked, and that the legacy `serverOnlyPlugin` still hard-fails the same import.
-- `src/__tests__/integration.test.ts` — added regression tests asserting that a route action which *returns* `redirect()` yields a `302` + `Location` for both the `X-BractJS-Action` (`<Form>`) and full-page POST paths (fixture: `routes/redirect-action.tsx`); plus `/_data` now carrying merged `meta`.
+- `src/__tests__/integration.test.ts` — added regression tests asserting that a route action which _returns_ `redirect()` yields a `302` + `Location` for both the `X-BractJS-Action` (`<Form>`) and full-page POST paths (fixture: `routes/redirect-action.tsx`); plus `/_data` now carrying merged `meta`.
 - New suites for this release: `nav-utils.test.ts` (parseTo/location keys), `scroll-restoration.test.ts`, `search-validation.test.ts` (unit + live-server searchSchema coercion/400s), `search-serializer.test.ts`, `fetcher-store.test.ts`, `revalidation.test.ts` (mutation → revalidate contract), `selective-ssr.test.ts` (Fallback SSR, loader skipping, beforeLoad parity), `spa-mode.test.ts` (shell serving + CSRF intact), `prerender.test.ts` (generation + production file serving). `typed-routing.test.ts` extended with `useSearch`/`useSetSearch`/`<Link search>` type-level assertions.
 
 ---
@@ -221,6 +221,7 @@ Incremental patch releases; their changes are consolidated into the `[0.2.0]` no
 ### Added
 
 #### Core SSR
+
 - `createServer()` — `Bun.serve()` entry with streaming SSR via `renderToReadableStream`
 - File-based routing via `Bun.Glob` with `scanRoutes()`
 - Route trie matcher (static > param > catch-all priority, no regex)
@@ -232,10 +233,12 @@ Incremental patch releases; their changes are consolidated into the `[0.2.0]` no
 - `meta()` resolution — full merge + dedup (last-writer-wins), SSR-injected into `<head>`
 
 #### Streaming
+
 - `defer()` helper — returns resolved values immediately, streams promises
 - `<Await>` component — React 19 `use()` + `<Suspense>` for deferred data
 
 #### Client
+
 - `hydrateRoot()` browser entry with `window.__BRACTJS_DATA__` hydration
 - `ClientRouter` — `RouterContext` + `NavigationContext` with `startTransition`
 - `<Link>` — soft navigation, `prefetch="hover"` (chunk + data preload)
@@ -246,6 +249,7 @@ Incremental patch releases; their changes are consolidated into the `[0.2.0]` no
 - Browser back/forward support (`popstate` listener)
 
 #### Dev Experience
+
 - File watcher via `node:fs watch` with 50ms debounce
 - HMR WebSocket server (port 3001) + auto-reload browser client
 - Dev error overlay — full-screen stack trace injected into HTML
@@ -253,6 +257,7 @@ Incremental patch releases; their changes are consolidated into the `[0.2.0]` no
 - `RouteErrorBoundary` class component
 
 #### Build System
+
 - Dual `Bun.build()` — server bundle (`target: "bun"`) + client bundle (`target: "browser"`)
 - Route code splitting — one chunk per route file
 - Content-hash filenames (`SHA-256`, 8-char prefix) for cache busting
@@ -263,22 +268,26 @@ Incremental patch releases; their changes are consolidated into the `[0.2.0]` no
 - `Cache-Control: no-cache` for `public/` assets
 
 #### Middleware
+
 - `MiddlewarePipeline` — composable `use()` + `run()` with full context threading
 - `requestLogger()` — `[METHOD] /path → status in Xms`
 - `cors({ origin, methods? })` — `Access-Control-Allow-*` headers + OPTIONS preflight
 - `authGuard({ session, required? })` — cookie session → `ctx.context.user`
 
 #### Session
+
 - `createCookieSession()` — HMAC-SHA256 signing via `crypto.subtle`
 - Base64url encode/decode, constant-time signature verification
 - Secret rotation support (`secrets: [current, ...previous]`)
 - `Set-Cookie` builder with `HttpOnly`, `Secure`, `SameSite`, `Max-Age`, `Path=/`
 
 #### TypeScript
+
 - Full declaration files under `types/` — `route.d.ts`, `config.d.ts`, `session.d.ts`, `middleware.d.ts`, `index.d.ts`
 - `package.json` conditional exports with `"types"` field
 
 #### CLI
+
 - `bractjs new <name>` — scaffold a new app from `templates/new-app/`
 - `bractjs dev` — starts dev server + HMR
 - `bractjs build` — production build
