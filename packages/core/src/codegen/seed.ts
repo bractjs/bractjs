@@ -29,3 +29,20 @@ export async function seedGenerated(appDir: string): Promise<void> {
   await writeRouteTypes(appDir);
   await Bun.write(join(appDir, "_generated", "manifest.ts"), MANIFEST_STUB);
 }
+
+/**
+ * Seed only what's missing so `<appDir>/server.ts` is importable (its static
+ * `_generated/*` imports resolve). Unlike seedGenerated, this never overwrites
+ * an existing `manifest.ts` — `bractjs codegen:manifest` may have snapshotted a
+ * real build there. Returns true when anything was written.
+ */
+export async function seedGeneratedIfMissing(appDir: string): Promise<boolean> {
+  const gen = join(appDir, "_generated");
+  const missingRegistries =
+    !(await Bun.file(join(gen, "routes.ts")).exists()) || !(await Bun.file(join(gen, "actions.ts")).exists());
+  const missingManifest = !(await Bun.file(join(gen, "manifest.ts")).exists());
+  if (!missingRegistries && !missingManifest) return false;
+  if (missingRegistries) await writeModuleRegistries(appDir);
+  if (missingManifest) await Bun.write(join(gen, "manifest.ts"), MANIFEST_STUB);
+  return true;
+}

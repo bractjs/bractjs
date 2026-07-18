@@ -2,6 +2,7 @@ import { basename, extname, resolve } from "node:path";
 import { lintRouteModuleSource } from "../build/route-lint.ts";
 import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
 import { loadUserConfig } from "../config/load.ts";
+import { loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts";
 import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
 import { setDevHmrPort, setRuntimeMode } from "../server/env.ts";
 import type { LifecycleHooks } from "../server/lifecycle.ts";
@@ -147,13 +148,18 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
   const routeRows = await inspectRoutes(appDir);
 
   // Load user lifecycle hooks if defined (<appDir>/lifecycle.ts)
-  let lifecycle: LifecycleHooks = {};
-  try {
-    const lifecyclePath = resolve(process.cwd(), appDir, "lifecycle.ts");
-    const mod = await import(lifecyclePath);
-    if (mod.default) lifecycle = mod.default;
-  } catch {
-    // No lifecycle file — that's fine
+  const lifecycle: LifecycleHooks = await loadLifecycleModule(appDir);
+
+  // Import <appDir>/server.ts for its pipeline.use(...) side effects (its own
+  // createServer() call is suppressed) so global middleware behaves the same
+  // in dev as under `bractjs start` and the compiled binary. Loaded once at
+  // boot — editing server.ts requires a restart, like all server modules.
+  const entry = await loadServerEntry(appDir);
+  if (entry.error) {
+    console.warn(
+      "[bractjs] app/server.ts failed to load — global middleware registered there is INACTIVE in dev:",
+      entry.error instanceof Error ? entry.error.message : entry.error,
+    );
   }
 
   let srv: ReturnType<typeof createServer>;

@@ -908,6 +908,8 @@ If you prefer to keep calling `validate()` and catching: `isValidationResponse(e
 
 The module-level `pipeline` singleton wraps the **entire** request — every response flows through it, including typed `/api` routes, server actions (`/_action`, `/_stream`), the image endpoint (`/_image`), static assets, and SSR documents. So `cors()`, `csp()`, `authGuard()`, a rate limiter, or your own logging applies uniformly, not just to page renders. Each middleware gets `(ctx, next)` and returns a `Response`; `ctx.context` is threaded into every loader/action and into nested route middleware.
 
+Register global middleware in **`app/server.ts`**. The compiled binary executes that file as its entrypoint, and `bractjs dev` / `bractjs start` import it at boot for its `pipeline.use(...)` side effects (its module-scope `createServer()` call is suppressed during the import) — so middleware registered there applies identically in all three run modes. Like all server modules, editing it in dev requires a restart.
+
 ```ts
 import { pipeline, requestLogger, cors, authGuard, csp } from "@bractjs/bractjs";
 import type { MiddlewareFn } from "@bractjs/bractjs";
@@ -953,6 +955,8 @@ pipeline.use(
 ```
 
 Read the nonce inside a component/middleware with `getCspNonce(context)` (key: `CSP_NONCE_KEY`) to nonce your own inline scripts.
+
+Under `bractjs dev`, `csp()` automatically appends the HMR websocket (`ws://localhost:<hmrPort>`) to `connect-src`, so you can keep CSP enabled in development instead of guarding it out — the policy you verify in dev is the one you ship (minus that one dev-only source).
 
 `script-src` is always nonce-based (`'nonce-…' 'strict-dynamic'`), so injected `<script>` cannot execute. Note that with `'strict-dynamic'`, supporting browsers **ignore** the `'self'`/host expressions in `script-src` — trust flows solely through the nonce and the scripts it loads (the `'self'` is kept only as a fallback for older browsers). The default policy also sets `form-action 'self'` (a `<form>` can only submit same-origin), `base-uri 'self'`, `frame-ancestors 'self'`, and `object-src 'none'`. The default `style-src` allows `'unsafe-inline'` for ergonomics (React inline styles, CSS-in-JS); this leaves inline-style injection possible. Pass `strict: true` (or override `style-src` with a nonce/hash) if your app serves all styles from same-origin stylesheets.
 
@@ -1062,8 +1066,8 @@ export default defineLifecycle({
 | `onShutdown` | Before exit — any signal, programmatic `stop()`, or uncaught exception.                                                                                                                                      |
 | `onError`    | Every unexpected error (loader/action throws, uncaught exceptions). Redirects and `HttpError`s are intentional control flow and are **not** reported. `request` is `undefined` for process-level exceptions. |
 
-- **Dev** picks up `app/lifecycle.ts` automatically.
-- **Production**: spread into `createServer()`:
+- **`bractjs dev` and `bractjs start`** pick up `app/lifecycle.ts` automatically.
+- **Compiled binary / custom entry**: spread into `createServer()` yourself:
   ```ts
   import { createServer } from "@bractjs/bractjs";
   import lifecycle from "./app/lifecycle.ts";
@@ -1374,6 +1378,8 @@ createServer({
 ```
 
 When all four are present, the server uses the pre-imported modules for routing, layouts, actions, and assets.
+
+This file has a second role: `bractjs dev` and `bractjs start` import it at boot (with the `createServer()` call suppressed) so any global `pipeline.use(...)` middleware registered here applies in every run mode, not only the compiled binary. See [§14 Middleware](#14-middleware).
 
 ### Manual pipeline
 

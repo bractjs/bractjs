@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { CSP_NONCE_KEY, csp, getCspNonce } from "../server/csp.ts";
+import { setDevHmrPort, setRuntimeMode } from "../server/env.ts";
 import { type MiddlewareContext, MiddlewarePipeline } from "../server/middleware.ts";
 import { renderRoute } from "../server/render.ts";
 
@@ -44,6 +45,38 @@ describe("csp middleware", () => {
     const policy = res.headers.get("Content-Security-Policy")!;
     expect(policy).toContain("img-src 'self' https://cdn.example");
     expect(policy).toContain("frame-ancestors 'none'");
+  });
+
+  describe("dev runtime connect-src", () => {
+    afterEach(() => {
+      setRuntimeMode("prod");
+      setDevHmrPort(0);
+    });
+
+    test("appends the HMR websocket to connect-src under bractjs dev", async () => {
+      setRuntimeMode("dev");
+      setDevHmrPort(3999);
+      const { res } = await runCsp(csp(), () => Promise.resolve(new Response("ok")));
+      expect(res.headers.get("Content-Security-Policy")).toContain("connect-src 'self' ws://localhost:3999");
+    });
+
+    test("appends over a user-supplied connect-src too", async () => {
+      setRuntimeMode("dev");
+      setDevHmrPort(3999);
+      const { res } = await runCsp(csp({ directives: { "connect-src": "'self' https://api.example" } }), () =>
+        Promise.resolve(new Response("ok")),
+      );
+      expect(res.headers.get("Content-Security-Policy")).toContain(
+        "connect-src 'self' https://api.example ws://localhost:3999",
+      );
+    });
+
+    test("does not touch connect-src outside dev", async () => {
+      const { res } = await runCsp(csp(), () => Promise.resolve(new Response("ok")));
+      const policy = res.headers.get("Content-Security-Policy")!;
+      expect(policy).toContain("connect-src 'self'");
+      expect(policy).not.toContain("ws://localhost");
+    });
   });
 
   test("a null directive value removes that directive", async () => {

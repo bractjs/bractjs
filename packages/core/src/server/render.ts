@@ -2,6 +2,7 @@ import { createElement, Fragment, type ReactNode } from "react";
 import { renderToReadableStream } from "react-dom/server";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
+import { CspNonceContext } from "../shared/nonce-context.tsx";
 import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
 import { mergeMeta } from "./meta.ts";
@@ -66,7 +67,13 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   // and no-JS clients receive real meta tags. The client renders the same
   // <MetaTags> inside ClientRouter, so hydration matches and soft navigation
   // re-renders the head.
-  const tree = createElement(Fragment, null, createElement(MetaTags, { meta: mergedMeta }), shell);
+  // CspNonceContext lets framework-emitted inline scripts deep in the app tree
+  // (<LiveReload>'s HMR client) carry the per-request nonce.
+  const tree = createElement(
+    CspNonceContext.Provider,
+    { value: options.nonce },
+    createElement(Fragment, null, createElement(MetaTags, { meta: mergedMeta }), shell),
+  );
 
   let renderError: unknown;
 

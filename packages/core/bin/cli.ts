@@ -117,9 +117,22 @@ switch (command) {
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
     const { createServer } = await import("../src/server/serve.ts");
     const { loadUserConfig } = await import("../src/config/load.ts");
+    const { loadLifecycleModule, loadServerEntry } = await import("../src/config/server-entry.ts");
     // The config carries runtime-relevant fields too (ssr, port, dirs).
     const userCfg = await loadUserConfig();
-    createServer({ port: 3000, buildDir: "./build", ...userCfg });
+    const appDir = userCfg.appDir ?? "./app";
+    // Parity with `bractjs dev` and the compiled binary: pick up lifecycle
+    // hooks and app/server.ts's pipeline.use(...) registrations (its own
+    // createServer() call is suppressed during the import).
+    const lifecycle = await loadLifecycleModule(appDir);
+    const entry = await loadServerEntry(appDir);
+    if (entry.error) {
+      console.warn(
+        "[bractjs] app/server.ts failed to load — global middleware registered there is INACTIVE:",
+        entry.error instanceof Error ? entry.error.message : entry.error,
+      );
+    }
+    createServer({ port: 3000, buildDir: "./build", ...userCfg, ...lifecycle });
     break;
   }
 

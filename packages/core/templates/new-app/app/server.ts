@@ -1,4 +1,12 @@
-// Entry point for `bun build --compile`.
+// Entry point for `bun build --compile` — and the home of global middleware.
+//
+// `bractjs dev` and `bractjs start` also import this file for its side
+// effects, with the createServer() call below suppressed. That means any
+// `pipeline.use(...)` registrations here (cors, csp, auth, logging) apply
+// identically in dev, start, and the compiled binary:
+//
+//   import { pipeline, csp } from "@bractjs/bractjs";
+//   pipeline.use(csp());
 //
 // Pre-generated registries below come from `bractjs codegen:registry` and
 // `bractjs codegen:manifest`. They turn every runtime fs scan / dynamic

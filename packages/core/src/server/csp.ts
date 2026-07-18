@@ -1,3 +1,4 @@
+import { getDevHmrPort, isDevRuntime } from "./env.ts";
 import type { MiddlewareFn } from "./middleware.ts";
 
 /**
@@ -91,6 +92,18 @@ export function csp(options: CspOptions = {}): MiddlewareFn {
       "object-src": "'none'",
       ...(options.directives ?? {}),
     };
+
+    // Under `bractjs dev` the HMR client opens a websocket to
+    // ws://localhost:<hmrPort> (a different port = a different origin), which
+    // `connect-src 'self'` would block. Append it — including over any
+    // user-supplied connect-src — so csp() can stay enabled in dev instead of
+    // being conditionally skipped and never verified. (The HMR client script
+    // itself is nonced via CspNonceContext, so script-src needs no allowance.)
+    if (isDevRuntime() && directives["connect-src"] !== null) {
+      const hmrWs = `ws://localhost:${getDevHmrPort() || 3001}`;
+      const current = directives["connect-src"];
+      directives["connect-src"] = current ? `${current} ${hmrWs}` : hmrWs;
+    }
 
     const policy = Object.entries(directives)
       .filter(([, v]) => v !== null)

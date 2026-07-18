@@ -403,9 +403,21 @@ async function shutdownAll(signal?: string): Promise<void> {
   await Promise.all([...activeServers].map((rec) => shutdownServer(rec)));
 }
 
+// `bractjs dev` / `bractjs start` import `<appDir>/server.ts` purely for its
+// side effects (pipeline.use(...) registrations). That file also calls
+// createServer() at module scope — the compile entrypoint contract — which
+// must NOT bind a second server during such an import. loadServerEntry()
+// (src/config/server-entry.ts) sets this flag around the import.
+let createServerSuppressed = false;
+export function setCreateServerSuppressed(v: boolean): void {
+  createServerSuppressed = v;
+}
+
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
 } {
+  if (createServerSuppressed) return { stop() {} };
+
   const port = config?.port ?? 3000;
 
   if (!isDevRuntime()) {
