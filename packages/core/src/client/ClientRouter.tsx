@@ -502,6 +502,20 @@ export function ClientRouter({
             headers: { "X-BractJS-Action": "1" },
           });
           lastStatus = res.status;
+          // Preferred path: the server enveloped the action redirect
+          // (204 + X-BractJS-Redirect) instead of a raw 3xx, so no throwaway
+          // document GET ever happened — soft-nav straight to the target
+          // (its /_data request is the first to present one-shot cookies).
+          const envelope = res.headers.get("X-BractJS-Redirect");
+          if (envelope !== null) {
+            const safe = toSamePath(envelope);
+            if (safe) {
+              await navigateRef.current(safe);
+              return REDIRECTED;
+            }
+            window.location.assign(envelope);
+            return REDIRECTED;
+          }
           if (res.redirected) {
             const safe = toSamePath(res.url);
             if (safe) {

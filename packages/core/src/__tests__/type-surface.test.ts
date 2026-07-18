@@ -1,65 +1,56 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import * as api from "../index.ts";
+import * as buildApi from "../build-entry.ts";
+import * as codegenApi from "../codegen-entry.ts";
+import * as rootApi from "../index.ts";
 
-// The published type surface (`types/*.d.ts`) is hand-maintained, not
-// generated. These tests keep it in lockstep with the runtime barrel
-// (`src/index.ts`): a runtime export missing from the declarations is
-// invisible to TypeScript consumers, and a declared value that doesn't exist
-// at runtime is a lie that compiles and then crashes.
+// The published type surface (`types/`) is GENERATED from `src/` by
+// `bun run typegen` (tsc --emitDeclarationOnly) and committed. These tests
+// catch the cheap-but-common staleness — an export added to or removed from
+// an entry barrel without regenerating — without spawning tsc. Signature-level
+// drift is caught by CI, which reruns typegen and fails on any diff.
 
 const typesDir = join(import.meta.dir, "../../types");
 
-function readAllDeclarations(): string {
-  return readdirSync(typesDir)
-    .filter((f) => f.endsWith(".d.ts"))
-    .map((f) => readFileSync(join(typesDir, f), "utf8"))
-    .join("\n");
-}
-
-/** Names declared as VALUES (function/const/class/let/var) in the .d.ts files. */
-function declaredValueNames(src: string): Set<string> {
+/**
+ * Names in VALUE re-export lists of a generated entry —
+ * `export { A, B as C } from "..."`. `export type { ... }` lists and inline
+ * `type X` entries are excluded: types have no runtime counterpart.
+ */
+function valueExports(src: string): Set<string> {
   const names = new Set<string>();
-  for (const m of src.matchAll(/^export declare (?:async )?(?:function|const|class|let|var)\s+(\w+)/gm)) {
-    names.add(m[1]);
-  }
-  return names;
-}
-
-/** Every exported name (values, interfaces, type aliases, re-export lists). */
-function declaredNames(src: string): Set<string> {
-  const names = declaredValueNames(src);
-  for (const m of src.matchAll(/^export (?:interface|type)\s+(\w+)/gm)) {
-    names.add(m[1]);
-  }
-  // `export { A, B as C } from "..."` / `export type { ... }` — lists can span lines.
-  for (const m of src.matchAll(/export\s+(?:type\s+)?\{([^}]+)\}/g)) {
-    for (const raw of m[1].split(",")) {
-      const name = raw.trim();
-      if (!name) continue;
-      const asMatch = name.match(/^\w+\s+as\s+(\w+)$/);
-      names.add(asMatch ? asMatch[1] : name.split(/\s/)[0]);
+  for (const m of src.matchAll(/export\s+(type\s+)?\{([^}]+)\}/g)) {
+    if (m[1]) continue; // `export type { ... }` — type-only list
+    for (const raw of m[2].split(",")) {
+      const entry = raw.trim();
+      if (!entry || entry.startsWith("type ")) continue;
+      const asMatch = entry.match(/^\w+\s+as\s+(\w+)$/);
+      names.add(asMatch ? asMatch[1] : entry.split(/\s/)[0]);
     }
   }
   return names;
 }
 
-describe("type surface (types/*.d.ts vs src/index.ts)", () => {
-  const allDecls = readAllDeclarations();
-  const declared = declaredNames(allDecls);
-  const runtimeNames = Object.keys(api).sort();
+const entries = [
+  { name: ".", dts: "index.d.ts", api: rootApi },
+  { name: "./build", dts: "build-entry.d.ts", api: buildApi },
+  { name: "./codegen", dts: "codegen-entry.d.ts", api: codegenApi },
+] as const;
 
-  test("every runtime export is declared in types/", () => {
-    const missing = runtimeNames.filter((name) => !declared.has(name));
-    expect(missing).toEqual([]);
-  });
+for (const { name, dts, api } of entries) {
+  describe(`type surface of "${name}" (generated types/${dts} vs runtime)`, () => {
+    const declared = valueExports(readFileSync(join(typesDir, dts), "utf8"));
+    const runtimeNames = Object.keys(api).sort();
 
-  test("every value declared in types/index.d.ts exists at runtime", () => {
-    // Only index.d.ts value declarations are the public entry's surface; the
-    // sibling .d.ts files also back re-exports, so index.d.ts is the contract.
-    const indexDecls = readFileSync(join(typesDir, "index.d.ts"), "utf8");
-    const phantom = [...declaredValueNames(indexDecls)].filter((name) => !(name in api));
-    expect(phantom).toEqual([]);
+    test("every runtime export appears in the generated declarations (rerun `bun run typegen`)", () => {
+      const missing = runtimeNames.filter((n) => !declared.has(n));
+      expect(missing).toEqual([]);
+    });
+
+    test("every declared value export exists at runtime (rerun `bun run typegen`)", () => {
+      const phantom = [...declared].filter((n) => !(n in api));
+      expect(phantom).toEqual([]);
+    });
   });
-});
+}

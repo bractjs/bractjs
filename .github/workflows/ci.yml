@@ -41,6 +41,11 @@ jobs:
       - name: Typecheck (framework + types + examples)
         run: pnpm -r typecheck
 
+      - name: Generated types fresh (typegen produces no diff)
+        run: |
+          pnpm --filter @bractjs/bractjs typegen
+          git diff --exit-code -- packages/core/types
+
       - name: Lockfile unchanged
         # bunx tsc used to re-resolve TypeScript and rewrite pnpm-lock.yaml as a
         # side effect; typescript is a devDependency now, so any diff here is a

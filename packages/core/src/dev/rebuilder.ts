@@ -4,6 +4,7 @@ import { createUseServerProxyPlugin } from "../build/directives.ts";
 import { clientEnvPlugin, serverModuleStubPlugin } from "../build/env-plugin.ts";
 import { generateManifest, writeManifest } from "../build/manifest.ts";
 import { cssModulesPlugin } from "../build/plugins/css-modules.ts";
+import { routeShakePlugin } from "../build/plugins/route-shake.ts";
 import { reactDedupePlugin } from "../build/react-dedupe.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import type { BractJSConfig } from "../server/serve.ts";
@@ -58,6 +59,7 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
         reactDedupePlugin(process.cwd()),
         serverModuleStubPlugin,
         createUseServerProxyPlugin(appDir),
+        routeShakePlugin(appDir),
         clientEnvPlugin(config?.clientEnv ?? [], Bun.env as Record<string, string>),
         cssModulesPlugin,
         ...(config?.plugins ?? []),

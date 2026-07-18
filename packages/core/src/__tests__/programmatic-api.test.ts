@@ -131,11 +131,16 @@ test("DevServer interface has a stop() method", () => {
   expect(typeof stub.stop).toBe("function");
 });
 
-// ── Re-exports from src/index.ts ──────────────────────────────────────────
+// ── Re-exports from the public entries ────────────────────────────────────
 
-test("createDevServer, runBuild, loadUserConfig are all re-exported from src/index.ts", async () => {
+test("createDevServer and loadUserConfig are re-exported from src/index.ts", async () => {
   const mod = await import("../index.ts");
   expect(typeof mod.createDevServer).toBe("function");
-  expect(typeof mod.runBuild).toBe("function");
   expect(typeof mod.loadUserConfig).toBe("function");
+});
+
+test("runBuild is re-exported from src/build-entry.ts (the ./build subpath)", async () => {
+  const mod = await import("../build-entry.ts");
+  expect(typeof mod.runBuild).toBe("function");
+  expect(typeof mod.runPrerender).toBe("function");
 });

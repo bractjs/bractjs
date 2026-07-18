@@ -42,6 +42,14 @@
     ".": {
       "types": "./types/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./build": {
+      "types": "./types/build-entry.d.ts",
+      "default": "./src/build-entry.ts"
+    },
+    "./codegen": {
+      "types": "./types/codegen-entry.d.ts",
+      "default": "./src/codegen-entry.ts"
     }
   },
   "scripts": {
@@ -49,7 +57,8 @@
     "build": "bun run src/build/bundler.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit && bunx tsc -p tsconfig.types.json",
-    "prepublishOnly": "bun run scripts/verify-pack.ts"
+    "typegen": "bunx tsc -p tsconfig.declarations.json",
+    "prepublishOnly": "bun run typegen && bun run scripts/verify-pack.ts"
   },
   "peerDependencies": {
     "react": "^19",

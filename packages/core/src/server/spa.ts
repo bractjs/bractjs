@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { type ComponentType, createElement } from "react";
 import { BractJSProvider, type RouteManifest } from "../shared/context.ts";
+import { devBustedSpecifier } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
 
@@ -27,7 +28,9 @@ export async function renderSpaShell(
   } else {
     const rootPath = resolve(join(appDir, "root.tsx"));
     if (await Bun.file(rootPath).exists()) {
-      const mod = (await import(rootPath)) as { default?: ComponentType };
+      // Dev: cache-busted so an edited root shell is live without a restart.
+      const spec = devBustedSpecifier(rootPath);
+      const mod = (await import(spec)) as { default?: ComponentType };
       if (mod.default) RootComponent = mod.default;
     }
   }

@@ -75,19 +75,50 @@ switch (command) {
     // Ensure dev-only handlers gated by isExplicitDev() (e.g. /_hmr/module,
     // /_bractjs/devtools.js) are reachable when the user hasn't set NODE_ENV.
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
-    const { createDevServer, DevServerError } = await import("../src/dev/server.ts");
-    try {
-      await createDevServer();
-    } catch (err) {
-      // User-actionable startup failures (port conflicts) get the message
-      // without a stack; anything else is a real bug and should blow up loud.
-      if (err instanceof DevServerError) {
-        console.error(`[bractjs] ${err.message}`);
-        process.exit(1);
+
+    // Reserved child exit code meaning "a server module changed — respawn me".
+    // 75 = EX_TEMPFAIL, chosen to never collide with real failure codes.
+    const DEV_RESTART_EXIT_CODE = 75;
+
+    if (process.env.BRACTJS_DEV_CHILD === "1") {
+      // Child mode: actually run the dev server. On a change the process
+      // cannot absorb (server.ts / lifecycle.ts / *.server.ts / shared
+      // modules / added or removed routes), exit with the reserved code so
+      // the supervisor below respawns us; the browser reloads itself when
+      // its HMR socket reconnects.
+      const { createDevServer, DevServerError } = await import("../src/dev/server.ts");
+      try {
+        await createDevServer({
+          onRestartRequired: (file) => {
+            console.log(`[bractjs] ${file} changed — restarting dev server…`);
+            process.exit(DEV_RESTART_EXIT_CODE);
+          },
+        });
+      } catch (err) {
+        // User-actionable startup failures (port conflicts) get the message
+        // without a stack; anything else is a real bug and should blow up loud.
+        if (err instanceof DevServerError) {
+          console.error(`[bractjs] ${err.message}`);
+          process.exit(1);
+        }
+        throw err;
       }
-      throw err;
+      break;
     }
-    break;
+
+    // Supervisor mode: run the dev server as a child process and respawn it
+    // whenever it exits with the reserved restart code. Any other exit
+    // (Ctrl+C, port conflict, crash) is propagated and ends the loop.
+    for (;;) {
+      const child = Bun.spawn([process.execPath, import.meta.path, "dev"], {
+        env: { ...process.env, BRACTJS_DEV_CHILD: "1" },
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      const code = await child.exited;
+      if (code !== DEV_RESTART_EXIT_CODE) process.exit(code ?? 0);
+    }
   }
 
   case "build": {

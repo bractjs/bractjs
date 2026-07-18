@@ -839,10 +839,31 @@ export const webhook = route("POST", "/api/webhook", handleWebhook, { csrf: fals
 
 - `GET`/`DELETE`: no body parsed. `POST`/`PUT`/`PATCH`: JSON or form body parsed into `input`.
 - Bodies are capped at 1 MiB. JSON bodies carrying prototype-pollution keys (`__proto__`/`constructor`/`prototype`) are rejected (400). Errors return a generic 500 in production (full message in dev).
-- Handlers also receive the raw `Request` as the 2nd arg.
-- `:param` segments match any non-empty value; **read and validate params from `request.url` yourself** (they aren't injected into `input`).
+- Handlers also receive the raw `Request` (2nd arg) and the middleware context (3rd arg): `:param` segment values are in `ctx.params` (raw, undecoded — **validate before using them** in fs/SQL ops), and anything endpoint middleware set on `ctx.context` is readable there.
 - **CSRF — on by default for mutating methods** (`POST`/`PUT`/`PATCH`/`DELETE`): the request must prove same-origin (via `Sec-Fetch-Site`, the `X-BractJS-Action` header `createClient` sends automatically, or a matching `Origin`), exactly like server actions. Cross-site requests get `403`. Pass `{ csrf: false }` **only** for endpoints that don't trust ambient credentials (session cookies / Basic auth) and are meant to be called cross-site (webhooks, token-authenticated or public APIs).
 - Global `pipeline` middleware (`cors`, `csp`, `authGuard`, custom) applies to `/api` responses too — see §14.
+
+### Guard an endpoint with `{ middleware: [...] }`
+
+Nested route `middleware` exports do **not** cover `/api` — this option is the supported way to guard a typed endpoint. The chain runs after the CSRF gate and **before body parsing** (an auth gate rejects before the payload is buffered); return a `Response` to short-circuit, or call `next()` and enrich `ctx.context` for the handler:
+
+```ts
+import type { MiddlewareFn } from "@bractjs/bractjs";
+
+const requireUser: MiddlewareFn = async (ctx, next) => {
+  const user = await sessionUser(ctx.request);
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  ctx.context.user = user;
+  return next();
+};
+
+export const getProfile = route(
+  "GET",
+  "/api/profile/:id",
+  async (_input, _req, ctx) => db.profiles.get(ctx.params.id, ctx.context.user),
+  { middleware: [requireUser] },
+);
+```
 
 ### Call them with `createClient<AppApiRoutes>()`
 
@@ -908,7 +929,7 @@ If you prefer to keep calling `validate()` and catching: `isValidationResponse(e
 
 The module-level `pipeline` singleton wraps the **entire** request — every response flows through it, including typed `/api` routes, server actions (`/_action`, `/_stream`), the image endpoint (`/_image`), static assets, and SSR documents. So `cors()`, `csp()`, `authGuard()`, a rate limiter, or your own logging applies uniformly, not just to page renders. Each middleware gets `(ctx, next)` and returns a `Response`; `ctx.context` is threaded into every loader/action and into nested route middleware.
 
-Register global middleware in **`app/server.ts`**. The compiled binary executes that file as its entrypoint, and `bractjs dev` / `bractjs start` import it at boot for its `pipeline.use(...)` side effects (its module-scope `createServer()` call is suppressed during the import) — so middleware registered there applies identically in all three run modes. Like all server modules, editing it in dev requires a restart.
+Register global middleware in **`app/server.ts`**. The compiled binary executes that file as its entrypoint, and `bractjs dev` / `bractjs start` import it at boot for its `pipeline.use(...)` side effects (its module-scope `createServer()` call is suppressed during the import) — so middleware registered there applies identically in all three run modes. Editing it under `bractjs dev` restarts the dev server automatically (the browser reloads itself when its HMR socket reconnects).
 
 ```ts
 import { pipeline, requestLogger, cors, authGuard, csp } from "@bractjs/bractjs";
@@ -996,6 +1017,18 @@ export const middleware = [requireAdmin];
 ```
 
 It protects the **document and the `/_data` soft-nav endpoint** alike, so it's a safe place for auth — same guarantee as `beforeLoad`. Prefer route middleware over `beforeLoad` when you want composition (multiple concerns, shared across a folder) or response post-processing; `beforeLoad` remains the lighter single-gate option.
+
+### Middleware coverage at a glance
+
+Three middleware surfaces, three scopes — pick by what you need to cover:
+
+| Surface                                   | Covers                                                                              | Register in                        |
+| ----------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------- |
+| Global `pipeline.use(...)`                | **Everything**: SSR documents, `/_data`, `/api`, `/_action`, `/_stream`, `/_image`, static assets | `app/server.ts`                    |
+| Nested route `middleware` exports         | The **document + `/_data`** path of that route subtree only — **not** `/api` or `/_action` | `root.tsx` / `layout.tsx` / routes |
+| `route(..., { middleware })` (per-endpoint) | That one typed **`/api` endpoint**                                                  | The `route()` definition (§12)     |
+
+Server actions (`/_action`, `/_stream`) have no per-action middleware — guard inside the action body, or globally.
 
 ---
 
@@ -1101,7 +1134,7 @@ export async function loader() {
 }
 ```
 
-> BractJS ships the whole route module — `loader` and `action` included — to the client, so a server import is reachable from the client graph. The `serverModuleStubPlugin` (applied automatically by `bractjs dev`/`build`) replaces every `*.server.ts` export with a throwing stub: the import resolves, the loader/action are dead code on the client, and **zero** server source is emitted. The stricter, hard-failing `serverOnlyPlugin` is still exported if you'd rather a server import be a build error.
+> Client bundles **strip** a route module's server-only exports — `loader`, `action`, `headers`, `middleware` — together with any import only they used (`routeShakePlugin`, applied automatically by `bractjs dev`/`build`). Your DB driver and its call sites never reach the browser, and route chunks shrink to their component + client hooks. As a backstop, `serverModuleStubPlugin` still replaces every `*.server.ts` export with a throwing stub, covering server imports that survive shaking (module-level side-effect imports, non-route files). The stricter, hard-failing `serverOnlyPlugin` remains exported if you'd rather a server import be a build error.
 
 ```ts
 // bractjs.config.ts
@@ -1260,6 +1293,8 @@ The CLI is a thin wrapper — every command delegates to a public function, so y
 
 **`createDevServer(options?)`** — dev server with HMR.
 
+Change handling in dev: route-module edits (including **loaders, actions, and `beforeLoad`**) are applied live — the server re-imports the fresh module on the next request, no restart needed. Changes the process cannot absorb — `app/server.ts`, `lifecycle.ts`, any `*.server.ts`, shared non-route modules, or adding/removing a route file — make `bractjs dev` restart itself and the browser reload once its HMR socket reconnects. Programmatic `createDevServer()` callers can hook this via `onRestartRequired(file)` (the default logs a restart warning instead of exiting).
+
 ```ts
 import { createDevServer } from "@bractjs/bractjs";
 
@@ -1272,10 +1307,10 @@ const dev = await createDevServer({
 dev.stop();
 ```
 
-**`runBuild(config?)`** — production build (accepts only build-relevant fields).
+**`runBuild(config?)`** — production build (accepts only build-relevant fields). Lives at the `/build` subpath.
 
 ```ts
-import { runBuild } from "@bractjs/bractjs";
+import { runBuild } from "@bractjs/bractjs/build";
 
 await runBuild({
   appDir: "./app",
@@ -1339,7 +1374,7 @@ export default {
 };
 ```
 
-`bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations _into_ a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported for custom pipelines.
+`bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations _into_ a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported from `@bractjs/bractjs/build` for custom pipelines.
 
 Deployment notes: with `bun build --compile`, ship `build/client/` (including `_prerender/`) alongside the binary — or pass it via `--asset`. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs.
 
@@ -1393,7 +1428,7 @@ bun build --compile app/server.ts \               # D — single binary
 
 `--asset build/client/` embeds JS/CSS into the binary (true single file); omit it to ship `myapp` + `build/client/` side by side.
 
-The codegen functions are exported: `writeModuleRegistries(appDir)`, `writeManifestModule(appDir, buildDir)`, and the lower-level `generateRouteRegistry` / `generateActionRegistry` / `generateManifestModule`.
+The codegen functions are exported from `@bractjs/bractjs/codegen`: `writeModuleRegistries(appDir)`, `writeManifestModule(appDir, buildDir)`, and the lower-level `generateRouteRegistry` / `generateActionRegistry` / `generateManifestModule`.
 
 > **Contributor note — keep the binary working:** anything on the server request/startup path must avoid runtime `Bun.Glob`/computed-path `import()`, must fall back from `realpath()` to `Bun.file().exists()` for embedded assets, and must preserve every consumed export when projecting route modules. Two tests enforce this: `packages/core/src/__tests__/compile-safety.test.ts` (fast static scan) and `packages/core/src/__tests__/compile-smoke.test.ts` (compiles and boots a real binary).
 
@@ -1423,15 +1458,16 @@ export default makeCloudflareHandler(handler);
 
 ## 24. Build plugins
 
-If you write your own `Bun.build()` (instead of `bractjs build`), you **must** apply these or face crashes / secret leaks. All are exported.
+If you write your own `Bun.build()` (instead of `bractjs build`), you **must** apply these or face crashes / secret leaks. All are exported from the `@bractjs/bractjs/build` subpath.
 
-| Bundle | Plugin                               | Without it                                                               |
-| ------ | ------------------------------------ | ------------------------------------------------------------------------ |
-| Server | `useClientStubPlugin`                | Server crashes calling browser-only hooks from `"use client"` modules.   |
-| Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB code, secrets) ship in the browser JS.          |
-| Client | `serverModuleStubPlugin`             | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle. |
-| Client | `clientEnvPlugin(allowedKeys, env)`  | Server env vars leak into the browser bundle.                            |
-| Client | `cssModulesPlugin`                   | `*.module.css` imports don't resolve.                                    |
+| Bundle | Plugin                               | Without it                                                                       |
+| ------ | ------------------------------------ | -------------------------------------------------------------------------------- |
+| Server | `useClientStubPlugin`                | Server crashes calling browser-only hooks from `"use client"` modules.           |
+| Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB code, secrets) ship in the browser JS.                  |
+| Client | `routeShakePlugin(appDir)`           | Route loader/action/headers/middleware bodies (and their imports) ship to the browser. |
+| Client | `serverModuleStubPlugin`             | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle.         |
+| Client | `clientEnvPlugin(allowedKeys, env)`  | Server env vars leak into the browser bundle.                                    |
+| Client | `cssModulesPlugin`                   | `*.module.css` imports don't resolve.                                            |
 
 ```ts
 import {
@@ -1440,7 +1476,7 @@ import {
   serverModuleStubPlugin,
   clientEnvPlugin,
   cssModulesPlugin,
-} from "@bractjs/bractjs";
+} from "@bractjs/bractjs/build";
 
 // Server bundle (target: "bun"):
 plugins: [useClientStubPlugin];
@@ -1449,6 +1485,7 @@ plugins: [useClientStubPlugin];
 plugins: [
   serverModuleStubPlugin,
   createUseServerProxyPlugin("./app"), // same appDir as createServer!
+  routeShakePlugin("./app"), // register AFTER the use-server proxy plugin
   clientEnvPlugin(["PUBLIC_API_URL"], Bun.env as Record<string, string>),
   cssModulesPlugin,
 ];
@@ -1492,9 +1529,11 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 
 ## 26. Full export index
 
+The package has three entries: `@bractjs/bractjs` (everything app code needs), `@bractjs/bractjs/build` (programmatic builds + bundler plugins), and `@bractjs/bractjs/codegen` (registry/manifest generation for the native-compile workflow).
+
 Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `hasForbiddenKey`, `nullProtoFromEntries`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
 **Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
 
@@ -1502,7 +1541,7 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Context:** `BractJSContext`, `BractJSProvider`, `useBractJSContext`
 
-**Middleware:** `pipeline`, `MiddlewarePipeline`, `runRouteMiddleware`, `collectRouteMiddleware`, `requestLogger`, `cors`, `authGuard`, `csp`, `getCspNonce`, `CSP_NONCE_KEY`
+**Middleware:** `pipeline`, `MiddlewarePipeline`, `requestLogger`, `cors`, `authGuard`, `csp`, `getCspNonce`, `CSP_NONCE_KEY`
 
 **Sessions:** `createCookieSession`
 
@@ -1510,7 +1549,7 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useMatches`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useToast`, `useToasts`, `useLocale`, `useLocalizedLink`
 
-**Toasts:** `toast`, `toastStore`
+**Toasts:** `toast`
 
 **Search serialization:** `serializeSearch`
 
@@ -1518,13 +1557,19 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Client RPC:** `createClient`
 
-**Build / programmatic:** `createDevServer`, `runBuild`, `loadUserConfig`, `defineConfig`, `runPrerender`
-
-**Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`
-
-**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `serverModuleStubPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `cssModulesPlugin`, `transformCssModule`
+**Programmatic:** `createDevServer`, `loadUserConfig`, `defineConfig`
 
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
+
+From `@bractjs/bractjs/build` ([packages/core/src/build-entry.ts](packages/core/src/build-entry.ts)):
+
+**Build:** `runBuild`, `runPrerender`
+
+**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `routeShakePlugin`, `SERVER_ONLY_ROUTE_EXPORTS`, `serverModuleStubPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `cssModulesPlugin`, `transformCssModule`
+
+From `@bractjs/bractjs/codegen` ([packages/core/src/codegen-entry.ts](packages/core/src/codegen-entry.ts)):
+
+**Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`, `routesFingerprint`, `explainStaleness`
 
 **Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `ApiRouteOptions`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `ToasterProps`, `ToastPosition`, `Toast`, `ToastEntry`, `ToastOptions`, `ToastType`, `ToastAction`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 

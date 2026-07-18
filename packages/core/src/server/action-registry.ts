@@ -1,5 +1,6 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { hasServerDirective } from "../shared/directives.ts";
+import { devBustedSpecifier } from "./env.ts";
 
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 
@@ -96,7 +97,9 @@ export async function loadServerActions(appDir: string): Promise<void> {
 
     let mod: Record<string, unknown>;
     try {
-      mod = (await import(filePath)) as Record<string, unknown>;
+      // Dev: cache-busted so edited "use server" bodies are live after re-scan.
+      const spec = devBustedSpecifier(filePath);
+      mod = (await import(spec)) as Record<string, unknown>;
     } catch (err) {
       console.error("[bractjs] failed to load server actions from", rel, err);
       continue;

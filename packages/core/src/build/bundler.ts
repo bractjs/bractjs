@@ -9,6 +9,7 @@ import { buildDefines } from "./defines.ts";
 import { writeRouteTypes } from "../codegen/route-codegen.ts";
 import { useClientStubPlugin, createUseServerProxyPlugin } from "./directives.ts";
 import { cssModulesPlugin } from "./plugins/css-modules.ts";
+import { routeShakePlugin } from "./plugins/route-shake.ts";
 import { reactDedupePlugin } from "./react-dedupe.ts";
 
 /** Subset of config fields relevant to the build pipeline. */
@@ -91,7 +92,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
       minify: config.minify ?? true,
       sourcemap: config.sourcemap ?? "external",
       define: buildDefines(config),
-      plugins: [reactDedupePlugin(process.cwd()), serverModuleStubPlugin, createUseServerProxyPlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
+      plugins: [reactDedupePlugin(process.cwd()), serverModuleStubPlugin, createUseServerProxyPlugin(appDir), routeShakePlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
     });
   } finally {
     await rm(shimPath, { force: true });

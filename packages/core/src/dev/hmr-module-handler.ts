@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
 import { serverModuleStubPlugin } from "../build/env-plugin.ts";
+import { routeShakePlugin } from "../build/plugins/route-shake.ts";
 
 /**
  * Dev-only HTTP handler for /_hmr/module?file=routes/about.tsx
@@ -54,7 +55,7 @@ export async function handleHmrModuleRequest(url: URL, appDir: string): Promise<
     target: "browser",
     minify: false,
     sourcemap: "inline",
-    plugins: [serverModuleStubPlugin, createUseServerProxyPlugin(rootDir)],
+    plugins: [serverModuleStubPlugin, createUseServerProxyPlugin(rootDir), routeShakePlugin(rootDir)],
   });
 
   if (!result.success || result.outputs.length === 0) {

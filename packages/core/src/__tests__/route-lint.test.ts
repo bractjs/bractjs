@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lintRouteModuleSource } from "../build/route-lint.ts";
+import { extractApiRouteDefs, lintRouteModuleSource } from "../build/route-lint.ts";
 
 describe("lintRouteModuleSource — empty routes", () => {
   test("warns when a route has no meaningful export", () => {
@@ -75,5 +75,33 @@ describe("lintRouteModuleSource — miscased exports", () => {
       "routes/h.tsx",
     );
     expect(w).toEqual([]);
+  });
+});
+
+describe("extractApiRouteDefs", () => {
+  test("finds route() calls with method and path", () => {
+    const src =
+      `import { route } from "@bractjs/bractjs";\n` +
+      `export const getUsers = route("GET", "/api/users", async () => []);\n` +
+      `export const addUser = route("POST", "/api/users", async (input) => input, { csrf: true });\n`;
+    expect(extractApiRouteDefs(src)).toEqual([
+      { method: "GET", path: "/api/users" },
+      { method: "POST", path: "/api/users" },
+    ]);
+  });
+
+  test("finds namespace-style bract.route() calls and single quotes", () => {
+    const src = `export const del = bract.route('DELETE', '/api/items/:id', handler);\n`;
+    expect(extractApiRouteDefs(src)).toEqual([{ method: "DELETE", path: "/api/items/:id" }]);
+  });
+
+  test("tolerates a line break between method and path", () => {
+    const src = `export const r = route(\n  "PUT",\n  "/api/settings",\n  handler,\n);\n`;
+    expect(extractApiRouteDefs(src)).toEqual([{ method: "PUT", path: "/api/settings" }]);
+  });
+
+  test("ignores modules without route definitions", () => {
+    expect(extractApiRouteDefs(`export const route = "/somewhere";\n`)).toEqual([]);
+    expect(extractApiRouteDefs(`navigate(route("home"))\n`)).toEqual([]);
   });
 });

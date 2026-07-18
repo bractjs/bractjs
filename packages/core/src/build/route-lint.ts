@@ -21,6 +21,30 @@ const MEANINGFUL = ["default", "loader", "action", "beforeLoad"];
  * two common, silent mistakes: a route that renders nothing, and an export
  * whose casing doesn't match a framework export (so it's ignored).
  */
+/** A typed API route definition found in source: `route("GET", "/api/x", …)`. */
+export interface ApiRouteDef {
+  method: string;
+  path: string;
+}
+
+// Matches `route("GET", "/api/x"` and `bract.route('POST', '/api/y'` — the
+// method and path are always inline string literals in the supported pattern.
+const API_ROUTE_CALL = /\broute\(\s*["'`](GET|POST|PUT|PATCH|DELETE)["'`]\s*,\s*["'`]([^"'`]+)["'`]/g;
+
+/**
+ * Statically extract typed API route definitions from a module's SOURCE (no
+ * execution). Used by the dev server to warn when a defined endpoint never
+ * registered — registration is an import side effect, so a `route()` call in
+ * a module nothing imports silently doesn't exist.
+ */
+export function extractApiRouteDefs(src: string): ApiRouteDef[] {
+  const defs: ApiRouteDef[] = [];
+  for (const m of src.matchAll(API_ROUTE_CALL)) {
+    defs.push({ method: m[1], path: m[2] });
+  }
+  return defs;
+}
+
 export function lintRouteModuleSource(src: string, filePath: string): string[] {
   const warnings: string[] = [];
   const names = extractExports(src);
