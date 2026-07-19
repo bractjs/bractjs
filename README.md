@@ -13,6 +13,8 @@
 
 This README is a **step-by-step guide to every function and feature** BractJS exports. Each section is self-contained and ordered from "first app" to "advanced". Every symbol shown here is a real export from `@bractjs/bractjs` (see [packages/core/src/index.ts](packages/core/src/index.ts)).
 
+> **New to BractJS?** Start with the guides in [`docs/`](docs/README.md): a [15-minute tutorial](docs/tutorial.md), the [mental model](docs/concepts.md) (request lifecycle, run modes), [authentication end to end](docs/authentication.md), and [deployment](docs/deployment.md). This README is the reference; those are the learning path.
+
 ---
 
 ## Table of Contents
