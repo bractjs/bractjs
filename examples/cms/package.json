@@ -3,14 +3,9 @@
   "version": "0.0.2",
   "private": true,
   "scripts": {
-    "css": "tailwindcss -i ./app/styles.css -o ./public/styles.css --minify",
-    "css:watch": "tailwindcss -i ./app/styles.css -o ./public/styles.css --watch",
-    "predev": "bun run css",
     "dev": "bractjs dev",
-    "prebuild": "bun run css",
     "build": "NODE_ENV=production bractjs build",
     "start": "NODE_ENV=production bractjs start",
-    "precompile": "bun run css",
     "compile": "NODE_ENV=production bractjs compile ./bin/cms-app ./app/server.ts",
     "start:bin": "./bin/cms-app",
     "seed:demo": "bun run scripts/seed-demo.ts",
@@ -26,7 +21,7 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.0",
+    "bun-plugin-tailwind": "^0.1.2",
     "@types/bun": "latest",
     "@types/nodemailer": "^8.0.0",
     "@types/react": "^19",

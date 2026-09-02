@@ -15,7 +15,7 @@
 
 ```sh
 # Scaffold a new app
-bunx bractjs new my-app
+bunx @bractjs/bractjs new my-app
 cd my-app
 
 # Start the dev server (HMR on http://localhost:3000)

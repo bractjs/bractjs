@@ -6,4 +6,8 @@ import { defineConfig } from "@bractjs/bractjs";
 export default defineConfig({
   port: 3200,
   clientEnv: [],
+  // Compiles app/styles.css (imported from root.tsx) as part of the bundle:
+  // no tailwindcss CLI step, no hand-written <link>. BractJS extracts the CSS,
+  // content-hashes it, and emits the stylesheet link during SSR.
+  tailwind: true,
 });

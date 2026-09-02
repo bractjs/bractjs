@@ -354,6 +354,8 @@ async function route(
       matches,
       headers: routeHeaders,
       routeFile: match.routeFile.filePath,
+      // Manifest key for this route — selects its extracted CSS bundles.
+      routePattern: match.routeFile.urlPattern,
       // Set by the opt-in csp() middleware; undefined otherwise.
       nonce: getCspNonce(mwCtx.context),
       ssrMode,

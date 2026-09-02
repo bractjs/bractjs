@@ -30,13 +30,18 @@
  *   when you want server-module imports to be a build error rather than a stub.
  * - `clientEnvPlugin(allowedKeys, env)` (client bundle): allowlists which
  *   `process.env.*` references survive into the browser bundle.
- * - `cssModulesPlugin` (client bundle): handles `*.module.css` imports.
+ *
+ * CSS needs no plugin: Bun extracts stylesheets (including natively scoped
+ * `*.module.css`) into real files, and BractJS hashes them and emits the
+ * `<link>` tags. `tailwindPlugins` is applied automatically when the config
+ * sets `tailwind: true`.
  */
 export type { BuildConfig } from "./build/bundler.ts";
 export { runBuild } from "./build/bundler.ts";
 export { createUseServerProxyPlugin, useClientStubPlugin, useServerProxyPlugin } from "./build/directives.ts";
 export { clientEnvPlugin, serverModuleStubPlugin, serverOnlyPlugin } from "./build/env-plugin.ts";
-export { cssModulesPlugin, transformCssModule } from "./build/plugins/css-modules.ts";
 export { routeShakePlugin, SERVER_ONLY_ROUTE_EXPORTS } from "./build/plugins/route-shake.ts";
+export { tailwindPlugins } from "./build/plugins/tailwind.ts";
+export { collectCssBundles } from "./build/css-collect.ts";
 export type { PrerenderOptions, PrerenderResult } from "./build/prerender.ts";
 export { runPrerender } from "./build/prerender.ts";

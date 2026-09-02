@@ -158,7 +158,9 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] Module-level HMR (no full reload — fine-grained module swap)
 - [x] Edge runtime support — Cloudflare Workers adapter (`createCloudflareAdapter`, `src/adapters/cloudflare.ts`)
 - [ ] Edge runtime support — Deno / Node.js adapters (generalize the adapter contract)
-- [x] Built-in CSS modules (`cssModulesPlugin`, `src/build/plugins/css-modules.ts`)
+- [x] Zero-config CSS pipeline — stylesheets extracted to hashed files, recorded in the manifest, and `<link>`-injected during SSR (no FOUC); per-route splitting automatic; `hmr:css` hot-swap in dev (`src/build/css-collect.ts`, `src/shared/style-links.tsx`)
+- [x] Zero-config Tailwind v4 — `tailwind: true` config flag, no CLI step (`src/build/plugins/tailwind.ts`)
+- [~] Built-in CSS modules — natively scoped + extracted by Bun; **server/client class-name parity still missing** (SSR renders no class because Bun's runtime resolves `.module.css` to a path, not the class map). Needs framework-owned class-name generation on both sides.
 - [x] Image optimization pipeline (`<Image>`, `/_image` handler)
 - [x] Typed routes (codegen — `route-types.gen.ts`, `src/codegen/route-codegen.ts`)
 - [x] Typed routes (codegen — `params` typed per route via `RouteParams<T>`)
@@ -209,7 +211,7 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 - [x] Adapter interface — `BractAdapter` / `BunAdapter` abstract the serve layer (`src/server/adapter.ts`)
 - [x] Cloudflare Workers adapter — first non-Bun target (`createCloudflareAdapter`, `src/adapters/cloudflare.ts`)
 - [ ] Deno / Node.js adapters — second/third targets to fully validate the adapter contract
-- [x] CSS modules — scoped styles, build-time class-name hashing (`cssModulesPlugin`, `src/build/plugins/css-modules.ts`)
+- [x] CSS — scoped styles + build-time hashing, superseded by the zero-config CSS pipeline (see Future, above)
 
 ---
 

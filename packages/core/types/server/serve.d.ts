@@ -33,8 +33,15 @@ export interface BractJSConfig {
     sourcemap?: "none" | "linked" | "inline" | "external";
     minify?: boolean;
     clientEnv?: string[];
-    /** User Bun bundler plugins appended to the client build (e.g. bun-plugin-tailwind). */
+    /** User Bun bundler plugins appended to the client build. */
     plugins?: import("bun").BunPlugin[];
+    /**
+     * Compile Tailwind v4 as part of the CSS graph. Requires `bun-plugin-tailwind`
+     * and `tailwindcss` in the app's devDependencies; import a stylesheet
+     * containing `@import "tailwindcss";` from `app/root.tsx` (or a route) and
+     * BractJS extracts, hashes, and `<link>`s it — no CLI step, no manual tag.
+     */
+    tailwind?: boolean;
     buildDir?: string;
     /** Directory for transformed image cache. Defaults to .bract-image-cache */
     imageCacheDir?: string;

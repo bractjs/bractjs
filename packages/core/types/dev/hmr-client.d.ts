@@ -3,6 +3,7 @@
  *
  * Message types:
  *   hmr:route  — swap a single route module without full page reload
+ *   hmr:css    — re-fetch stylesheets in place (no reload, no state loss)
  *   hmr:reload — full page reload (root/layout/non-route file changed)
  *
  * Module swap flow:

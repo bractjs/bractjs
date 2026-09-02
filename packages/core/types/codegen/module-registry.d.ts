@@ -20,9 +20,12 @@ interface DiskManifest {
     mode?: string;
     clientEntry: string;
     rootChunk?: string;
+    entryCss?: string[];
+    rootCss?: string[];
     routes: Record<string, {
         chunk: string;
         pattern: string;
+        css?: string[];
     }>;
 }
 /**

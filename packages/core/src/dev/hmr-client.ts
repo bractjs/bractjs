@@ -3,6 +3,7 @@
  *
  * Message types:
  *   hmr:route  — swap a single route module without full page reload
+ *   hmr:css    — re-fetch stylesheets in place (no reload, no state loss)
  *   hmr:reload — full page reload (root/layout/non-route file changed)
  *
  * Module swap flow:
@@ -39,6 +40,18 @@ export const hmrClientScript: string = `
         var msg = JSON.parse(event.data);
         if (msg.type === "hmr:reload") {
           location.reload();
+        } else if (msg.type === "hmr:css") {
+          // Re-point every framework-emitted stylesheet at a cache-busted URL.
+          // Dev CSS paths are stable (unhashed), so mutating href in place is
+          // enough and preserves all client state. Only /build/ hrefs are
+          // touched, matching the same-origin check the route path enforces.
+          var links = document.querySelectorAll('link[rel="stylesheet"]');
+          for (var i = 0; i < links.length; i++) {
+            var el = links[i];
+            var href = el.getAttribute("href") || "";
+            if (!/^\\/build\\//.test(href)) continue;
+            el.setAttribute("href", href.split("?")[0] + "?t=" + Date.now());
+          }
         } else if (msg.type === "hmr:route" && msg.pattern != null && msg.chunkUrl) {
           // Validate chunk URL is a same-origin relative path before importing.
           // Prevents a compromised/MITM'd dev WS from executing arbitrary URLs.

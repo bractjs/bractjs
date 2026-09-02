@@ -3,6 +3,13 @@ import { renderToReadableStream } from "react-dom/server";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
 import { MetaTags } from "../shared/meta-tags.tsx";
 import { CspNonceContext } from "../shared/nonce-context.tsx";
+import {
+  baseCssHrefs,
+  CSS_PRECEDENCE_BASE,
+  CSS_PRECEDENCE_ROUTE,
+  routeCssHrefs,
+  StyleLinks,
+} from "../shared/style-links.tsx";
 import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
 import { mergeMeta } from "./meta.ts";
@@ -10,7 +17,11 @@ import { mergeMeta } from "./meta.ts";
 export interface ServerManifest {
   clientEntry: string;
   rootChunk?: string;
-  routes: Record<string, { file: string; chunk?: string; imports?: string[] }>;
+  /** CSS reachable from the client entry — linked on every document. */
+  entryCss?: string[];
+  /** CSS imported by `app/root.tsx` — linked on every document. */
+  rootCss?: string[];
+  routes: Record<string, { file: string; chunk?: string; imports?: string[]; css?: string[] }>;
 }
 
 export interface RenderOptions {
@@ -28,6 +39,12 @@ export interface RenderOptions {
   status?: number;
   /** Path of the matched route file (e.g. "routes/_index.tsx"), used by the client to pre-import the module before hydration. */
   routeFile?: string;
+  /**
+   * URL pattern of the matched route (the manifest key), used to link that
+   * route's extracted CSS. Omitted for the SPA shell, which has no matched
+   * route — the client links route CSS once it resolves one.
+   */
+  routePattern?: string;
   /** Per-request CSP nonce (set by the opt-in `csp()` middleware). Applied to the inline bootstrap script + client entry module tags. */
   nonce?: string;
   /**
@@ -69,10 +86,24 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   // re-renders the head.
   // CspNonceContext lets framework-emitted inline scripts deep in the app tree
   // (<LiveReload>'s HMR client) carry the per-request nonce.
+  // Stylesheets are hoisted into <head> by React exactly like the meta tags
+  // above, so the streamed HTML is styled on first paint — no FOUC, and no-JS
+  // clients get real <link> tags. Base (entry + root) is listed before the
+  // route's own CSS so the route wins the cascade.
   const tree = createElement(
     CspNonceContext.Provider,
     { value: options.nonce },
-    createElement(Fragment, null, createElement(MetaTags, { meta: mergedMeta }), shell),
+    createElement(
+      Fragment,
+      null,
+      createElement(MetaTags, { meta: mergedMeta }),
+      createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
+      createElement(StyleLinks, {
+        hrefs: routeCssHrefs(manifest, options.routePattern),
+        precedence: CSS_PRECEDENCE_ROUTE,
+      }),
+      shell,
+    ),
   );
 
   let renderError: unknown;

@@ -45,6 +45,8 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 24. [Build plugins (for custom `Bun.build`)](#24-build-plugins)
 25. [Configuration reference](#25-configuration-reference)
 26. [Full export index](#26-full-export-index)
+27. [Security model](#27-security-model)
+28. [Styling: CSS, Tailwind, CSS Modules](#28-styling)
 
 ---
 
@@ -54,7 +56,7 @@ BractJS requires [Bun](https://bun.sh). There is no Node.js runtime path.
 
 ```sh
 # Scaffold a new app
-bunx bractjs new my-app
+bunx @bractjs/bractjs new my-app
 cd my-app
 
 # Start the dev server (HMR on http://localhost:3000)
@@ -1469,7 +1471,6 @@ If you write your own `Bun.build()` (instead of `bractjs build`), you **must** a
 | Client | `routeShakePlugin(appDir)`           | Route loader/action/headers/middleware bodies (and their imports) ship to the browser. |
 | Client | `serverModuleStubPlugin`             | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle.         |
 | Client | `clientEnvPlugin(allowedKeys, env)`  | Server env vars leak into the browser bundle.                                    |
-| Client | `cssModulesPlugin`                   | `*.module.css` imports don't resolve.                                            |
 
 ```ts
 import {
@@ -1477,7 +1478,7 @@ import {
   createUseServerProxyPlugin,
   serverModuleStubPlugin,
   clientEnvPlugin,
-  cssModulesPlugin,
+  collectCssBundles,
 } from "@bractjs/bractjs/build";
 
 // Server bundle (target: "bun"):
@@ -1489,11 +1490,12 @@ plugins: [
   createUseServerProxyPlugin("./app"), // same appDir as createServer!
   routeShakePlugin("./app"), // register AFTER the use-server proxy plugin
   clientEnvPlugin(["PUBLIC_API_URL"], Bun.env as Record<string, string>),
-  cssModulesPlugin,
 ];
 ```
 
-> Always pass the **same `appDir`** to `createUseServerProxyPlugin` that you pass to `createServer` — action IDs hash the appDir-relative path, so a mismatch makes every `/_action` return 404. `transformCssModule(filePath)` is exported for custom CSS pipelines; `useServerProxyPlugin` is the legacy absolute-path variant. `serverModuleStubPlugin` stubs `*.server.ts` exports so a route can import a server module inside its loader/action without leaking source; `serverOnlyPlugin` is the stricter predecessor that hard-fails such imports instead (still exported for opt-in use).
+> Always pass the **same `appDir`** to `createUseServerProxyPlugin` that you pass to `createServer` — action IDs hash the appDir-relative path, so a mismatch makes every `/_action` return 404. `useServerProxyPlugin` is the legacy absolute-path variant. `serverModuleStubPlugin` stubs `*.server.ts` exports so a route can import a server module inside its loader/action without leaking source; `serverOnlyPlugin` is the stricter predecessor that hard-fails such imports instead (still exported for opt-in use).
+
+**CSS needs no plugin.** Bun extracts stylesheets on its own; set `metafile: true` and use `collectCssBundles(result.metafile, outdirAbs)` to map each JS entry-point output to its CSS bundle, then record those paths in the manifest (`entryCss` / `rootCss` / `routes[pattern].css`) so the server emits the `<link>` tags. See [§28 Styling](#28-styling).
 
 ---
 
@@ -1519,6 +1521,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | `minify`                             | `boolean`                 | `true`                 | Minify client bundles                                               |
 | `clientEnv`                          | `string[]`                | `[]`                   | `process.env` keys exposed to the client                            |
 | `plugins`                            | `BunPlugin[]`             | `[]`                   | Extra client-build plugins                                          |
+| `tailwind`                           | `boolean`                 | `false`                | Compile Tailwind v4 as part of the CSS graph — no CLI step (§28)    |
 | `adapter`                            | `BractAdapter`            | `BunAdapter`           | Custom server adapter                                               |
 | `i18n`                               | `I18nConfig`              | —                      | Locale config consumed by the i18n utilities                        |
 | `ssr`                                | `boolean`                 | `true`                 | `false` → SPA mode: static shell for every document GET (§21)       |
@@ -1567,7 +1570,7 @@ From `@bractjs/bractjs/build` ([packages/core/src/build-entry.ts](packages/core/
 
 **Build:** `runBuild`, `runPrerender`
 
-**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `routeShakePlugin`, `SERVER_ONLY_ROUTE_EXPORTS`, `serverModuleStubPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `cssModulesPlugin`, `transformCssModule`
+**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `routeShakePlugin`, `SERVER_ONLY_ROUTE_EXPORTS`, `serverModuleStubPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `tailwindPlugins`, `collectCssBundles`
 
 From `@bractjs/bractjs/codegen` ([packages/core/src/codegen-entry.ts](packages/core/src/codegen-entry.ts)):
 
@@ -1590,6 +1593,55 @@ BractJS ships secure defaults, but a few behaviors are worth understanding so yo
 - **CSP `style-src`.** The opt-in `csp()` middleware nonces all scripts, but its default `style-src` includes `'unsafe-inline'` for ergonomics. Pass `csp({ strict: true })` (or override `style-src` with a nonce/hash) if you want to block inline-style injection.
 - **Request body size.** Beyond the per-handler caps (1 MiB JSON for actions/api, 10 MiB route forms), the Bun adapter enforces a hard `maxRequestBodySize` ceiling (default 16 MiB) so no path can stream an unbounded body into memory. Raise it via the `maxRequestBodySize` config for a dedicated large-upload endpoint.
 - **Already handled for you:** path traversal + symlink escape on `/public` and `/_image`, open-redirect neutralization (`redirect()` requires `{ allowExternal: true }` to go off-origin), XSS-safe SSR data island (`safeStringify`), prototype-pollution rejection on action **and** `/api` JSON bodies plus null-prototype objects for form/search inputs, request body-size caps + global backstop, signed/constant-time-verified cookie sessions, CSP defaults (`script-src` nonce + `strict-dynamic`, `form-action`/`base-uri`/`frame-ancestors` `'self'`, `object-src 'none'`), and CSRF via layered `Sec-Fetch-Site` + custom-header + `Origin` checks across actions, `/_stream`, route mutations, and `/api`.
+
+---
+
+## 28. Styling
+
+Import a stylesheet and you're done — there is no CSS config, no separate CLI step, and no `<link>` to hand-write:
+
+```tsx
+// app/root.tsx — app-wide styles
+import "./styles.css";
+```
+
+```tsx
+// app/routes/about.tsx — styles only this route needs
+import "./about.css";
+```
+
+The build extracts each stylesheet into a real, content-hashed `.css` file and records it in the route manifest; the server emits the `<link rel="stylesheet">` tags into the **streamed HTML**. That ordering is the point: the document arrives styled, so there is no flash of unstyled content and clients without JavaScript still get your CSS.
+
+**Per-route splitting is automatic.** Each route is its own bundle entry, so a stylesheet imported by one route ships only with that route. Visiting `/` never downloads `/about`'s CSS; on client navigation the router adds the incoming route's stylesheet and — because the links are rendered with React's `precedence` — waits for it to load before committing, so a route swap never paints unstyled.
+
+**Cascade order** is `entryCss` → `rootCss` → route CSS, so a route's styles win over app-wide ones regardless of load order.
+
+**In development**, editing a `.css` file hot-swaps the stylesheet in place: no page reload, no lost client state.
+
+### Tailwind v4
+
+```sh
+bun add -d bun-plugin-tailwind tailwindcss
+```
+
+```ts
+// bractjs.config.ts
+export default defineConfig({ tailwind: true });
+```
+
+```css
+/* app/styles.css — imported from app/root.tsx */
+@import "tailwindcss";
+@source "./**/*.{ts,tsx}";
+```
+
+That's the whole setup. Tailwind compiles as part of the bundle and its output flows through the same extract → hash → link path as any other stylesheet. If `tailwind: true` is set without the plugin installed, the build fails with an actionable message rather than silently emitting no styles. See [`examples/cms`](examples/cms/) for a full app using it.
+
+### CSS Modules
+
+`import styles from "./x.module.css"` is scoped by Bun at build time and extracted like any other stylesheet, and `bractjs codegen:seed` generates the ambient types so the import typechecks.
+
+> **Known limitation — CSS Modules do not have server/client class-name parity.** `bractjs dev` and `bractjs start` import route modules from source, and Bun's *runtime* resolves a `.module.css` import to a file path rather than the bundler's class-name map. The server therefore renders no class where the browser renders the scoped one, producing a hydration mismatch and unstyled SSR output for those elements. Plain `.css` imports are unaffected and work correctly in every run mode — **prefer them for anything server-rendered**, and reserve CSS Modules for client-only components.
 
 ---
 

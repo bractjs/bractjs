@@ -316,7 +316,14 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
     // Root, layouts, and other files: fall back to full page reload.
     const isRoute = file.startsWith("routes/") && !file.endsWith("layout.tsx") && !file.endsWith("layout.ts");
 
-    if (isRoute) {
+    if (file.endsWith(".css")) {
+      // Styles are extracted to real files, so a CSS edit needs no JS swap and
+      // no reload — the browser just re-fetches the rebuilt stylesheet. Checked
+      // before `isRoute` because a .css file living under routes/ would
+      // otherwise be mistaken for a route module.
+      hmr.broadcast({ type: "hmr:css", file, duration });
+      console.log(`✓ ${file} → style update in ${duration}ms`);
+    } else if (isRoute) {
       const pattern = filePathToPattern(file);
       // Chunk URL = same basename as route file; splitting build puts it in build/client/
       const chunkUrl = `/build/client/${basename(file, extname(file))}.js`;

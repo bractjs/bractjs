@@ -1,6 +1,8 @@
 export interface RouteManifestEntry {
     chunk: string;
     pattern: string;
+    /** Public paths of this route's extracted CSS bundles, linked when it renders. */
+    css?: string[];
 }
 export interface RouteManifest {
     version: 1;
@@ -8,6 +10,10 @@ export interface RouteManifest {
     mode?: "production";
     clientEntry: string;
     rootChunk?: string;
+    /** CSS reachable from the client entry — linked on every document. */
+    entryCss?: string[];
+    /** CSS imported by `app/root.tsx` — linked on every document. */
+    rootCss?: string[];
     routes: Record<string, RouteManifestEntry>;
 }
 /**
@@ -19,6 +25,10 @@ export declare function generateManifest(opts: {
     clientEntry: string;
     rootChunk?: string;
     routeChunks: Map<string, string>;
+    /** Per-pattern CSS bundles, keyed like `routeChunks`. */
+    routeCss?: Map<string, string[]>;
+    entryCss?: string[];
+    rootCss?: string[];
     mode?: "production";
 }): RouteManifest;
 /**
