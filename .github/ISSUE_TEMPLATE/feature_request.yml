@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a capability BractJS doesn't have.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The problem, not the solution — it often has a shorter path.
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How are you working around it today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: Optional. If you have a shape in mind, sketch it.
+      render: tsx
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I've checked [ROADMAP.md](https://github.com/bractjs/bractjs/blob/main/ROADMAP.md) — this isn't already planned.
+        - label: I've checked the [README](https://github.com/bractjs/bractjs#readme) — this doesn't already exist under another name.

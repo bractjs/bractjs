@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/bractjs/bractjs/security/advisories/new
+    about: Report privately — please don't open a public issue.
+  - name: Documentation
+    url: https://github.com/bractjs/bractjs/tree/main/docs
+    about: Guides (tutorial, concepts, auth, deployment) and the README API reference.
