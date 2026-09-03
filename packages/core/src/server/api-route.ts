@@ -138,37 +138,37 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
     const invoke = async (): Promise<Response> => {
       let input: unknown;
       if (request.method !== "GET" && request.method !== "DELETE") {
-      // Trust an advertised Content-Length up front so oversized payloads
-      // are rejected before we buffer them.
-      const clRaw = request.headers.get("Content-Length");
-      if (clRaw) {
-        const cl = Number(clRaw);
-        if (Number.isFinite(cl) && cl > MAX_BODY_BYTES) {
-          return new Response("Payload Too Large", { status: 413 });
+        // Trust an advertised Content-Length up front so oversized payloads
+        // are rejected before we buffer them.
+        const clRaw = request.headers.get("Content-Length");
+        if (clRaw) {
+          const cl = Number(clRaw);
+          if (Number.isFinite(cl) && cl > MAX_BODY_BYTES) {
+            return new Response("Payload Too Large", { status: 413 });
+          }
         }
-      }
 
-      const ct = request.headers.get("Content-Type") ?? "";
-      if (ct.includes("application/json")) {
-        const text = await request.text();
-        // Defense in depth: clients can lie about Content-Length.
-        if (text.length > MAX_BODY_BYTES) {
-          return new Response("Payload Too Large", { status: 413 });
+        const ct = request.headers.get("Content-Type") ?? "";
+        if (ct.includes("application/json")) {
+          const text = await request.text();
+          // Defense in depth: clients can lie about Content-Length.
+          if (text.length > MAX_BODY_BYTES) {
+            return new Response("Payload Too Large", { status: 413 });
+          }
+          try {
+            input = text ? JSON.parse(text) : undefined;
+          } catch {
+            return new Response("Bad Request: invalid JSON", { status: 400 });
+          }
+          // SECURITY(high): reject prototype-pollution keys before the parsed
+          // body reaches a handler that might merge it into another object.
+          // Parity with the /_action JSON path.
+          if (hasForbiddenKey(input)) {
+            return new Response("Bad Request: forbidden keys", { status: 400 });
+          }
+        } else if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
+          input = await request.formData();
         }
-        try {
-          input = text ? JSON.parse(text) : undefined;
-        } catch {
-          return new Response("Bad Request: invalid JSON", { status: 400 });
-        }
-        // SECURITY(high): reject prototype-pollution keys before the parsed
-        // body reaches a handler that might merge it into another object.
-        // Parity with the /_action JSON path.
-        if (hasForbiddenKey(input)) {
-          return new Response("Bad Request: forbidden keys", { status: 400 });
-        }
-      } else if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
-        input = await request.formData();
-      }
       }
 
       const result = await def.handler(input, request, ctx);

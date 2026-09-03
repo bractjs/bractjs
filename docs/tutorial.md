@@ -40,7 +40,7 @@ export function addNote(title: string, body: string): Note {
 }
 ```
 
-The `.server.ts` suffix matters: these files **never reach the client bundle** — on the client their imports are replaced with inert stubs, so a DB client or API key here can't leak into browser JS. (Route `loader`/`action` exports are also stripped from client bundles automatically; `.server.ts` is the explicit marker for *everything else* server-only. See [Concepts](concepts.md#what-ships-to-the-client).)
+The `.server.ts` suffix matters: these files **never reach the client bundle** — on the client their imports are replaced with inert stubs, so a DB client or API key here can't leak into browser JS. (Route `loader`/`action` exports are also stripped from client bundles automatically; `.server.ts` is the explicit marker for _everything else_ server-only. See [Concepts](concepts.md#what-ships-to-the-client).)
 
 > Dev note: editing a `*.server.ts` file makes `bractjs dev` restart itself (module-scope state resets). Editing route files does not.
 
@@ -69,7 +69,9 @@ export default function NotesIndex() {
       <ul>
         {notes.map((n) => (
           <li key={n.id}>
-            <Link to="/notes/:id" params={{ id: n.id }}>{n.title}</Link>
+            <Link to="/notes/:id" params={{ id: n.id }}>
+              {n.title}
+            </Link>
           </li>
         ))}
       </ul>
@@ -121,13 +123,13 @@ const actionData = useActionData<typeof action>();
   <textarea name="body" placeholder="Body" />
   {actionData?.fieldErrors?.body && <p>{actionData.fieldErrors.body[0]}</p>}
   <button type="submit">Add note</button>
-</Form>
+</Form>;
 ```
 
 What just happened:
 
 - `<Form method="post">` submits without a full page reload; the `action` runs on the server.
-- `safeValidate` returns `{ ok, data, fieldErrors, firstError }` — the clean idiom for inline form errors. (Its sibling `validate()` *throws* a 400 `Response` instead — handy when any failure should just be a 400.)
+- `safeValidate` returns `{ ok, data, fieldErrors, firstError }` — the clean idiom for inline form errors. (Its sibling `validate()` _throws_ a 400 `Response` instead — handy when any failure should just be a 400.)
 - On success the action redirects, and BractJS **automatically revalidates the loaders**, so the new note appears without any manual refetching.
 - Cross-site POSTs are rejected with a 403 before your action ever runs — CSRF protection is on by default.
 
@@ -163,7 +165,7 @@ export default function NoteDetail() {
 }
 ```
 
-Throwing an `HttpError` from a loader is intentional control flow — it renders the 404 page rather than an error boundary. Any *other* thrown error is caught, sanitized (generic message in production), and rendered by the nearest `ErrorBoundary` export.
+Throwing an `HttpError` from a loader is intentional control flow — it renders the 404 page rather than an error boundary. Any _other_ thrown error is caught, sanitized (generic message in production), and rendered by the nearest `ErrorBoundary` export.
 
 Bonus: run `bunx bractjs codegen` and `<Link to>` / `params` become **typed against your actual routes** — a typo'd path or missing param is a compile error. See [§18 Typed routes](../README.md#18-typed-routes).
 

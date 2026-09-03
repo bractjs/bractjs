@@ -149,10 +149,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
           entryCss: m.entryCss,
           rootCss: m.rootCss,
           routes: Object.fromEntries(
-            Object.entries(m.routes).map(([pat, e]) => [
-              pat,
-              { file: e.chunk, chunk: e.chunk, css: e.css },
-            ]),
+            Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk, css: e.css }]),
           ),
         }))
       : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);

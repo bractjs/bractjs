@@ -35,7 +35,10 @@ async function buildFixture(): Promise<{
   writeFileSync(join(src, "styles.module.css"), MODULE_CSS);
   writeFileSync(join(src, "a.css"), ROUTE_A_CSS);
   // root imports the app-wide stylesheet
-  writeFileSync(join(src, "root.tsx"), `import "./global.css";\nexport default function Root() { return null; }\n`);
+  writeFileSync(
+    join(src, "root.tsx"),
+    `import "./global.css";\nexport default function Root() { return null; }\n`,
+  );
   // routeA has its own CSS + a CSS module
   writeFileSync(
     join(src, "routeA.tsx"),

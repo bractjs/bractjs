@@ -6,11 +6,17 @@ import jsxA11y from "eslint-plugin-jsx-a11y";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
 
-// Flat config that replaces biome.json. Non-type-checked (no parserOptions.project)
-// to match Biome's speed and avoid wiring the pnpm workspace's tsconfigs. Rule
-// levels mirror the tuned set that lived in biome.json's `linter.rules`.
+// Non-type-checked (no parserOptions.project) for speed, and to avoid wiring the
+// pnpm workspace's tsconfigs into the linter.
+//
+// Two pins matter here and are both deliberate (see CONTRIBUTING.md):
+//   - ESLint is 9.x — eslint-plugin-react and eslint-plugin-jsx-a11y cap at
+//     ESLint 9 and crash on ESLint 10's removed rule-context API.
+//   - The ROOT workspace pins TypeScript 5.x — typescript-eslint needs the
+//     TypeScript compiler API, which the TypeScript 7 native port does not
+//     ship. packages/core and the examples still typecheck with TypeScript 7.
 export default tseslint.config(
-  // Ignore list mirrors biome.json `files.includes` negations.
+  // Keep in sync with .prettierignore.
   {
     ignores: [
       "**/node_modules/**",
@@ -18,6 +24,10 @@ export default tseslint.config(
       "**/dist/**",
       "**/_generated/**",
       "**/route-types.gen.ts",
+      // Emitted by `bun run typegen` (tsc --emitDeclarationOnly). Linting
+      // generated output can only ever produce findings nobody can fix at the
+      // source — the next typegen overwrites them.
+      "packages/core/types/**",
       "pnpm-lock.yaml",
       "**/.tmp-*",
       "examples/*/src/client/**",
@@ -52,21 +62,21 @@ export default tseslint.config(
       "react/react-in-jsx-scope": "off",
       "react/prop-types": "off",
 
-      // ── Mapped from biome.json ──────────────────────────────────────────
-      "@typescript-eslint/no-explicit-any": "off", // biome noExplicitAny: off
-      "no-console": "off", // biome noConsole: off
-      "@typescript-eslint/no-empty-object-type": "off", // biome noEmptyInterface: off
-      "@typescript-eslint/no-non-null-assertion": "off", // biome noNonNullAssertion: off
-      "no-cond-assign": "warn", // ~biome noAssignInExpressions
-      "react/no-array-index-key": "warn", // biome noArrayIndexKey
-      "array-callback-return": "warn", // biome useIterableCallbackReturn
-      "react/no-danger": "warn", // biome noDangerouslySetInnerHtml
-      "react-hooks/exhaustive-deps": "warn", // biome useExhaustiveDependencies
-      "react/no-children-prop": "warn", // biome noChildrenProp
+      // ── Deliberately relaxed ────────────────────────────────────────────
+      "@typescript-eslint/no-explicit-any": "off",
+      "no-console": "off", // the framework logs deliberately
+      "@typescript-eslint/no-empty-object-type": "off", // module-augmentation interfaces
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "no-cond-assign": "warn",
+      "react/no-array-index-key": "warn",
+      "array-callback-return": "warn",
+      "react/no-danger": "warn",
+      "react-hooks/exhaustive-deps": "warn",
+      "react/no-children-prop": "warn",
 
-      // Biome surfaced unused vars as non-blocking warnings, not errors; match
-      // that, and honor the repo's `_`-prefix + rest-sibling "intentionally
-      // unused" conventions (e.g. `_env`/`_ctx`, `const { passwordHash, ...u }`).
+      // Unused vars are advisory, not blocking, and the repo's `_`-prefix +
+      // rest-sibling "intentionally unused" conventions are honored
+      // (e.g. `_env`/`_ctx`, `const { passwordHash, ...u }`).
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {
@@ -78,9 +88,9 @@ export default tseslint.config(
       ],
       // Allow irregular whitespace inside template literals — the directive
       // tests embed a real UTF-8 BOM to assert the parser tolerates it. Still
-      // flagged in code/identifiers. Biome did not enforce this at all.
+      // flagged in code/identifiers.
       "no-irregular-whitespace": ["error", { skipTemplates: true }],
-      // No Biome equivalent; escaping apostrophes in prose copy is pure noise.
+      // Escaping apostrophes in prose copy is pure noise.
       "react/no-unescaped-entities": "off",
     },
   },
@@ -95,8 +105,8 @@ export default tseslint.config(
     },
   },
 
-  // jsx-a11y had "info" in Biome; ESLint has no info level, so downgrade a11y to
-  // advisory warnings rather than the plugin's default errors. Only the rules the
+  // a11y findings are advisory here rather than the plugin's default errors, so a
+  // real framework bug is never buried under them. Only the rules the
   // recommended config actually ENABLES are touched — rules it ships as "off"
   // (e.g. the deprecated label-has-for, control-has-associated-label) stay off —
   // and each rule keeps its recommended options.

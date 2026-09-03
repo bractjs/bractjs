@@ -1,17 +1,17 @@
 # Authentication end to end
 
-Auth is where BractJS's scoping rules matter most: the framework gives you secure primitives, but *where you attach a guard determines what it actually protects*. This guide builds a session-based login and then walks every server surface, showing exactly how each one gets guarded. The patterns come from [`examples/cms`](../examples/cms/), which implements all of this (plus 2FA and OAuth) and is the reference when in doubt.
+Auth is where BractJS's scoping rules matter most: the framework gives you secure primitives, but _where you attach a guard determines what it actually protects_. This guide builds a session-based login and then walks every server surface, showing exactly how each one gets guarded. The patterns come from [`examples/cms`](../examples/cms/), which implements all of this (plus 2FA and OAuth) and is the reference when in doubt.
 
 ## The one-table summary
 
 Guards do not cascade across surfaces. This table is the whole guide in miniature — everything below is elaboration:
 
-| Surface | Guarded by | NOT guarded by |
-| ------- | ---------- | -------------- |
-| Pages + their `/_data` (soft-nav JSON) | Layout/route `middleware` export, or `beforeLoad` | A check inside the component |
-| Typed `/api` endpoints | `route(..., { middleware: [...] })`, or checks in the handler | Layout/route `middleware` exports |
-| Server actions (`/_action`, `/_stream`) | Checks **inside the function body** | Layout/route `middleware` exports |
-| Everything at once | Global `pipeline.use(...)` in `app/server.ts` (e.g. `authGuard`) | — |
+| Surface                                 | Guarded by                                                       | NOT guarded by                    |
+| --------------------------------------- | ---------------------------------------------------------------- | --------------------------------- |
+| Pages + their `/_data` (soft-nav JSON)  | Layout/route `middleware` export, or `beforeLoad`                | A check inside the component      |
+| Typed `/api` endpoints                  | `route(..., { middleware: [...] })`, or checks in the handler    | Layout/route `middleware` exports |
+| Server actions (`/_action`, `/_stream`) | Checks **inside the function body**                              | Layout/route `middleware` exports |
+| Everything at once                      | Global `pipeline.use(...)` in `app/server.ts` (e.g. `authGuard`) | —                                 |
 
 ## 1. Sessions
 
@@ -23,9 +23,9 @@ import { createCookieSession } from "@bractjs/bractjs";
 
 export const session = createCookieSession({
   name: "__session",
-  secrets: [Bun.env.SESSION_SECRET!],   // ≥16 chars; rotate by prepending a new one
-  maxAge: 60 * 60 * 24 * 7,             // 1 week
-  secure: true,                         // false only for local HTTP dev
+  secrets: [Bun.env.SESSION_SECRET!], // ≥16 chars; rotate by prepending a new one
+  maxAge: 60 * 60 * 24 * 7, // 1 week
+  secure: true, // false only for local HTTP dev
   sameSite: "Lax",
 });
 ```
@@ -39,7 +39,10 @@ A pair of helpers keeps the rest of the app clean:
 import { redirect } from "@bractjs/bractjs";
 import { session } from "./session.server.ts";
 
-export interface User { id: string; name: string }
+export interface User {
+  id: string;
+  name: string;
+}
 
 export async function getUser(request: Request): Promise<User | null> {
   const s = await session.getSession(request.headers.get("Cookie"));
@@ -50,7 +53,7 @@ export async function requireUser(request: Request): Promise<User> {
   const user = await getUser(request);
   if (!user) {
     const next = encodeURIComponent(new URL(request.url).pathname);
-    throw redirect(`/login?next=${next}`);   // thrown redirects are control flow
+    throw redirect(`/login?next=${next}`); // thrown redirects are control flow
   }
   return user;
 }
@@ -92,7 +95,7 @@ export default function Login() {
 }
 ```
 
-Logout is an action that commits an expired session and redirects. Note what you did *not* build: CSRF protection. Cross-site form POSTs are already rejected with a 403 before any action runs.
+Logout is an action that commits an expired session and redirects. Note what you did _not_ build: CSRF protection. Cross-site form POSTs are already rejected with a 403 before any action runs.
 
 ## 3. Gating pages — and why not in the component
 
@@ -111,7 +114,7 @@ import { getUser } from "../../auth.server.ts";
 const requireAuth: RouteMiddlewareFunction = async (ctx, next) => {
   const user = await getUser(ctx.request);
   if (!user) return redirect("/login");
-  ctx.context.user = user;              // now visible to every loader below
+  ctx.context.user = user; // now visible to every loader below
   return next();
 };
 
@@ -126,7 +129,7 @@ export default function DashboardLayout() {
 
 ### The public-paths exception
 
-If the *login page itself* lives inside the gated subtree, gate-then-exempt — otherwise unauthenticated visitors to `/login` redirect to `/login` forever. From [`examples/cms`](../examples/cms/app/routes/admin/layout.tsx), which does this in the layout **loader** (equally safe — loaders are behind the same shared gate sequence):
+If the _login page itself_ lives inside the gated subtree, gate-then-exempt — otherwise unauthenticated visitors to `/login` redirect to `/login` forever. From [`examples/cms`](../examples/cms/app/routes/admin/layout.tsx), which does this in the layout **loader** (equally safe — loaders are behind the same shared gate sequence):
 
 ```ts
 const PUBLIC_PATHS = new Set(["/admin/login", "/admin/verify", "/admin/logout"]);
@@ -134,11 +137,11 @@ const PUBLIC_PATHS = new Set(["/admin/login", "/admin/verify", "/admin/logout"])
 export async function loader({ request }: LoaderArgs) {
   const pathname = new URL(request.url).pathname;
   if (PUBLIC_PATHS.has(pathname)) return { user: await getAdmin(request) };
-  return { user: await requireAdmin(request) };   // throws redirect if anonymous
+  return { user: await requireAdmin(request) }; // throws redirect if anonymous
 }
 ```
 
-Every public sub-path must be listed deliberately — when the CMS added 2FA, `/admin/verify` had to join the set because it runs *before* a full session exists.
+Every public sub-path must be listed deliberately — when the CMS added 2FA, `/admin/verify` had to join the set because it runs _before_ a full session exists.
 
 ## 4. Guarding typed `/api` endpoints
 
@@ -176,12 +179,12 @@ Every exported function of a `"use server"` module is a public RPC endpoint at `
 import { requireUser } from "./auth.server.ts";
 
 export async function deletePost(request: Request, postId: string) {
-  const user = await requireUser(request);       // first line, every action
+  const user = await requireUser(request); // first line, every action
   await db.posts.deleteOwned(postId, user.id);
 }
 ```
 
-Streaming actions (`GET /_stream`) are invoked with *no caller input* — they must be safe to call with none, and must authorize themselves the same way. ([§27](../README.md#27-security-model))
+Streaming actions (`GET /_stream`) are invoked with _no caller input_ — they must be safe to call with none, and must authorize themselves the same way. ([§27](../README.md#27-security-model))
 
 ## 6. The global option: `authGuard`
 
@@ -192,7 +195,7 @@ To attach identity to **every** request — pages, `/api`, actions, all of it �
 import { authGuard, pipeline } from "@bractjs/bractjs";
 import { session } from "./session.server.ts";
 
-pipeline.use(authGuard({ session }));           // sets ctx.context.user everywhere
+pipeline.use(authGuard({ session })); // sets ctx.context.user everywhere
 // authGuard({ session, required: true })       // …or hard-401 everything unauthenticated
 ```
 

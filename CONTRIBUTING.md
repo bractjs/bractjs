@@ -61,9 +61,24 @@ the single-binary path and must keep passing:
 binary). See the contributor note in the README's single-binary section for the
 constraints these enforce.
 
-> **Note:** `bunx tsc` may rewrite `pnpm-lock.yaml` as a side effect (it triggers
-> a Bun dependency resolve). If a typecheck leaves the lockfile dirty,
-> `git checkout pnpm-lock.yaml` to restore it.
+## TypeScript versions (why there are two)
+
+`packages/core` and both examples pin **TypeScript 7** — that's what `tsc`,
+`pnpm typecheck`, and `bun run typegen` use. The **root** workspace pins
+**TypeScript 5.9.3**, and only the lint toolchain sees it.
+
+The reason is that TypeScript 7 is the native Go port: it ships a compiler, not
+a compiler _API_, so `ts.ModuleKind`, `ts.sys` and the rest are absent.
+`typescript-eslint` is built on that API and crashes on startup without it, and
+no release supports TS 7 yet. Since `typescript` is a peer dependency resolved
+from the importing package, giving the root a TS 5 satisfies ESLint while
+leaving every package that actually runs `tsc` on TS 7.
+
+ESLint itself is pinned to **9.x**: `eslint-plugin-react` and
+`eslint-plugin-jsx-a11y` both cap at ESLint 9 and crash on ESLint 10's removed
+rule-context API.
+
+Revisit both pins once `typescript-eslint` supports TypeScript 7.
 
 ## Releasing `@bractjs/bractjs`
 

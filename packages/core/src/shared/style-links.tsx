@@ -33,9 +33,7 @@ export function StyleLinks({ hrefs, precedence }: { hrefs: string[]; precedence:
   return createElement(
     Fragment,
     null,
-    ...hrefs.map((href) =>
-      createElement("link", { key: href, rel: "stylesheet", href, precedence }),
-    ),
+    ...hrefs.map((href) => createElement("link", { key: href, rel: "stylesheet", href, precedence })),
   );
 }
 
@@ -52,7 +50,10 @@ export function baseCssHrefs(manifest: Pick<ServerManifest, "entryCss" | "rootCs
  * unmatched pattern or a route with no CSS, so callers can render
  * unconditionally.
  */
-export function routeCssHrefs(manifest: Pick<ServerManifest, "routes">, pattern: string | null | undefined): string[] {
+export function routeCssHrefs(
+  manifest: Pick<ServerManifest, "routes">,
+  pattern: string | null | undefined,
+): string[] {
   if (!pattern) return [];
   return dedupe(manifest.routes?.[pattern]?.css ?? []);
 }

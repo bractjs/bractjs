@@ -39,19 +39,14 @@ describe("typed API route middleware", () => {
   });
 
   test("ctx.context set by middleware is visible to the handler", async () => {
-    route(
-      "GET",
-      "/api/me",
-      async (_input, _req, ctx) => ({ user: ctx.context.user }),
-      {
-        middleware: [
-          async (ctx, next) => {
-            ctx.context.user = "alice";
-            return next();
-          },
-        ],
-      },
-    );
+    route("GET", "/api/me", async (_input, _req, ctx) => ({ user: ctx.context.user }), {
+      middleware: [
+        async (ctx, next) => {
+          ctx.context.user = "alice";
+          return next();
+        },
+      ],
+    });
 
     const res = await handleApiRequest(new Request("http://localhost/api/me"));
     expect(res?.status).toBe(200);

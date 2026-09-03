@@ -4,12 +4,12 @@ The [root README](../README.md) is the **complete API reference** — every expo
 
 ## Start here
 
-| Guide | What it covers | Read it when |
-| ----- | -------------- | ------------ |
-| [Tutorial: your first app](tutorial.md) | Scaffold → routes → loaders → forms with validation → a typed API endpoint → a single-binary build, in ~15 minutes. | You're new to BractJS. |
-| [Concepts: how BractJS works](concepts.md) | The request lifecycle, the three run modes, what ships to the client, and how dev-mode change handling behaves. | You want the mental model before (or after) the tutorial. |
+| Guide                                          | What it covers                                                                                                              | Read it when                                                       |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [Tutorial: your first app](tutorial.md)        | Scaffold → routes → loaders → forms with validation → a typed API endpoint → a single-binary build, in ~15 minutes.         | You're new to BractJS.                                             |
+| [Concepts: how BractJS works](concepts.md)     | The request lifecycle, the three run modes, what ships to the client, and how dev-mode change handling behaves.             | You want the mental model before (or after) the tutorial.          |
 | [Authentication end to end](authentication.md) | Sessions, gating routes, guarding `/api` and server actions, CSRF — and the scoping rules that make or break an auth setup. | You're adding login to an app. **Read this before shipping auth.** |
-| [Deployment](deployment.md) | `build`/`start`, the single-binary pipeline, rendering modes (SSR / SPA / prerender), and a production checklist. | You're taking an app to production. |
+| [Deployment](deployment.md)                    | `build`/`start`, the single-binary pipeline, rendering modes (SSR / SPA / prerender), and a production checklist.           | You're taking an app to production.                                |
 
 ## Suggested reading order
 
@@ -19,10 +19,10 @@ The [root README](../README.md) is the **complete API reference** — every expo
 
 ## Working examples
 
-| Example | Scope |
-| ------- | ----- |
-| [`examples/todo`](../examples/todo/) | Minimal — routes, loaders, actions. Port 3000. |
-| [`examples/cms`](../examples/cms/) | Full app — password + email-OTP 2FA, Google/Microsoft OAuth, RBAC, Tailwind v4, SQLite, its own test suite. Port 3200. |
+| Example                              | Scope                                                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| [`examples/todo`](../examples/todo/) | Minimal — routes, loaders, actions. Port 3000.                                                                         |
+| [`examples/cms`](../examples/cms/)   | Full app — password + email-OTP 2FA, Google/Microsoft OAuth, RBAC, Tailwind v4, SQLite, its own test suite. Port 3200. |
 
 ## Contributing to these docs
 
