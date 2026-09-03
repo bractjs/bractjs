@@ -39,7 +39,7 @@ The binary boots with **zero filesystem reads of `app/`**. `--asset build/client
 
 - `app/server.ts` is the entrypoint. Its scaffolded shape — the four `_generated` imports passed to `createServer()` — is what makes zero-read boot possible; keep them.
 - `app/_generated/` and `route-types.gen.ts` are **generated** — never hand-edit; re-run codegen instead. Re-run `codegen:registry` after adding/removing routes or `"use server"` files (or just use `bractjs compile`, which always runs the full sequence).
-- Global middleware belongs in `app/server.ts` — that's how it applies in dev, `start`, *and* the binary (see [Concepts](concepts.md#the-three-run-modes)).
+- Global middleware belongs in `app/server.ts` — that's how it applies in dev, `start`, _and_ the binary (see [Concepts](concepts.md#the-three-run-modes)).
 - `lifecycle.ts` hooks are picked up automatically by `dev`/`start`, but a compiled entry wires them explicitly: `createServer({ ...lifecycle })` ([§16](../README.md#16-lifecycle-hooks)).
 
 ## Rendering modes and what they change
@@ -52,6 +52,33 @@ All opt-in, all composable with either run path ([§21](../README.md#21-build--r
 - **Prerendering (SSG)** — `prerender: ["/", "/about", ...]` in `bractjs.config.ts` (or an async function returning paths). The build runs the real loaders and writes each path's HTML **and** `/_data` payload under `build/client/_prerender/`; production serves those before falling back to dynamic SSR. Loaders' dependencies (DB, env) must be available at build time; paths must be concrete; a query string opts back into SSR.
 
 Prerender note for binaries: ship `build/client/` (including `_prerender/`) via `--asset` or alongside the executable. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs ([§23](../README.md#23-custom-adapters)).
+
+## Behind a reverse proxy
+
+Almost every production deployment puts something in front of BractJS that terminates TLS — nginx, Caddy, a cloud load balancer, Cloudflare — and forwards the request to Bun over plain HTTP. When that happens the app no longer sees the URL the browser actually asked for: Bun reconstructs `request.url` from the forwarded `Host` header on the **HTTP** hop, so the app reads `http://app.example.com` while the browser sent `https://app.example.com`.
+
+BractJS only needs that distinction in one place — the CSRF gate, which compares the browser's `Origin` header against the request's own origin. If the proxy doesn't say it terminated TLS, the two disagree on the scheme and the gate rejects a legitimate same-origin POST with `403 Forbidden`.
+
+**Configure your proxy to send `X-Forwarded-Proto`.** BractJS reads it (and `X-Forwarded-Host`, if the proxy rewrites `Host`) when validating `Origin`:
+
+```nginx
+# nginx does NOT set this by default — you must add it.
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host  $host;
+}
+```
+
+Caddy, Fly.io, Railway, Render, and Cloudflare set `X-Forwarded-Proto` for you; nginx and bare HAProxy do not.
+
+Two things worth knowing about the failure mode, because it is easy to misdiagnose:
+
+- **It only affects requests without JavaScript.** The client router sets an `X-BractJS-Action` header on every submit, and that satisfies the CSRF gate on its own. So the app works perfectly while you click around, and only breaks for a plain `<Form>` submitted before hydration finishes or with JS disabled — a rare enough path that it can ship unnoticed.
+- **Forwarding these headers does not weaken CSRF.** They are non-safelisted request headers, so a browser cannot attach them cross-origin without a CORS preflight the framework never approves, and a non-browser client that can set arbitrary headers could already pass the gate with `X-BractJS-Action`. `Sec-Fetch-Site` still vetoes cross-site requests before either header is read. ([§27](../README.md#27-security-model))
+
+If your proxy strips `Sec-Fetch-Site` (some WAFs do), the gate falls back to this `Origin` comparison — which is exactly why the forwarded headers need to be right.
 
 ## Embedding in your own server
 
@@ -73,6 +100,7 @@ Prerender note for binaries: ship `build/client/` (including `_prerender/`) via 
 - [ ] `cors()` only if you actually serve cross-origin clients, with explicit origins — and never expose `X-BractJS-Action` in a custom CORS layer (it's part of the CSRF gate)
 - [ ] Auth checklist from the [authentication guide](authentication.md#checklist) done
 - [ ] Body-size ceiling (`maxRequestBodySize`, default 16 MiB) raised only if you have a real large-upload endpoint
+- [ ] Behind a TLS-terminating proxy: `X-Forwarded-Proto` forwarded, and a no-JS form POST verified end to end (see [above](#behind-a-reverse-proxy))
 
 **Operations**
 

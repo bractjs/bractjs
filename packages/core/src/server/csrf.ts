@@ -16,7 +16,10 @@
  *    preflight, so its presence implies a same-origin (or explicitly
  *    CORS-allowed) caller.
  *
- * 3. `Origin` — must match the request URL's origin.
+ * 3. `Origin` — must match the request URL's origin, or the origin implied by
+ *    `X-Forwarded-Proto`/`X-Forwarded-Host` when the app sits behind a
+ *    TLS-terminating reverse proxy (see {@link candidateOrigins} for why
+ *    honoring those headers costs nothing here).
  *
  * A request is allowed only when Sec-Fetch-Site does not veto it AND at least
  * one of (2) or (3) holds. Non-browser clients (curl, server-to-server) send
@@ -62,6 +65,60 @@ export function csrfForbiddenResponse(): Response {
   return new Response("Forbidden", { status: 403 });
 }
 
+/** First value of a comma-separated forwarded header (`a, b, c` → `a`), trimmed. */
+function firstForwarded(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const first = value.split(",")[0]?.trim();
+  return first || undefined;
+}
+
+/**
+ * The origins a same-origin `Origin` header may legitimately equal.
+ *
+ * Always includes the origin of `request.url`. Behind a reverse proxy that
+ * terminates TLS (nginx, Caddy, Cloudflare, most PaaS routers), that origin is
+ * wrong in a way that matters: Bun reconstructs `request.url` from the
+ * forwarded `Host` over the *plain HTTP* hop, so it reads `http://app.example.com`
+ * while the browser truthfully sends `Origin: https://app.example.com`. The
+ * schemes differ, the strings don't match, and a legitimate same-origin POST is
+ * rejected with a 403. That hit exactly one path — a plain `<Form>` submit
+ * before hydration or with JS disabled — because the client router sets
+ * `X-BractJS-Action` and passes at check (2) long before this comparison.
+ *
+ * So `X-Forwarded-Proto` / `X-Forwarded-Host` are folded in as *additional*
+ * candidates. This does not widen the gate:
+ *
+ * - A browser cannot set either header cross-origin. Both are non-safelisted
+ *   request headers, so a cross-site attempt needs a CORS preflight the
+ *   framework never approves — the same property that makes check (2) work.
+ * - A non-browser client that *can* set arbitrary headers is already through
+ *   the gate via `X-BractJS-Action: 1`; forging `X-Forwarded-Proto` buys such a
+ *   caller nothing it did not already have.
+ * - `Sec-Fetch-Site` (1) still vetoes first, and it is browser-set and not
+ *   forgeable from JS.
+ *
+ * The values are only ever compared against a browser-set `Origin`; nothing
+ * here is used to *build* a URL the server will fetch or redirect to.
+ */
+function candidateOrigins(request: Request): string[] {
+  const url = new URL(request.url);
+  const origins = [url.origin];
+
+  const proto = firstForwarded(request.headers.get("X-Forwarded-Proto"));
+  const host = firstForwarded(request.headers.get("X-Forwarded-Host"));
+  if (!proto && !host) return origins;
+
+  // Only http/https are meaningful for a web origin; anything else is junk or
+  // an injection attempt and is ignored in favor of the real scheme.
+  const scheme = proto === "http" || proto === "https" ? proto : url.protocol.replace(":", "");
+  try {
+    origins.push(new URL(`${scheme}://${host ?? url.host}`).origin);
+  } catch {
+    // A malformed X-Forwarded-Host contributes no candidate; url.origin stands.
+  }
+  return origins;
+}
+
 export function isAllowedMutation(request: Request): boolean {
   // (1) Browser-enforced signal. If present, it vetoes cross-origin requests
   // regardless of what the Origin/custom headers claim.
@@ -73,7 +130,7 @@ export function isAllowedMutation(request: Request): boolean {
   // (2) Client-issued custom header (blocked cross-origin by CORS preflight).
   if (request.headers.get("X-BractJS-Action")) return true;
 
-  // (3) Same-origin Origin header.
+  // (3) Same-origin Origin header, tolerant of a TLS-terminating proxy.
   const origin = request.headers.get("Origin");
   if (!origin) {
     // No Origin header. Allow only when the browser explicitly told us this is
@@ -81,7 +138,8 @@ export function isAllowedMutation(request: Request): boolean {
     return fetchSite === "same-origin" || fetchSite === "none";
   }
   try {
-    return new URL(origin).origin === new URL(request.url).origin;
+    const sent = new URL(origin).origin;
+    return candidateOrigins(request).includes(sent);
   } catch {
     return false;
   }
