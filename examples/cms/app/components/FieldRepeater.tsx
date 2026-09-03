@@ -1,12 +1,13 @@
 "use client";
 // Repeatable custom-field rows. Like RichEditor this is a "use client" module
-// (SSR-stubbed to null), so it renders null until `mounted` to avoid a hydration
+// (SSR-stubbed to null), so it renders null until hydrated to avoid a hydration
 // mismatch. Every row control shares name=`cf:<fieldId>`, so the action reads the
 // whole set via formData.getAll(). Single (non-repeatable) fields are plain
 // server-rendered controls in CustomFields — only the repeater needs JS.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ghostButton, input as inputCls, select as selectCls } from "../ui.tsx";
+import { useHydrated } from "../use-hydrated.ts";
 
 type Opt = { id: string; label: string };
 
@@ -22,9 +23,8 @@ export function FieldRepeater({
   defaultValues: string[];
 }) {
   const [rows, setRows] = useState<string[]>(defaultValues.length ? defaultValues : [""]);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return null;
+  const hydrated = useHydrated();
+  if (!hydrated) return null;
 
   const set = (i: number, v: string) => setRows(rows.map((r, j) => (j === i ? v : r)));
   return (
