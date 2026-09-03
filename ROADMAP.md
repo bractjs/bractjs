@@ -275,8 +275,8 @@ All Phase 0–5 items complete. Acceptance criteria passing:
 ## v0.3 — Planned
 
 - [ ] Remove deprecated `StreamFetcherResult.events` (deprecated since 0.2)
-- [ ] **Known gap:** `app/lifecycle.ts` is auto-loaded by `bractjs dev` but NOT by `bractjs start` — production hooks must live in `bractjs.config.ts` today. Fix needs a codegen'd static import to stay compatible with `bun build --compile` (dynamic user-file imports break the single-binary path)
+- [x] `app/lifecycle.ts` auto-loaded by `bractjs start`, not just `bractjs dev` — production hooks no longer have to live in `bractjs.config.ts`. `app/server.ts` is loaded in all three run modes too, so globally-registered middleware behaves identically in dev, start, and the compiled binary
 - [ ] Deno / Node.js adapters — validate the adapter contract beyond Bun + Cloudflare (carried from Phase D)
 - [ ] Built-in i18n routing wired end-to-end as a one-line opt-in (carried from Phase E)
 - [ ] Prerender assets embedded inside the compiled binary (carried from Phase G)
-- [ ] CI (GitHub Actions), lint/format (ESLint + Prettier), and a type-surface drift guard for the hand-maintained `types/*.d.ts`
+- [x] CI (GitHub Actions), lint/format (ESLint + Prettier), and a drift guard for `types/*.d.ts` — the declarations are now _generated_ (`bun run typegen`) rather than hand-maintained, and CI fails on any diff against a fresh regeneration
