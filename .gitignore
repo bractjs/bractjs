@@ -83,6 +83,14 @@ Desktop.ini
 
 # Internal docs not meant for the repo
 bract-*.md
+# Maintainer-local, deliberately never committed. These were previously kept out
+# only by a global ~/.config/git/ignore rule, which is invisible to anyone else
+# and to tooling — listing them here makes the exclusion explicit and survives a
+# fresh clone or a change to that global config.
+PUBLISH_GUIDE.md
+CLAUDE.md
+SECURITY.md
+.github/PULL_REQUEST_TEMPLATE.md
 
 # Test coverage
 coverage/
