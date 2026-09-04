@@ -6,6 +6,11 @@
 import { Link } from "@bractjs/bractjs";
 import { card } from "../ui.tsx";
 
+// Route-scoped styles: because only this route imports the file, the build
+// extracts it into THIS route's CSS bundle — "/" never downloads it — and
+// BractJS emits the <link> during SSR, so the page is styled on first paint.
+import "./about.css";
+
 export function meta() {
   return [
     { title: "About | BractJS Todo" },
@@ -118,9 +123,12 @@ export default function About() {
       </section>
 
       <section style={{ ...card, display: "grid", gap: ".9rem" }}>
-        {FEATURES.map((f) => (
+        {FEATURES.map((f, i) => (
           <div key={f.title}>
-            <h2 style={{ margin: "0 0 .25rem", fontSize: "1.05rem" }}>{f.title}</h2>
+            <h2 className="about-feature-title">
+              <span className="about-badge">{i + 1}</span>
+              {f.title}
+            </h2>
             <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.5 }}>{f.body}</p>
           </div>
         ))}

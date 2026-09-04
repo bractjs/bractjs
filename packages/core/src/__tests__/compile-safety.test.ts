@@ -45,16 +45,17 @@ const ALLOWED: Record<string, string[]> = {
   "scanner.ts": ["routes/**/*.{tsx,ts}"],
   // loadServerActions(): the startup action scan + dynamic import, bypassed
   // when `actionModules` is set. loadServerActionsFromRegistry() is the
-  // compiled-binary counterpart and uses neither.
-  "action-registry.ts": ["**/*.{ts,tsx}", "await import(filePath)"],
+  // compiled-binary counterpart and uses neither. `spec` is the file path,
+  // dev-cache-busted by devBustedSpecifier (identity outside dev runtime).
+  "action-registry.ts": ["**/*.{ts,tsx}", "await import(spec)"],
   // importRouteModule(): dev-mode route module load. resolveRouteChain() only
   // calls it when no `registry` is provided; registry mode uses pickRouteModule
-  // (a plain Record lookup, no import).
-  "layout.ts": ["await import(filePath)"],
+  // (a plain Record lookup, no import). `spec` as above.
+  "layout.ts": ["await import(spec)"],
   // renderSpaShell(): source-mode root.tsx load for the SPA shell. Compiled
   // binaries always pass a moduleRegistry, which takes the registry branch
-  // (plain Record lookup) before this import is reached.
-  "spa.ts": ["await import(rootPath)"],
+  // (plain Record lookup) before this import is reached. `spec` as above.
+  "spa.ts": ["await import(spec)"],
 };
 
 async function serverFiles(): Promise<string[]> {

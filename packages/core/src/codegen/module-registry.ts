@@ -219,7 +219,9 @@ interface DiskManifest {
   mode?: string;
   clientEntry: string;
   rootChunk?: string;
-  routes: Record<string, { chunk: string; pattern: string }>;
+  entryCss?: string[];
+  rootCss?: string[];
+  routes: Record<string, { chunk: string; pattern: string; css?: string[] }>;
 }
 
 /**
@@ -231,13 +233,19 @@ interface DiskManifest {
 export function generateManifestModule(disk: DiskManifest): string {
   // Mirror the RouteManifest → ServerManifest projection in serve.ts so the
   // compiled binary sees the same shape `buildFetchHandler` would have built.
-  const projectedRoutes: Record<string, { file: string; chunk: string }> = {};
+  const projectedRoutes: Record<string, { file: string; chunk: string; css?: string[] }> = {};
   for (const [pat, entry] of Object.entries(disk.routes ?? {})) {
-    projectedRoutes[pat] = { file: entry.chunk, chunk: entry.chunk };
+    projectedRoutes[pat] = entry.css?.length
+      ? { file: entry.chunk, chunk: entry.chunk, css: entry.css }
+      : { file: entry.chunk, chunk: entry.chunk };
   }
   const projected = {
     clientEntry: disk.clientEntry,
     rootChunk: disk.rootChunk,
+    // Without these the compiled binary would serve unstyled documents even
+    // though the CSS files ship alongside it.
+    ...(disk.entryCss?.length ? { entryCss: disk.entryCss } : {}),
+    ...(disk.rootCss?.length ? { rootCss: disk.rootCss } : {}),
     routes: projectedRoutes,
   };
   // JSON.stringify is safe for embedding — all strings get properly escaped.

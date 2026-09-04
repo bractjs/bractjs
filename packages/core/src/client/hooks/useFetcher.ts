@@ -165,6 +165,15 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
           body,
           headers: { "X-BractJS-Action": "1" },
         });
+        // Enveloped redirect (204 + X-BractJS-Redirect): the server converted
+        // the action's 3xx so no throwaway document GET consumed one-shot
+        // cookies (flash toasts). Navigate to the target directly.
+        const envelope = res.headers.get("X-BractJS-Redirect");
+        if (envelope !== null) {
+          const to = toSamePath(envelope);
+          window.location.assign(to ?? envelope);
+          return;
+        }
         // If the action redirected, do a real navigation rather than parsing the
         // redirect target as JSON. Off-origin targets get a full-page nav so we
         // never follow an attacker-controlled Location inside the SPA.

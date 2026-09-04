@@ -1,699 +1,90 @@
-import type { Context, CSSProperties, ReactNode } from "react";
-
-// ── Route types ───────────────────────────────────────────────────────────
-export type {
-  ActionArgs,
-  ActionData,
-  ActionFunction,
-  ClientActionFunction,
-  ClientLoaderFunction,
-  HeadersArgs,
-  HeadersFunction,
-  LoaderArgs,
-  LoaderData,
-  LoaderFunction,
-  MetaArgs,
-  MetaDescriptor,
-  MetaFunction,
-  RouteDefinition,
-  RouteFile,
-  RouteMatch,
-  RouteMiddlewareFunction,
-  RouteModule,
-  RouterLocation,
-  Segment,
-  ShouldRevalidateArgs,
-  ShouldRevalidateFunction,
-} from "./route.d.ts";
-
-import type { ActionArgs, ActionData, LoaderData, RouteFile, RouteMatch, RouterLocation } from "./route.d.ts";
-
-// ── Config + Server ───────────────────────────────────────────────────────
-export type { BractJSConfig, BuildConfig, ServerManifest } from "./config.d.ts";
-
-import type { BractJSConfig, ServerManifest } from "./config.d.ts";
-import type { MetaDescriptor } from "./route.d.ts";
-
-export interface RenderOptions {
-  shell: ReactNode;
-  loaderData: Record<string, unknown>;
-  actionData: unknown;
-  params: Record<string, string>;
-  pathname: string;
-  /** Validated search params — hydrates `useSearch()` on the client. */
-  search?: Record<string, unknown>;
-  manifest: ServerManifest;
-  meta: MetaDescriptor[];
-  status?: number;
-  routeFile?: string;
-  nonce?: string;
-  /** Set when the document did not SSR the route component (selective SSR / SPA shell). */
-  ssrMode?: "client-only" | "data-only" | "spa";
-}
-
-export type OnErrorHook = (err: unknown, request?: Request) => Promise<void> | void;
-
-export interface LifecycleHooks {
-  onStart?: () => Promise<void> | void;
-  onShutdown?: () => Promise<void> | void;
-  /** Called for every unexpected error: loader failures, action throws, and uncaught process exceptions. Redirects and HttpErrors are NOT reported here. The request is undefined for process-level exceptions. */
-  onError?: OnErrorHook;
-}
-export declare function defineLifecycle(hooks: LifecycleHooks): LifecycleHooks;
-export declare function createServer(config?: Partial<BractJSConfig>): { stop(): void };
-export declare function renderRoute(options: RenderOptions): Promise<Response>;
-export interface RedirectOptions {
-  allowExternal?: boolean;
-}
-export declare function redirect(
-  url: string,
-  status?: number,
-  headers?: HeadersInit,
-  options?: RedirectOptions,
-): Response;
-export declare function json<T>(data: T, init?: ResponseInit): Response;
-export declare function error(message: string, status?: number): Response;
-
-// ── Errors ────────────────────────────────────────────────────────────────
-export declare class BractJSError extends Error {
-  readonly status: number;
-}
-export declare class HttpError extends BractJSError {
-  constructor(status: number, message?: string);
-}
-export declare function isRedirect(value: unknown): value is Response;
-export declare function isHttpError(value: unknown): value is HttpError;
-export declare function isBractJSError(value: unknown): value is BractJSError;
-
-// ── Deferred ──────────────────────────────────────────────────────────────
-export declare class Deferred<T> {
-  readonly promise: Promise<T>;
-}
-export declare function defer<T>(data: Record<string, T | Promise<T>>): unknown;
-export declare function isDeferred(value: unknown): boolean;
-
-// ── Context ───────────────────────────────────────────────────────────────
-export interface RouteManifest {
-  clientEntry: string;
-  routes: Record<string, { file?: string; chunk?: string }>;
-}
-export interface BractJSContextValue {
-  loaderData: Record<string, unknown>;
-  actionData: unknown;
-  params: Record<string, string>;
-  pathname: string;
-  manifest: RouteManifest;
-  /** The request's location, so `useLocation()` works during SSR (hash is always ""). */
-  location?: RouterLocation;
-  /** Validated search params, so `useSearch()` works during SSR. */
-  search?: Record<string, unknown>;
-}
-export declare const BractJSContext: Context<BractJSContextValue>;
-export declare function BractJSProvider(props: {
-  value: BractJSContextValue;
-  children: ReactNode;
-}): ReactNode;
-export declare function useBractJSContext(): BractJSContextValue;
-
-// ── Session ───────────────────────────────────────────────────────────────
-export type {
-  CommitOptions,
-  CookieSessionOptions,
-  Session,
-  SessionData,
-  SessionStorage,
-} from "./session.d.ts";
-
-import type { CookieSessionOptions, SessionStorage } from "./session.d.ts";
-export declare function createCookieSession(options: CookieSessionOptions): SessionStorage;
-
-// ── Middleware ────────────────────────────────────────────────────────────
-export type { MiddlewareContext, MiddlewareFn } from "./middleware.d.ts";
-
-import type { MiddlewareContext, MiddlewareFn } from "./middleware.d.ts";
-
-export declare class MiddlewarePipeline {
-  use(fn: MiddlewareFn): this;
-  clear(): this;
-  run(ctx: MiddlewareContext, handler: () => Promise<Response>): Promise<Response>;
-}
-export declare const pipeline: MiddlewarePipeline;
-
-/** A route/layout/root module's `middleware` entry — same shape as the global {@link MiddlewareFn}. */
-export type RouteMiddleware = MiddlewareFn;
-/** Compose + run a per-route middleware chain around `handler` (root → layouts → route). */
-export declare function runRouteMiddleware(
-  fns: RouteMiddleware[],
-  ctx: MiddlewareContext,
-  handler: () => Promise<Response>,
-): Promise<Response>;
-/** Flatten a route chain's `middleware` exports (fn or array) into one ordered list. */
-export declare function collectRouteMiddleware(chain: {
-  root: { middleware?: unknown };
-  layouts: Array<{ middleware?: unknown }>;
-  route: { middleware?: unknown };
-}): RouteMiddleware[];
-
-export interface CorsOptions {
-  origin: string | string[];
-  methods?: string[];
-}
-/** Minimal read-only session, as exposed by {@link authGuard}. */
-export interface SessionLike {
-  get(key: string): unknown;
-}
-export interface SessionStorageLike {
-  getSession(cookie?: string | null): Promise<SessionLike>;
-}
-export interface AuthGuardOptions {
-  session: SessionStorageLike;
-  required?: boolean;
-}
-export declare function requestLogger(): MiddlewareFn;
-export declare function cors(options: CorsOptions): MiddlewareFn;
-export declare function authGuard(options: AuthGuardOptions): MiddlewareFn;
-
-export interface CspOptions {
-  directives?: Record<string, string | null>;
-  reportOnly?: boolean;
-  strict?: boolean;
-}
-export declare const CSP_NONCE_KEY: string;
-export declare function getCspNonce(context: Record<string, unknown>): string | undefined;
-export declare function csp(options?: CspOptions): MiddlewareFn;
-
-// ── API routes (C1) ───────────────────────────────────────────────────────
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export interface ApiRouteOptions {
-  /** CSRF protection for this route. Default `true` for mutating methods
-   *  (POST/PUT/PATCH/DELETE). Set `false` only for endpoints that don't trust
-   *  ambient credentials (webhooks, token-authenticated/public APIs). */
-  csrf?: boolean;
-}
-export interface ApiRouteDefinition<TMethod extends HttpMethod, TPath extends string, TInput, TOutput> {
-  method: TMethod;
-  path: TPath;
-  handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>;
-  csrf: boolean;
-}
-export declare function route<TMethod extends HttpMethod, TPath extends string, TInput, TOutput>(
-  method: TMethod,
-  path: TPath,
-  handler: (input: TInput, request: Request) => TOutput | Promise<TOutput>,
-  options?: ApiRouteOptions,
-): ApiRouteDefinition<TMethod, TPath, TInput, TOutput>;
-export type AppApiRoutes = never; // users extend this via codegen
-
-type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
-type ApiClient<TRoutes extends { method: string; path: string; input: unknown; output: unknown }> = {
-  [TPath in TRoutes["path"]]: {
-    [TMethod in Extract<TRoutes, { path: TPath }>["method"]]: (
-      input?: Extract<TRoutes, { path: TPath; method: TMethod }>["input"],
-    ) => Promise<UnwrapPromise<Extract<TRoutes, { path: TPath; method: TMethod }>["output"]>>;
-  };
-};
-export declare function createClient<
-  TRoutes extends { method: string; path: string; input: unknown; output: unknown },
->(baseUrl?: string): ApiClient<TRoutes>;
-
-// ── Validate (C2) ────────────────────────────────────────────────────────
-export interface FieldErrors {
-  [field: string]: string[];
-}
-export declare class ValidationError extends Error {
-  readonly status: 400;
-  readonly fieldErrors: FieldErrors;
-}
-export declare function validate<T>(
-  schema: { safeParse?(i: unknown): unknown } | { parse(i: unknown): T },
-  input: FormData | Record<string, unknown>,
-): Promise<T>;
-
-export type SafeValidateResult<T> =
-  { ok: true; data: T } | { ok: false; fieldErrors: FieldErrors; firstError: string };
-/** Non-throwing validate(): returns a result instead of throwing a 400. */
-export declare function safeValidate<T>(
-  schema: { safeParse?(i: unknown): unknown } | { parse(i: unknown): T },
-  input: FormData | Record<string, unknown>,
-): Promise<SafeValidateResult<T>>;
-/** True for the 400 Response thrown by validate()/searchSchema validation. */
-export declare function isValidationResponse(value: unknown): value is Response;
-/** Parse the `{ errors }` body of a validation 400 into field errors + first message. */
-export declare function readValidationError(
-  res: Response,
-): Promise<{ fieldErrors: FieldErrors; firstError: string }>;
-
-// ── FormData helpers ──────────────────────────────────────────────────────
-/** String field from FormData; "" when missing or a File. */
-export declare function formText(formData: FormData, key: string): string;
-/** Collect string fields from FormData (all, or a named subset). */
-export declare function formValues(formData: FormData, keys?: string[]): Record<string, string>;
-
-// ── Prototype-pollution guards ────────────────────────────────────────────
-/** Deep-scan a parsed JSON value for `__proto__`/`constructor`/`prototype`
- *  keys. Fails closed past an internal depth cap. Returns true if found. */
-export declare function hasForbiddenKey(value: unknown, depth?: number): boolean;
-/** Build a null-prototype object from entries, so a key named `__proto__`
- *  lands as a plain own property instead of mutating the prototype. */
-export declare function nullProtoFromEntries<V>(entries: Iterable<readonly [string, V]>): Record<string, V>;
-
-// ── Search-param validation ───────────────────────────────────────────────
-/** URLSearchParams → plain object; repeated keys collapse into arrays. */
-export declare function searchParamsToObject(sp: URLSearchParams): Record<string, string | string[]>;
 /**
- * Validate a URL's search params against a route's `searchSchema`. No schema →
- * the raw string record; failure → throws a 400 Response with field errors.
+ * @bractjs/bractjs — public API barrel.
+ *
+ * Every symbol exported here is public. The published declarations under
+ * `types/` are GENERATED from this file's module graph — run
+ * `bun run typegen` after changing any public signature and commit the
+ * result (CI fails on a stale tree). Section-by-section usage docs live in
+ * the repository README: https://github.com/bractjs/bractjs#readme
  */
-export declare function validateSearch(schema: unknown, url: URL): Promise<Record<string, unknown>>;
-/** Serialize a search object back into a query string (leading `?`, or ""). */
-export declare function serializeSearch(search: Record<string, unknown>): string;
-
-// ── Typed-routing registration seam ───────────────────────────────────────
-// Mirror of src/client/registry.ts. Augment `Register` (done by `bractjs codegen`
-// in app/route-types.gen.ts) to make <Link>/useNavigate/useParams/useSearchParams
-// type-safe. Un-augmented, everything falls back to loose `string` / Record so
-// apps that never run codegen keep compiling. Keep in sync with registry.ts.
-export interface Register {}
-export interface RouteRegistry {
-  routes: string;
-  params: Record<string, Record<string, string>>;
-  search: Record<string, Record<string, string>>;
-}
-export interface RouteSearchParamsMap {}
-export interface RouteContextMap {}
-// Infer each member directly (NOT `infer R extends RouteRegistry` — a constrained
-// infer fails to match the generated registry and falls back to loose). Keep in
-// sync with src/client/registry.ts.
-export type RegisteredRoutes = Register extends { routes: { routes: infer R } } ? R : string;
-export type RegisteredParamsMap = Register extends { routes: { params: infer P } }
-  ? P
-  : Record<string, Record<string, string>>;
-export type RegisteredSearchMap = Register extends { routes: { search: infer S } }
-  ? S
-  : Record<string, Record<string, string>>;
-export type RegisteredSearchOutputMap = Register extends { routes: { searchOutput: infer S } }
-  ? S
-  : Record<string, Record<string, unknown>>;
-export type ParamsFor<TTo> = TTo extends keyof RegisteredParamsMap
-  ? RegisteredParamsMap[TTo]
-  : Record<string, string>;
-export type SearchFor<TTo> = TTo extends keyof RegisteredSearchMap
-  ? RegisteredSearchMap[TTo]
-  : Record<string, string>;
-/** Validated (schema-output) search object for a specific route literal. */
-export type SearchOutputFor<TTo> = TTo extends keyof RegisteredSearchOutputMap
-  ? RegisteredSearchOutputMap[TTo]
-  : Record<string, unknown>;
-/** Infer the output type of a Zod/Valibot-compatible schema (duck-typed z.infer). */
-export type InferSchemaOutput<S> = S extends { parse(input: unknown): infer T }
-  ? T
-  : S extends { safeParse(input: unknown): infer R }
-    ? Awaited<R> extends { data?: infer T }
-      ? NonNullable<T>
-      : Record<string, unknown>
-    : Record<string, unknown>;
-export declare function buildPath(pattern: string, params: Record<string, string | number>): string;
-
-// ── Client components ─────────────────────────────────────────────────────
-export declare function Scripts(): null;
-export declare function LiveReload(): ReactNode;
-export declare function Outlet(): ReactNode;
-
-export type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = {
-  to: TTo | (string & {});
-  params?: ParamsFor<TTo>;
-  /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
-  search?: Partial<SearchOutputFor<TTo>>;
-  /** When to prefetch the target's chunk + loader data. Default "none". */
-  prefetch?: "none" | "intent" | "hover" | "viewport" | "render";
-  viewTransition?: boolean;
-  /** Replace the current history entry instead of pushing. */
-  replace?: boolean;
-  children?: ReactNode;
-  className?: string;
-  [key: string]: unknown;
-};
-export declare function Link<TTo extends RegisteredRoutes = RegisteredRoutes>(
-  props: LinkProps<TTo>,
-): ReactNode;
-
-export interface ScrollRestorationProps {
-  /** Derive the storage key for a location. Default: `location.key`. */
-  getKey?: (location: RouterLocation) => string;
-  storageKey?: string;
-}
-/** Restores scroll on back/forward, scrolls to top (or `#hash`) on new navigations. Render once in root.tsx. */
-export declare function ScrollRestoration(props?: ScrollRestorationProps): null;
-
-export type ToastType = "success" | "error" | "info" | "warning" | "loading";
-export interface ToastAction {
-  label: string;
-  onClick: () => void;
-}
-export interface ToastEntry {
-  id: string;
-  type: ToastType;
-  message: string;
-  description?: string;
-  duration: number;
-  action?: ToastAction;
-  createdAt: number;
-}
-export interface ToastOptions {
-  id?: string;
-  type?: ToastType;
-  description?: string;
-  duration?: number;
-  action?: ToastAction;
-}
-type ToastMsg<T> = string | ((value: T) => string);
-export interface Toast {
-  (message: string, opts?: ToastOptions): string;
-  success(message: string, opts?: Omit<ToastOptions, "type">): string;
-  error(message: string, opts?: Omit<ToastOptions, "type">): string;
-  info(message: string, opts?: Omit<ToastOptions, "type">): string;
-  warning(message: string, opts?: Omit<ToastOptions, "type">): string;
-  loading(message: string, opts?: Omit<ToastOptions, "type">): string;
-  dismiss(id?: string): void;
-  promise<T>(
-    promise: Promise<T>,
-    msgs: { loading: string; success: ToastMsg<T>; error: ToastMsg<unknown> },
-    opts?: Omit<ToastOptions, "type" | "id">,
-  ): Promise<T>;
-}
-export type ToastPosition =
-  "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
-export interface ToasterProps {
-  position?: ToastPosition;
-  gap?: number;
-  renderToast?: (toast: ToastEntry, dismiss: () => void) => ReactNode;
-}
-/** Renders the active toast queue. Mount once in root.tsx, then call `toast.*` anywhere. */
-export declare function Toaster(props?: ToasterProps): ReactNode;
-
-export interface FormProps {
-  method?: "post" | "put" | "delete";
-  action?: string /** Renders a hidden `intent` input (pairs with defineActions()). */;
-  intent?: string;
-  children?: ReactNode;
-  [key: string]: unknown;
-}
-export declare function Form(props: FormProps): ReactNode;
-
-// ── defineActions (intent dispatch) ───────────────────────────────────────
-/** Compose a route action from per-intent handlers, dispatching on the form's `intent` field. */
-export declare function defineActions<M extends Record<string, (args: ActionArgs) => unknown>>(
-  handlers: M,
-): (args: ActionArgs) => Promise<Awaited<ReturnType<M[keyof M]>> | Response>;
-
-export interface AwaitProps<T> {
-  resolve: Promise<T> | Deferred<T>;
-  fallback: ReactNode;
-  children: (data: T) => ReactNode;
-}
-export declare function Await<T>(props: AwaitProps<T>): ReactNode;
-
-export type ImageFormat = "webp" | "avif" | "jpeg" | "png";
-export type ImageFit = "cover" | "contain" | "fill";
-export interface ImageProps {
-  src: string;
-  alt: string;
-  width?: number;
-  height?: number;
-  quality?: number;
-  format?: ImageFormat;
-  fit?: ImageFit;
-  priority?: boolean;
-  sizes?: string;
-  className?: string;
-  style?: CSSProperties;
-}
-export declare function Image(props: ImageProps): ReactNode;
-
-// ── Client hooks ──────────────────────────────────────────────────────────
-// Pass the loader/action function type to infer the data — useLoaderData<typeof loader>().
-export declare function useLoaderData<T = unknown>(): LoaderData<T>;
-export declare function useActionData<T = unknown>(): ActionData<T> | null;
-/** The current location — reactive on the client, request-derived during SSR. */
-export declare function useLocation(): RouterLocation;
-/** The matched route chain (root → layouts → route); each entry has `{ id, pathname, params, data, handle }`. */
-export declare function useMatches(): RouteMatch[];
-export declare function useParams<TTo extends string>(): ParamsFor<TTo>;
-export declare function useParams<T extends Record<string, string> = Record<string, string>>(): T;
-export type NavigationState = "idle" | "loading" | "submitting";
-export declare function useNavigation(): { state: NavigationState };
-
-export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes> {
-  params?: ParamsFor<TTo>;
-  /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
-  search?: Partial<SearchOutputFor<TTo>>;
-  /** Replace the current history entry instead of pushing a new one. */
-  replace?: boolean;
-  /** Arbitrary history state, readable via `useLocation().state` after navigating. */
-  state?: unknown;
-}
-export type NavigateFn = <TTo extends RegisteredRoutes>(
-  to: TTo | (string & {}),
-  options?: NavigateOptions<TTo>,
-) => Promise<void>;
-export declare function useNavigate(): NavigateFn;
-
-// ── Fetchers ──────────────────────────────────────────────────────────────
-export type FetcherState = "idle" | "loading" | "submitting";
-export interface FetcherEntry {
-  key: string;
-  state: FetcherState;
-  data: unknown;
-  /** The submitted form data while a submission is in flight — the optimistic-UI source. */
-  formData?: FormData;
-  formMethod?: string;
-}
-export interface FetcherFormProps {
-  method?: "post" | "put" | "delete";
-  action?: string;
-  /** Renders a hidden `intent` input (pairs with defineActions()). */
-  intent?: string;
-  children?: ReactNode;
-  [key: string]: unknown;
-}
-export interface FetcherResult {
-  data: unknown;
-  state: FetcherState;
-  formData?: FormData;
-  formMethod?: string;
-  key: string;
-  load(path: string): Promise<void>;
-  submit(path: string, opts: { method: string; body: FormData | Record<string, string> }): Promise<void>;
-  /** A form that submits through this fetcher (no navigation, no history). */
-  Form: (props: FetcherFormProps) => ReactNode;
-}
-export interface StreamFetcherResult<T = unknown> {
-  /** @deprecated Never emitted — call `connect(actionId)` instead. Removal planned for 0.3. */
-  events: AsyncGenerator<T>;
-  connect(actionId: string): AsyncGenerator<T>;
-}
-export interface UseFetcherOptions {
-  key?: string;
-  stream?: boolean;
-}
-export declare function useFetcher(opts?: { key?: string }): FetcherResult;
-export declare function useFetcher<T>(opts: { stream: true }): StreamFetcherResult<T>;
-/** Every active fetcher — the cross-component view for optimistic UI. */
-export declare function useFetchers(): FetcherEntry[];
-
-// ── Revalidation ──────────────────────────────────────────────────────────
-export interface Revalidator {
-  revalidate(): Promise<void>;
-  state: "idle" | "loading";
-}
-/** Manually re-run the active route's loaders (respects `shouldRevalidate`). */
-export declare function useRevalidator(): Revalidator;
-
-// ── Typed search ──────────────────────────────────────────────────────────
-/** The current route's VALIDATED search params (its `searchSchema` output). */
-export declare function useSearch<TTo extends string>(): SearchOutputFor<TTo>;
-export declare function useSearch<T extends Record<string, unknown>>(): T;
-export interface SetSearchOptions {
-  replace?: boolean;
-}
-export type SetSearchFn<T extends Record<string, unknown>> = (
-  updater: Partial<T> | ((prev: T) => Partial<T>),
-  options?: SetSearchOptions,
-) => Promise<void>;
-/** Merge a patch into the current search params and soft-navigate (loaders re-run). */
-export declare function useSetSearch<TTo extends string>(): SetSearchFn<SearchOutputFor<TTo>>;
-export declare function useSetSearch<T extends Record<string, unknown>>(): SetSearchFn<T>;
-
-export interface SearchParamsResult<T extends Record<string, string> = Record<string, string>> {
-  searchParams: URLSearchParams;
-  getParam<K extends keyof T & string>(key: K): T[K] | null;
-  setSearchParams(updater: Record<string, string> | ((prev: URLSearchParams) => URLSearchParams)): void;
-}
-export declare function useSearchParams<TTo extends string>(): SearchParamsResult<SearchFor<TTo>>;
-export declare function useSearchParams<
-  T extends Record<string, string> = Record<string, string>,
->(): SearchParamsResult<T>;
-
-// ── Typed route context ───────────────────────────────────────────────────
-export declare function defineContext<T>(
-  factory: (args: { request: Request; params: Record<string, string> }) => T | Promise<T>,
-): ContextFactory<T>;
-export interface ContextFactory<T> {
-  _factory: (args: { request: Request; params: Record<string, string> }) => T | Promise<T>;
-}
-
-// ── beforeLoad / useBlocker ───────────────────────────────────────────────
-export declare function useBlocker(shouldBlock: () => boolean): void;
-
-// ── Toasts ────────────────────────────────────────────────────────────────
-/** The stable `toast` API — call from anywhere to flash status feedback. */
-export declare const toast: Toast;
-export declare const toastStore: {
-  add(message: string, opts?: ToastOptions): string;
-  dismiss(id: string): void;
-  clear(): void;
-  subscribe(listener: () => void): () => void;
-  getSnapshot(): ToastEntry[];
-};
-export declare function useToast(): Toast;
-export declare function useToasts(): ToastEntry[];
-
-// ── i18n routing (E2) ────────────────────────────────────────────────────
-export declare function useLocale(defaultLocale?: string): string;
-export declare function useLocalizedLink(defaultLocale?: string): (path: string) => string;
-export interface I18nConfig {
-  locales: string[];
-  defaultLocale: string;
-}
-/** Duplicate each route under `/:locale/...` prefixes (server-side route-table helper). */
-export declare function wrapRoutesWithLocale(routes: RouteFile[], i18n: I18nConfig): RouteFile[];
-/** Split a pathname into its leading locale (if any) and the locale-free remainder. */
-export declare function stripLocale(
-  pathname: string,
-  locales: string[],
-): { locale: string | null; strippedPathname: string };
-/** Re-prefix a pathname with a locale for `/_data` fetches (no-op when locale is null). */
-export declare function localizedDataPath(pathname: string, locale: string | null): string;
-
-// ── Adapter (D1) ──────────────────────────────────────────────────────────
-export interface BractAdapter {
-  fetch(request: Request): Promise<Response>;
-  listen?(port: number): void;
-}
-export declare class BunAdapter implements BractAdapter {
-  setHandler(handler: (request: Request) => Promise<Response>): void;
-  fetch(request: Request): Promise<Response>;
-  listen(port: number): void;
-  stop(): void;
-}
-
-// ── Cloudflare adapter (D2) ───────────────────────────────────────────────
-export declare function createCloudflareAdapter(
-  handler: (request: Request) => Promise<Response>,
-): BractAdapter & { fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response> };
-export declare function makeCloudflareHandler(handler: (request: Request) => Promise<Response>): {
-  fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response>;
-};
-
-// ── CSS Modules (D3) ─────────────────────────────────────────────────────
-export declare const cssModulesPlugin: unknown; // BunPlugin
-export declare function transformCssModule(
-  filePath: string,
-): Promise<{ map: Record<string, string>; css: string }>;
-
-// ── Build plugins (required for native `bun build --compile` workflow) ───
-//
-// Apply all of these on the relevant bundle or face crashes / secret leaks:
-//   server bundle  → useClientStubPlugin
-//   client bundle  → createUseServerProxyPlugin(appDir), serverModuleStubPlugin,
-//                    clientEnvPlugin(allowedKeys, env), cssModulesPlugin
-export declare const useClientStubPlugin: unknown; // BunPlugin
-export declare function createUseServerProxyPlugin(appDir?: string): unknown; // BunPlugin
-export declare const useServerProxyPlugin: unknown; // BunPlugin (legacy — uses absolute paths)
-/** Client bundle: replaces every export of a `*.server.ts` module with an inert throwing
- *  stub, keeping the import resolvable while guaranteeing zero server source reaches the
- *  browser. This is the plugin the dev and production client builds use. */
-export declare const serverModuleStubPlugin: unknown; // BunPlugin
-/** Client bundle (legacy, opt-in): the stricter predecessor that hard-fails any `*.server.ts` import. */
-export declare const serverOnlyPlugin: unknown; // BunPlugin
-export declare function clientEnvPlugin(allowedKeys: string[], envValues: Record<string, string>): unknown; // BunPlugin
-
-// ── Module-registry codegen (drives `bun build --compile`) ────────────────
-export interface CodegenResult {
-  routesPath: string;
-  actionsPath: string;
-}
-/** Scan appDir; write `<appDir>/_generated/routes.ts` and `actions.ts`. */
-export declare function writeModuleRegistries(appDir: string): Promise<CodegenResult>;
-/** Read `<buildDir>/route-manifest.json`; write `<appDir>/_generated/manifest.ts`. */
-export declare function writeManifestModule(appDir: string, buildDir: string): Promise<string>;
-/** Render the static-import route/layout/root registry module (`_generated/routes.ts`) as source text. */
-export declare function generateRouteRegistry(input: {
-  appDir: string;
-  routes: RouteFile[];
-  layoutRelPaths: string[];
-  hasRoot: boolean;
-}): string;
-/** Render the static-import `"use server"` action registry module (`_generated/actions.ts`) as source text. */
-export declare function generateActionRegistry(input: { appDir: string; actionRelPaths: string[] }): string;
-/** Render `_generated/manifest.ts` (an inline ServerManifest constant) from the on-disk manifest JSON. */
-export declare function generateManifestModule(disk: {
-  version?: number;
-  mode?: string;
-  clientEntry: string;
-  rootChunk?: string;
-  routes: Record<string, { chunk: string; pattern: string }>;
-}): string;
-
-// ── Route-type codegen helpers ────────────────────────────────────────────
-/** Stable 8-hex fingerprint of a route-pattern set (order-independent). */
-export declare function routesFingerprint(patterns: string[]): Promise<string>;
-/** Human-readable reason the generated route types are stale, or null when fresh. */
-export declare function explainStaleness(oldSrc: string | null, patterns: string[]): Promise<string | null>;
-
-/** Pre-loaded route/layout/root modules keyed by appDir-relative path. */
-export type ModuleRegistry = Record<string, import("./route.d.ts").RouteModule | Record<string, unknown>>;
-
-// ── buildFetchHandler (D1) ───────────────────────────────────────────────
-export declare function buildFetchHandler(
-  config: Partial<import("./config.d.ts").BractJSConfig>,
-): (request: Request) => Promise<Response>;
-
-// ── Programmatic API ─────────────────────────────────────────────────────
-export declare function runBuild(config: import("./config.d.ts").BuildConfig): Promise<void>;
-
-export interface DevServerOptions {
-  port?: number;
-  hmrPort?: number;
-  config?: Partial<BractJSConfig>;
-  skipUserConfig?: boolean;
-}
-export interface DevServer {
-  stop(): void;
-}
-export declare function createDevServer(options?: DevServerOptions): Promise<DevServer>;
-
-export declare function loadUserConfig(): Promise<Partial<BractJSConfig>>;
-
-/** Identity helper for bractjs.config.ts — wrap your default export for autocomplete + type-checking. */
-export declare function defineConfig(config: Partial<BractJSConfig>): Partial<BractJSConfig>;
-
-// ── Prerendering / SPA shell ──────────────────────────────────────────────
-export interface PrerenderOptions {
-  prerender: string[] | (() => string[] | Promise<string[]>);
-  appDir?: string;
-  publicDir?: string;
-  buildDir?: string;
-  manifest?: ServerManifest;
-}
-export interface PrerenderResult {
-  written: string[];
-}
-/** Build-time prerendering (SSG): write HTML + /_data payloads under `<buildDir>/client/_prerender/`. */
-export declare function runPrerender(options: PrerenderOptions): Promise<PrerenderResult>;
-/** Render the SPA-mode document shell (config `ssr: false`). */
-export declare function renderSpaShell(
-  appDir: string,
-  manifest: ServerManifest,
-  registry?: ModuleRegistry,
-): Promise<string>;
+export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloudflare.ts";
+export { buildPath } from "./client/build-path.ts";
+export { Await } from "./client/components/Await.tsx";
+export { Form } from "./client/components/Form.tsx";
+export type { ImageFit, ImageFormat, ImageProps } from "./client/components/Image.tsx";
+export { Image } from "./client/components/Image.tsx";
+export { Link } from "./client/components/Link.tsx";
+export { LiveReload } from "./client/components/LiveReload.tsx";
+export { Outlet } from "./client/components/Outlet.tsx";
+export { Scripts } from "./client/components/Scripts.tsx";
+export type { ScrollRestorationProps } from "./client/components/ScrollRestoration.tsx";
+export { ScrollRestoration } from "./client/components/ScrollRestoration.tsx";
+export type { ToasterProps, ToastPosition } from "./client/components/Toaster.tsx";
+export { Toaster } from "./client/components/Toaster.tsx";
+export type { FetcherEntry, FetcherState } from "./client/fetcher-store.ts";
+export { useActionData } from "./client/hooks/useActionData.ts";
+export { useBlocker } from "./client/hooks/useBlocker.ts";
+export type { FetcherFormProps, FetcherResult, StreamFetcherResult, UseFetcherOptions, } from "./client/hooks/useFetcher.ts";
+export { useFetcher } from "./client/hooks/useFetcher.ts";
+export { useFetchers } from "./client/hooks/useFetchers.ts";
+export { useLoaderData } from "./client/hooks/useLoaderData.ts";
+export { useLocale } from "./client/hooks/useLocale.ts";
+export { useLocalizedLink } from "./client/hooks/useLocalizedLink.ts";
+export { useLocation } from "./client/hooks/useLocation.ts";
+export { useMatches } from "./client/hooks/useMatches.ts";
+export type { NavigateFn, NavigateOptions } from "./client/hooks/useNavigate.ts";
+export { useNavigate } from "./client/hooks/useNavigate.ts";
+export { useNavigation } from "./client/hooks/useNavigation.ts";
+export { useParams } from "./client/hooks/useParams.ts";
+export type { Revalidator } from "./client/hooks/useRevalidator.ts";
+export { useRevalidator } from "./client/hooks/useRevalidator.ts";
+export type { SetSearchFn, SetSearchOptions } from "./client/hooks/useSearch.ts";
+export { useSearch, useSetSearch } from "./client/hooks/useSearch.ts";
+export type { SearchParamsResult } from "./client/hooks/useSearchParams.ts";
+export { useSearchParams } from "./client/hooks/useSearchParams.ts";
+export { useToast, useToasts } from "./client/hooks/useToast.ts";
+export type { InferSchemaOutput, ParamsFor, Register, RegisteredRoutes, RouteContextMap, RouteRegistry, RouteSearchParamsMap, SearchFor, SearchOutputFor, } from "./client/registry.ts";
+export { createClient } from "./client/rpc.ts";
+export { serializeSearch } from "./client/search-serializer.ts";
+export type { Toast, ToastAction, ToastEntry, ToastOptions, ToastType } from "./client/toast-store.ts";
+export { toast } from "./client/toast-store.ts";
+export { defineConfig, loadUserConfig } from "./config/load.ts";
+export type { DevServer, DevServerOptions } from "./dev/server.ts";
+export { createDevServer } from "./dev/server.ts";
+export type { AuthGuardOptions, SessionLike, SessionStorageLike } from "./middleware/authGuard.ts";
+export { authGuard } from "./middleware/authGuard.ts";
+export type { CorsOptions } from "./middleware/cors.ts";
+export { cors } from "./middleware/cors.ts";
+export { requestLogger } from "./middleware/requestLogger.ts";
+export type { BractAdapter } from "./server/adapter.ts";
+export { BunAdapter } from "./server/adapter.ts";
+export type { ApiRouteDefinition, ApiRouteOptions, AppApiRoutes } from "./server/api-route.ts";
+export { route } from "./server/api-route.ts";
+export type { ContextFactory } from "./server/context.ts";
+export { defineContext } from "./server/context.ts";
+export type { CspOptions } from "./server/csp.ts";
+export { CSP_NONCE_KEY, csp, getCspNonce } from "./server/csp.ts";
+export { localizedDataPath, stripLocale, wrapRoutesWithLocale } from "./server/i18n.ts";
+export type { BractJSConfig, RenderOptions, ServerManifest } from "./server/index.ts";
+export { createServer, error, json, redirect, renderRoute } from "./server/index.ts";
+export type { ModuleRegistry } from "./server/layout.ts";
+export type { LifecycleHooks } from "./server/lifecycle.ts";
+export { defineLifecycle } from "./server/lifecycle.ts";
+export type { MiddlewareContext, MiddlewareFn, RouteMiddleware } from "./server/middleware.ts";
+export { MiddlewarePipeline, pipeline } from "./server/middleware.ts";
+export type { RouteFile, Segment } from "./server/scanner.ts";
+export { searchParamsToObject, validateSearch } from "./server/search.ts";
+export type { I18nConfig } from "./server/serve.ts";
+export { buildFetchHandler } from "./server/serve.ts";
+export type { CommitOptions, CookieSessionOptions, Session, SessionData, SessionStorage, } from "./server/session.ts";
+export { createCookieSession } from "./server/session.ts";
+export { renderSpaShell } from "./server/spa.ts";
+export type { FieldErrors, SafeValidateResult } from "./server/validate.ts";
+export { isValidationResponse, readValidationError, safeValidate, ValidationError, validate, } from "./server/validate.ts";
+export type { BractJSContextValue, RouteManifest } from "./shared/context.ts";
+export { BractJSContext, BractJSProvider, useBractJSContext } from "./shared/context.ts";
+export { Deferred, defer, isDeferred } from "./shared/deferred.ts";
+export { defineActions } from "./shared/define-actions.ts";
+export { BractJSError, HttpError, isBractJSError, isHttpError, isRedirect } from "./shared/errors.ts";
+export { formText, formValues } from "./shared/form-data.ts";
+export type { ActionArgs, ActionData, ActionFunction, ClientActionFunction, ClientLoaderFunction, HeadersArgs, HeadersFunction, LoaderArgs, LoaderData, LoaderFunction, MetaArgs, MetaDescriptor, MetaFunction, RouteDefinition, RouteMatch, RouteMiddlewareFunction, RouteModule, RouterLocation, ShouldRevalidateArgs, ShouldRevalidateFunction, } from "./shared/route-types.ts";

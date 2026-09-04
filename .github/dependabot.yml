@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  # The lint toolchain is deliberately pinned (TypeScript 5.x at the root for
+  # typescript-eslint, ESLint 9.x for the react/jsx-a11y plugins — see
+  # CONTRIBUTING.md § TypeScript versions). Dependabot must not "helpfully"
+  # bump those back into the broken combinations, so they are ignored here and
+  # revisited by hand when upstream adds support.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      dev-tooling:
+        patterns: ["@types/*", "prettier", "eslint-config-prettier", "globals"]
+    ignore:
+      - dependency-name: typescript
+      - dependency-name: eslint
+      - dependency-name: "@eslint/js"
+      - dependency-name: typescript-eslint
+      - dependency-name: eslint-plugin-react
+      - dependency-name: eslint-plugin-jsx-a11y
+      # React is pinned repo-wide via pnpm.overrides to prevent dual-React
+      # hydration failures; a Dependabot bump here would desync the override.
+      - dependency-name: react
+      - dependency-name: react-dom
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

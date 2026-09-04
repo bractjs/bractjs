@@ -8,7 +8,9 @@ import { serverModuleStubPlugin, clientEnvPlugin } from "./env-plugin.ts";
 import { buildDefines } from "./defines.ts";
 import { writeRouteTypes } from "../codegen/route-codegen.ts";
 import { useClientStubPlugin, createUseServerProxyPlugin } from "./directives.ts";
-import { cssModulesPlugin } from "./plugins/css-modules.ts";
+import { collectCssBundles } from "./css-collect.ts";
+import { tailwindPlugins } from "./plugins/tailwind.ts";
+import { routeShakePlugin } from "./plugins/route-shake.ts";
 import { reactDedupePlugin } from "./react-dedupe.ts";
 
 /** Subset of config fields relevant to the build pipeline. */
@@ -21,6 +23,8 @@ export interface BuildConfig {
   plugins?: BunPlugin[];
   /** SPA mode: when `false`, the build also emits the static document shell. */
   ssr?: boolean;
+  /** Compile Tailwind v4 as part of the CSS graph (no separate CLI step). */
+  tailwind?: boolean;
 }
 
 export async function runBuild(config: BuildConfig): Promise<void> {
@@ -91,7 +95,10 @@ export async function runBuild(config: BuildConfig): Promise<void> {
       minify: config.minify ?? true,
       sourcemap: config.sourcemap ?? "external",
       define: buildDefines(config),
-      plugins: [reactDedupePlugin(process.cwd()), serverModuleStubPlugin, createUseServerProxyPlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), cssModulesPlugin, ...(config.plugins ?? [])],
+      // Bun pairs each JS entry-point output with the CSS bundle it extracted;
+      // the mapping is only available via the metafile.
+      metafile: true,
+      plugins: [reactDedupePlugin(process.cwd()), serverModuleStubPlugin, createUseServerProxyPlugin(appDir), routeShakePlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), ...(await tailwindPlugins(config)), ...(config.plugins ?? [])],
     });
   } finally {
     await rm(shimPath, { force: true });
@@ -100,22 +107,72 @@ export async function runBuild(config: BuildConfig): Promise<void> {
 
   // ── 4. Hash + rename output files ──────────────────────────────────────
   const routeChunks = new Map<string, string>();
+  const routeCss = new Map<string, string[]>();
   let clientEntry = "";
   let rootChunk: string | undefined;
+  let entryCss: string[] | undefined;
+  let rootCss: string[] | undefined;
   const outdirAbs = resolve("build/client");
   const appDirClean = appDir.replace(/^\.\//, "");
   const rootBase = basename(rootFilePath, extname(rootFilePath)); // "root"
+
+  // Entry-point → its extracted CSS bundles, keyed by the PRE-rename absolute
+  // JS path (that's what the metafile reports).
+  const cssByEntry = collectCssBundles(clientResult.metafile, outdirAbs);
+  // A CSS bundle can be referenced by more than one entry-point; hash + rename
+  // it once and reuse the resulting public path.
+  const cssPublicPaths = new Map<string, string>();
+
+  /**
+   * Content-hash a build output, rename it in place to `<name>.<hash><ext>`,
+   * and return the URL it will be served at (`/build/client/...`). Shared by
+   * the JS entry-points and their extracted CSS bundles so both get the same
+   * immutable-cacheable naming.
+   */
+  async function hashAndRename(outPath: string, precomputedHash?: string): Promise<string> {
+    const hash = precomputedHash ?? (await contentHash(outPath));
+    const ext = outPath.slice(outPath.lastIndexOf("."));
+    const base = outPath.slice(0, outPath.lastIndexOf("."));
+    const hashedPath = `${base}.${hash}${ext}`;
+    await rename(outPath, hashedPath);
+
+    const hashedAbs = resolve(hashedPath);
+    const cwdAbs = resolve(".");
+    return hashedAbs.startsWith(cwdAbs + "/")
+      ? "/" + hashedAbs.slice(cwdAbs.length + 1).replace(/\\/g, "/")
+      : "/" + hashedPath.replace(/^build\//, "build/");
+  }
+
+  async function publishCss(absCssPaths: string[] | undefined): Promise<string[] | undefined> {
+    if (!absCssPaths?.length) return undefined;
+    const out: string[] = [];
+    for (const cssAbs of absCssPaths) {
+      const cached = cssPublicPaths.get(cssAbs);
+      if (cached) {
+        out.push(cached);
+        continue;
+      }
+      if (!(await Bun.file(cssAbs).exists())) continue;
+      const publicPath = await hashAndRename(cssAbs);
+      cssPublicPaths.set(cssAbs, publicPath);
+      out.push(publicPath);
+    }
+    return out.length ? out : undefined;
+  }
 
   for (const artifact of clientResult.outputs) {
     // Only rename entry points. Bun's split chunks (kind === "chunk") already
     // have content-hashed basenames (e.g. chunk-189z661a.js); renaming them
     // would break sibling import refs, which Bun bakes in at bundle time and
-    // does NOT rewrite after rename.
+    // does NOT rewrite after rename. CSS bundles (kind === "asset") are handled
+    // via their owning entry-point below, not here.
     if (artifact.kind !== "entry-point") continue;
     // Compute the source-relative path BEFORE renaming, to classify the output.
     const absPath = resolve(artifact.path);
     const rel = absPath.startsWith(outdirAbs + "/") ? absPath.slice(outdirAbs.length + 1) : basename(artifact.path);
     const outBase = basename(artifact.path, extname(artifact.path));
+    // Look the CSS up by the pre-rename path — that's the key the metafile uses.
+    const css = await publishCss(cssByEntry.get(absPath));
     const hash = await contentHash(artifact.path);
     const ext = artifact.path.slice(artifact.path.lastIndexOf("."));
 
@@ -125,32 +182,37 @@ export async function runBuild(config: BuildConfig): Promise<void> {
       const hashedPath = join(outdirAbs, `client.${hash}${ext}`);
       await rename(artifact.path, hashedPath);
       clientEntry = "/build/client/" + basename(hashedPath);
+      entryCss = css;
       continue;
     }
 
-    const base = artifact.path.slice(0, artifact.path.lastIndexOf("."));
-    const hashedPath = `${base}.${hash}${ext}`;
-    await rename(artifact.path, hashedPath);
-
-    const hashedAbs = resolve(hashedPath);
-    const cwdAbs = resolve(".");
-    const publicPath = hashedAbs.startsWith(cwdAbs + "/")
-      ? "/" + hashedAbs.slice(cwdAbs.length + 1).replace(/\\/g, "/")
-      : "/" + hashedPath.replace(/^build\//, "build/");
+    const publicPath = await hashAndRename(artifact.path, hash);
 
     if (outBase === rootBase) {
       rootChunk = publicPath;
+      rootCss = css;
     } else {
       const matched = routes.find((r) => {
         const expected = join(appDirClean, r.filePath).replace(/\.[^.]+$/, ".js");
         return rel === expected;
       });
-      if (matched) routeChunks.set(matched.urlPattern, publicPath);
+      if (matched) {
+        routeChunks.set(matched.urlPattern, publicPath);
+        if (css) routeCss.set(matched.urlPattern, css);
+      }
     }
   }
 
   // ── 5. Write manifest ──────────────────────────────────────────────────
-  const manifest = generateManifest({ clientEntry, rootChunk, routeChunks, mode: "production" });
+  const manifest = generateManifest({
+    clientEntry,
+    rootChunk,
+    routeChunks,
+    routeCss,
+    entryCss,
+    rootCss,
+    mode: "production",
+  });
   await writeManifest(manifest, "build");
 
   // ── 6. SPA shell (ssr: false) ───────────────────────────────────────────
@@ -164,8 +226,13 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     const serverManifest = {
       clientEntry,
       rootChunk,
+      entryCss,
+      rootCss,
       routes: Object.fromEntries(
-        Object.entries(manifest.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk }]),
+        Object.entries(manifest.routes).map(([pat, e]) => [
+          pat,
+          { file: e.chunk, chunk: e.chunk, css: e.css },
+        ]),
       ),
     };
     const html = await renderSpaShell(appDir, serverManifest);

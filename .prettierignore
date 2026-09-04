@@ -1,9 +1,15 @@
-# Mirror of biome.json `files.includes` negations.
+# Keep in sync with the ignore list in eslint.config.mjs.
 node_modules
 build
 dist
 **/_generated
 **/route-types.gen.ts
+
+# Emitted by `bun run typegen` (tsc --emitDeclarationOnly), and CI fails on any
+# diff against a fresh regeneration. Formatting these would be a standoff:
+# `prettier --write` reformats them, then the next typegen writes tsc's own
+# formatting back and the drift guard fails. tsc owns this directory.
+packages/core/types
 pnpm-lock.yaml
 **/.tmp-*
 examples/*/src/client

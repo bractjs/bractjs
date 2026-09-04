@@ -1,6 +1,11 @@
 import { LiveReload, Outlet, Scripts, ScrollRestoration, Toaster, useLocation } from "@bractjs/bractjs";
 import { AdminShell } from "./ui.tsx";
 
+// Tailwind v4 + the editorial component classes. Importing the stylesheet is
+// all that's needed: the build extracts it to a hashed CSS file and BractJS
+// emits the <link> into the streamed HTML.
+import "./styles.css";
+
 // Side-effect imports: register the typed `/api/*` endpoints. root.tsx is the
 // one module guaranteed to load in dev, prod, and the compiled binary, so it's
 // the reliable place to register API routes (app/server.ts doesn't run in dev).
@@ -28,8 +33,6 @@ export default function Root() {
       <head>
         <meta charSet="utf-8" />
         <link rel="icon" type="image/x-icon" href="/public/favicon.ico" />
-        {/* Tailwind v4 output, compiled from app/styles.css by the `css` script. */}
-        <link rel="stylesheet" href="/public/styles.css" />
       </head>
       <body>
         {adminChrome ? (

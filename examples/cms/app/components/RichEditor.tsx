@@ -7,6 +7,7 @@
 // RichEditorFallback below) — only one of them is ever in the DOM at a time.
 
 import { useEffect, useRef, useState } from "react";
+import { useHydrated } from "../use-hydrated.ts";
 
 type Cmd = { label: string; title: string; run: (exec: (c: string, v?: string) => void) => void };
 
@@ -35,20 +36,18 @@ export function RichEditor({ name, defaultValue = "" }: { name: string; defaultV
   const [html, setHtml] = useState(defaultValue);
   // This module is stubbed to null during SSR, so the server renders nothing
   // here (only RichField's <noscript> fallback). To avoid a hydration mismatch
-  // (React #418), the first client render must also produce null; we then flip
-  // `mounted` in an effect and render the real editor.
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  // (React #418), the first client render must also produce null; the real
+  // editor appears on the commit that finishes hydration.
+  const hydrated = useHydrated();
 
   // Seed the contentEditable once the editor is in the DOM (uncontrolled
   // thereafter so the caret isn't reset on every keystroke).
   useEffect(() => {
-    if (mounted && editorRef.current) editorRef.current.innerHTML = defaultValue;
+    if (hydrated && editorRef.current) editorRef.current.innerHTML = defaultValue;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
+  }, [hydrated]);
 
-  if (!mounted) return null;
+  if (!hydrated) return null;
 
   const sync = () => setHtml(editorRef.current?.innerHTML ?? "");
   const exec = (command: string, value?: string) => {

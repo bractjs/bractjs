@@ -50,6 +50,7 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
     "an array of strings",
   );
   check("plugins", Array.isArray(c.plugins), "an array of Bun plugins");
+  check("tailwind", typeof c.tailwind === "boolean", "a boolean");
   check("onStart", typeof c.onStart === "function", "a function");
   check("onShutdown", typeof c.onShutdown === "function", "a function");
   check("onError", typeof c.onError === "function", "a function");

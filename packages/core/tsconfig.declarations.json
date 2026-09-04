@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "./src",
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "stripInternal": true,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": "./types",
+    "types": ["bun-types", "react", "react-dom"]
+  },
+  "include": ["src"],
+  "exclude": ["src/__tests__"]
+}

@@ -1,0 +1,26 @@
+/* about.css — styles for the /about route only.
+ *
+ * This file is imported by about.tsx and nothing else, so the build extracts
+ * it into that route's own CSS bundle: visiting "/" never downloads it, and
+ * BractJS emits the <link> for it during SSR so the page is styled on first
+ * paint. Open /about and check the network panel to see it load on demand. */
+
+.about-badge {
+  display: inline-block;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.about-feature-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}

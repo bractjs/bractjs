@@ -13,6 +13,8 @@
 
 This README is a **step-by-step guide to every function and feature** BractJS exports. Each section is self-contained and ordered from "first app" to "advanced". Every symbol shown here is a real export from `@bractjs/bractjs` (see [packages/core/src/index.ts](packages/core/src/index.ts)).
 
+> **New to BractJS?** Start with the guides in [`docs/`](docs/README.md): a [15-minute tutorial](docs/tutorial.md), the [mental model](docs/concepts.md) (request lifecycle, run modes), [authentication end to end](docs/authentication.md), and [deployment](docs/deployment.md). This README is the reference; those are the learning path.
+
 ---
 
 ## Table of Contents
@@ -43,6 +45,8 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 24. [Build plugins (for custom `Bun.build`)](#24-build-plugins)
 25. [Configuration reference](#25-configuration-reference)
 26. [Full export index](#26-full-export-index)
+27. [Security model](#27-security-model)
+28. [Styling: CSS, Tailwind, CSS Modules](#28-styling)
 
 ---
 
@@ -52,7 +56,7 @@ BractJS requires [Bun](https://bun.sh). There is no Node.js runtime path.
 
 ```sh
 # Scaffold a new app
-bunx bractjs new my-app
+bunx @bractjs/bractjs new my-app
 cd my-app
 
 # Start the dev server (HMR on http://localhost:3000)
@@ -839,10 +843,31 @@ export const webhook = route("POST", "/api/webhook", handleWebhook, { csrf: fals
 
 - `GET`/`DELETE`: no body parsed. `POST`/`PUT`/`PATCH`: JSON or form body parsed into `input`.
 - Bodies are capped at 1 MiB. JSON bodies carrying prototype-pollution keys (`__proto__`/`constructor`/`prototype`) are rejected (400). Errors return a generic 500 in production (full message in dev).
-- Handlers also receive the raw `Request` as the 2nd arg.
-- `:param` segments match any non-empty value; **read and validate params from `request.url` yourself** (they aren't injected into `input`).
+- Handlers also receive the raw `Request` (2nd arg) and the middleware context (3rd arg): `:param` segment values are in `ctx.params` (raw, undecoded — **validate before using them** in fs/SQL ops), and anything endpoint middleware set on `ctx.context` is readable there.
 - **CSRF — on by default for mutating methods** (`POST`/`PUT`/`PATCH`/`DELETE`): the request must prove same-origin (via `Sec-Fetch-Site`, the `X-BractJS-Action` header `createClient` sends automatically, or a matching `Origin`), exactly like server actions. Cross-site requests get `403`. Pass `{ csrf: false }` **only** for endpoints that don't trust ambient credentials (session cookies / Basic auth) and are meant to be called cross-site (webhooks, token-authenticated or public APIs).
 - Global `pipeline` middleware (`cors`, `csp`, `authGuard`, custom) applies to `/api` responses too — see §14.
+
+### Guard an endpoint with `{ middleware: [...] }`
+
+Nested route `middleware` exports do **not** cover `/api` — this option is the supported way to guard a typed endpoint. The chain runs after the CSRF gate and **before body parsing** (an auth gate rejects before the payload is buffered); return a `Response` to short-circuit, or call `next()` and enrich `ctx.context` for the handler:
+
+```ts
+import type { MiddlewareFn } from "@bractjs/bractjs";
+
+const requireUser: MiddlewareFn = async (ctx, next) => {
+  const user = await sessionUser(ctx.request);
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  ctx.context.user = user;
+  return next();
+};
+
+export const getProfile = route(
+  "GET",
+  "/api/profile/:id",
+  async (_input, _req, ctx) => db.profiles.get(ctx.params.id, ctx.context.user),
+  { middleware: [requireUser] },
+);
+```
 
 ### Call them with `createClient<AppApiRoutes>()`
 
@@ -908,6 +933,8 @@ If you prefer to keep calling `validate()` and catching: `isValidationResponse(e
 
 The module-level `pipeline` singleton wraps the **entire** request — every response flows through it, including typed `/api` routes, server actions (`/_action`, `/_stream`), the image endpoint (`/_image`), static assets, and SSR documents. So `cors()`, `csp()`, `authGuard()`, a rate limiter, or your own logging applies uniformly, not just to page renders. Each middleware gets `(ctx, next)` and returns a `Response`; `ctx.context` is threaded into every loader/action and into nested route middleware.
 
+Register global middleware in **`app/server.ts`**. The compiled binary executes that file as its entrypoint, and `bractjs dev` / `bractjs start` import it at boot for its `pipeline.use(...)` side effects (its module-scope `createServer()` call is suppressed during the import) — so middleware registered there applies identically in all three run modes. Editing it under `bractjs dev` restarts the dev server automatically (the browser reloads itself when its HMR socket reconnects).
+
 ```ts
 import { pipeline, requestLogger, cors, authGuard, csp } from "@bractjs/bractjs";
 import type { MiddlewareFn } from "@bractjs/bractjs";
@@ -954,6 +981,8 @@ pipeline.use(
 
 Read the nonce inside a component/middleware with `getCspNonce(context)` (key: `CSP_NONCE_KEY`) to nonce your own inline scripts.
 
+Under `bractjs dev`, `csp()` automatically appends the HMR websocket (`ws://localhost:<hmrPort>`) to `connect-src`, so you can keep CSP enabled in development instead of guarding it out — the policy you verify in dev is the one you ship (minus that one dev-only source).
+
 `script-src` is always nonce-based (`'nonce-…' 'strict-dynamic'`), so injected `<script>` cannot execute. Note that with `'strict-dynamic'`, supporting browsers **ignore** the `'self'`/host expressions in `script-src` — trust flows solely through the nonce and the scripts it loads (the `'self'` is kept only as a fallback for older browsers). The default policy also sets `form-action 'self'` (a `<form>` can only submit same-origin), `base-uri 'self'`, `frame-ancestors 'self'`, and `object-src 'none'`. The default `style-src` allows `'unsafe-inline'` for ergonomics (React inline styles, CSS-in-JS); this leaves inline-style injection possible. Pass `strict: true` (or override `style-src` with a nonce/hash) if your app serves all styles from same-origin stylesheets.
 
 ### Custom middleware
@@ -992,6 +1021,18 @@ export const middleware = [requireAdmin];
 ```
 
 It protects the **document and the `/_data` soft-nav endpoint** alike, so it's a safe place for auth — same guarantee as `beforeLoad`. Prefer route middleware over `beforeLoad` when you want composition (multiple concerns, shared across a folder) or response post-processing; `beforeLoad` remains the lighter single-gate option.
+
+### Middleware coverage at a glance
+
+Three middleware surfaces, three scopes — pick by what you need to cover:
+
+| Surface                                     | Covers                                                                                            | Register in                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Global `pipeline.use(...)`                  | **Everything**: SSR documents, `/_data`, `/api`, `/_action`, `/_stream`, `/_image`, static assets | `app/server.ts`                    |
+| Nested route `middleware` exports           | The **document + `/_data`** path of that route subtree only — **not** `/api` or `/_action`        | `root.tsx` / `layout.tsx` / routes |
+| `route(..., { middleware })` (per-endpoint) | That one typed **`/api` endpoint**                                                                | The `route()` definition (§12)     |
+
+Server actions (`/_action`, `/_stream`) have no per-action middleware — guard inside the action body, or globally.
 
 ---
 
@@ -1062,8 +1103,8 @@ export default defineLifecycle({
 | `onShutdown` | Before exit — any signal, programmatic `stop()`, or uncaught exception.                                                                                                                                      |
 | `onError`    | Every unexpected error (loader/action throws, uncaught exceptions). Redirects and `HttpError`s are intentional control flow and are **not** reported. `request` is `undefined` for process-level exceptions. |
 
-- **Dev** picks up `app/lifecycle.ts` automatically.
-- **Production**: spread into `createServer()`:
+- **`bractjs dev` and `bractjs start`** pick up `app/lifecycle.ts` automatically.
+- **Compiled binary / custom entry**: spread into `createServer()` yourself:
   ```ts
   import { createServer } from "@bractjs/bractjs";
   import lifecycle from "./app/lifecycle.ts";
@@ -1097,7 +1138,7 @@ export async function loader() {
 }
 ```
 
-> BractJS ships the whole route module — `loader` and `action` included — to the client, so a server import is reachable from the client graph. The `serverModuleStubPlugin` (applied automatically by `bractjs dev`/`build`) replaces every `*.server.ts` export with a throwing stub: the import resolves, the loader/action are dead code on the client, and **zero** server source is emitted. The stricter, hard-failing `serverOnlyPlugin` is still exported if you'd rather a server import be a build error.
+> Client bundles **strip** a route module's server-only exports — `loader`, `action`, `headers`, `middleware` — together with any import only they used (`routeShakePlugin`, applied automatically by `bractjs dev`/`build`). Your DB driver and its call sites never reach the browser, and route chunks shrink to their component + client hooks. As a backstop, `serverModuleStubPlugin` still replaces every `*.server.ts` export with a throwing stub, covering server imports that survive shaking (module-level side-effect imports, non-route files). The stricter, hard-failing `serverOnlyPlugin` remains exported if you'd rather a server import be a build error.
 
 ```ts
 // bractjs.config.ts
@@ -1161,6 +1202,16 @@ declare module "@bractjs/bractjs" {
   }
 }
 ```
+
+`buildPath(pattern, params)` is the same substitution as an untyped function, for when the pattern is only known at runtime (a redirect table, a breadcrumb map). It URL-encodes values, passes static patterns straight through, and leaves an absent param's `:name` segment intact so a missing value surfaces as an obviously-wrong URL instead of a silently truncated one:
+
+```ts
+import { buildPath } from "@bractjs/bractjs";
+
+buildPath("/blog/:id", { id: "123" }); // → "/blog/123"
+```
+
+Prefer the generated `routes` builder wherever the pattern is a literal — it catches typos at compile time; `buildPath` cannot.
 
 You can also call `writeRouteTypes(appDir, outPath?)` / `generateRouteTypes(appDir)` programmatically.
 
@@ -1256,6 +1307,8 @@ The CLI is a thin wrapper — every command delegates to a public function, so y
 
 **`createDevServer(options?)`** — dev server with HMR.
 
+Change handling in dev: route-module edits (including **loaders, actions, and `beforeLoad`**) are applied live — the server re-imports the fresh module on the next request, no restart needed. Changes the process cannot absorb — `app/server.ts`, `lifecycle.ts`, any `*.server.ts`, shared non-route modules, or adding/removing a route file — make `bractjs dev` restart itself and the browser reload once its HMR socket reconnects. Programmatic `createDevServer()` callers can hook this via `onRestartRequired(file)` (the default logs a restart warning instead of exiting).
+
 ```ts
 import { createDevServer } from "@bractjs/bractjs";
 
@@ -1268,10 +1321,10 @@ const dev = await createDevServer({
 dev.stop();
 ```
 
-**`runBuild(config?)`** — production build (accepts only build-relevant fields).
+**`runBuild(config?)`** — production build (accepts only build-relevant fields). Lives at the `/build` subpath.
 
 ```ts
-import { runBuild } from "@bractjs/bractjs";
+import { runBuild } from "@bractjs/bractjs/build";
 
 await runBuild({
   appDir: "./app",
@@ -1335,7 +1388,7 @@ export default {
 };
 ```
 
-`bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations _into_ a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported for custom pipelines.
+`bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations _into_ a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported from `@bractjs/bractjs/build` for custom pipelines.
 
 Deployment notes: with `bun build --compile`, ship `build/client/` (including `_prerender/`) alongside the binary — or pass it via `--asset`. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs.
 
@@ -1375,6 +1428,8 @@ createServer({
 
 When all four are present, the server uses the pre-imported modules for routing, layouts, actions, and assets.
 
+This file has a second role: `bractjs dev` and `bractjs start` import it at boot (with the `createServer()` call suppressed) so any global `pipeline.use(...)` middleware registered here applies in every run mode, not only the compiled binary. See [§14 Middleware](#14-middleware).
+
 ### Manual pipeline
 
 ```sh
@@ -1387,7 +1442,7 @@ bun build --compile app/server.ts \               # D — single binary
 
 `--asset build/client/` embeds JS/CSS into the binary (true single file); omit it to ship `myapp` + `build/client/` side by side.
 
-The codegen functions are exported: `writeModuleRegistries(appDir)`, `writeManifestModule(appDir, buildDir)`, and the lower-level `generateRouteRegistry` / `generateActionRegistry` / `generateManifestModule`.
+The codegen functions are exported from `@bractjs/bractjs/codegen`: `writeModuleRegistries(appDir)`, `writeManifestModule(appDir, buildDir)`, and the lower-level `generateRouteRegistry` / `generateActionRegistry` / `generateManifestModule`.
 
 > **Contributor note — keep the binary working:** anything on the server request/startup path must avoid runtime `Bun.Glob`/computed-path `import()`, must fall back from `realpath()` to `Bun.file().exists()` for embedded assets, and must preserve every consumed export when projecting route modules. Two tests enforce this: `packages/core/src/__tests__/compile-safety.test.ts` (fast static scan) and `packages/core/src/__tests__/compile-smoke.test.ts` (compiles and boots a real binary).
 
@@ -1417,15 +1472,15 @@ export default makeCloudflareHandler(handler);
 
 ## 24. Build plugins
 
-If you write your own `Bun.build()` (instead of `bractjs build`), you **must** apply these or face crashes / secret leaks. All are exported.
+If you write your own `Bun.build()` (instead of `bractjs build`), you **must** apply these or face crashes / secret leaks. All are exported from the `@bractjs/bractjs/build` subpath.
 
-| Bundle | Plugin                               | Without it                                                               |
-| ------ | ------------------------------------ | ------------------------------------------------------------------------ |
-| Server | `useClientStubPlugin`                | Server crashes calling browser-only hooks from `"use client"` modules.   |
-| Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB code, secrets) ship in the browser JS.          |
-| Client | `serverModuleStubPlugin`             | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle. |
-| Client | `clientEnvPlugin(allowedKeys, env)`  | Server env vars leak into the browser bundle.                            |
-| Client | `cssModulesPlugin`                   | `*.module.css` imports don't resolve.                                    |
+| Bundle | Plugin                               | Without it                                                                             |
+| ------ | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| Server | `useClientStubPlugin`                | Server crashes calling browser-only hooks from `"use client"` modules.                 |
+| Client | `createUseServerProxyPlugin(appDir)` | Server-action bodies (DB code, secrets) ship in the browser JS.                        |
+| Client | `routeShakePlugin(appDir)`           | Route loader/action/headers/middleware bodies (and their imports) ship to the browser. |
+| Client | `serverModuleStubPlugin`             | `*.server.ts` source (DB drivers, secrets) leaks into the client bundle.               |
+| Client | `clientEnvPlugin(allowedKeys, env)`  | Server env vars leak into the browser bundle.                                          |
 
 ```ts
 import {
@@ -1433,8 +1488,8 @@ import {
   createUseServerProxyPlugin,
   serverModuleStubPlugin,
   clientEnvPlugin,
-  cssModulesPlugin,
-} from "@bractjs/bractjs";
+  collectCssBundles,
+} from "@bractjs/bractjs/build";
 
 // Server bundle (target: "bun"):
 plugins: [useClientStubPlugin];
@@ -1443,12 +1498,14 @@ plugins: [useClientStubPlugin];
 plugins: [
   serverModuleStubPlugin,
   createUseServerProxyPlugin("./app"), // same appDir as createServer!
+  routeShakePlugin("./app"), // register AFTER the use-server proxy plugin
   clientEnvPlugin(["PUBLIC_API_URL"], Bun.env as Record<string, string>),
-  cssModulesPlugin,
 ];
 ```
 
-> Always pass the **same `appDir`** to `createUseServerProxyPlugin` that you pass to `createServer` — action IDs hash the appDir-relative path, so a mismatch makes every `/_action` return 404. `transformCssModule(filePath)` is exported for custom CSS pipelines; `useServerProxyPlugin` is the legacy absolute-path variant. `serverModuleStubPlugin` stubs `*.server.ts` exports so a route can import a server module inside its loader/action without leaking source; `serverOnlyPlugin` is the stricter predecessor that hard-fails such imports instead (still exported for opt-in use).
+> Always pass the **same `appDir`** to `createUseServerProxyPlugin` that you pass to `createServer` — action IDs hash the appDir-relative path, so a mismatch makes every `/_action` return 404. `useServerProxyPlugin` is the legacy absolute-path variant. `serverModuleStubPlugin` stubs `*.server.ts` exports so a route can import a server module inside its loader/action without leaking source; `serverOnlyPlugin` is the stricter predecessor that hard-fails such imports instead (still exported for opt-in use).
+
+**CSS needs no plugin.** Bun extracts stylesheets on its own; set `metafile: true` and use `collectCssBundles(result.metafile, outdirAbs)` to map each JS entry-point output to its CSS bundle, then record those paths in the manifest (`entryCss` / `rootCss` / `routes[pattern].css`) so the server emits the `<link>` tags. See [§28 Styling](#28-styling).
 
 ---
 
@@ -1474,6 +1531,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | `minify`                             | `boolean`                 | `true`                 | Minify client bundles                                               |
 | `clientEnv`                          | `string[]`                | `[]`                   | `process.env` keys exposed to the client                            |
 | `plugins`                            | `BunPlugin[]`             | `[]`                   | Extra client-build plugins                                          |
+| `tailwind`                           | `boolean`                 | `false`                | Compile Tailwind v4 as part of the CSS graph — no CLI step (§28)    |
 | `adapter`                            | `BractAdapter`            | `BunAdapter`           | Custom server adapter                                               |
 | `i18n`                               | `I18nConfig`              | —                      | Locale config consumed by the i18n utilities                        |
 | `ssr`                                | `boolean`                 | `true`                 | `false` → SPA mode: static shell for every document GET (§21)       |
@@ -1486,9 +1544,11 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 
 ## 26. Full export index
 
+The package has three entries: `@bractjs/bractjs` (everything app code needs), `@bractjs/bractjs/build` (programmatic builds + bundler plugins), and `@bractjs/bractjs/codegen` (registry/manifest generation for the native-compile workflow).
+
 Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `hasForbiddenKey`, `nullProtoFromEntries`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
 **Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
 
@@ -1496,7 +1556,7 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Context:** `BractJSContext`, `BractJSProvider`, `useBractJSContext`
 
-**Middleware:** `pipeline`, `MiddlewarePipeline`, `runRouteMiddleware`, `collectRouteMiddleware`, `requestLogger`, `cors`, `authGuard`, `csp`, `getCspNonce`, `CSP_NONCE_KEY`
+**Middleware:** `pipeline`, `MiddlewarePipeline`, `requestLogger`, `cors`, `authGuard`, `csp`, `getCspNonce`, `CSP_NONCE_KEY`
 
 **Sessions:** `createCookieSession`
 
@@ -1504,21 +1564,29 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useMatches`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useToast`, `useToasts`, `useLocale`, `useLocalizedLink`
 
-**Toasts:** `toast`, `toastStore`
+**Toasts:** `toast`
 
 **Search serialization:** `serializeSearch`
+
+**URL building:** `buildPath`
 
 **i18n:** `wrapRoutesWithLocale`, `stripLocale`, `localizedDataPath`
 
 **Client RPC:** `createClient`
 
-**Build / programmatic:** `createDevServer`, `runBuild`, `loadUserConfig`, `defineConfig`, `runPrerender`
-
-**Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`
-
-**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `serverModuleStubPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `cssModulesPlugin`, `transformCssModule`
+**Programmatic:** `createDevServer`, `loadUserConfig`, `defineConfig`
 
 **Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
+
+From `@bractjs/bractjs/build` ([packages/core/src/build-entry.ts](packages/core/src/build-entry.ts)):
+
+**Build:** `runBuild`, `runPrerender`
+
+**Build plugins:** `useClientStubPlugin`, `createUseServerProxyPlugin`, `useServerProxyPlugin`, `routeShakePlugin`, `SERVER_ONLY_ROUTE_EXPORTS`, `serverModuleStubPlugin`, `serverOnlyPlugin`, `clientEnvPlugin`, `tailwindPlugins`, `collectCssBundles`
+
+From `@bractjs/bractjs/codegen` ([packages/core/src/codegen-entry.ts](packages/core/src/codegen-entry.ts)):
+
+**Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`, `routesFingerprint`, `explainStaleness`
 
 **Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `ApiRouteOptions`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `ToasterProps`, `ToastPosition`, `Toast`, `ToastEntry`, `ToastOptions`, `ToastType`, `ToastAction`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 
@@ -1533,10 +1601,60 @@ BractJS ships secure defaults, but a few behaviors are worth understanding so yo
 - **Typed `/api` routes are CSRF-protected by default.** Mutating routes (`POST`/`PUT`/`PATCH`/`DELETE`) require a same-origin proof just like server actions; cross-site requests get `403`. Opt out with `route(..., { csrf: false })` **only** for endpoints that don't trust ambient credentials (webhooks, token-authenticated/public APIs). As with actions, the CSRF gate is not authentication — authorize inside the handler.
 - **Global middleware covers every endpoint.** Anything attached to `pipeline.use(...)` — `cors()`, `csp()`, `authGuard()`, a rate limiter, custom logging — runs for typed `/api` routes, `/_action`, `/_stream`, `/_image`, static assets, and SSR documents alike. (This was previously SSR-only; a cross-cutting guard you register globally now actually applies to your API surface.)
 - **CORS + credentials.** Listing an origin in `cors({ origin: [...], credentials: true })` fully trusts that origin for credentialed cross-origin reads. Only list origins you control. `credentials:true` with `origin:"*"` is refused at setup. **Never add `X-BractJS-Action` to `Access-Control-Allow-Headers`** — it is part of the CSRF gate; the built-in `cors()` deliberately omits it. If you write your own CORS layer and expose that header cross-origin, you defeat CSRF on both actions and `/api`; add a cryptographic double-submit token if you must. The header-based gate also assumes browsers send `Sec-Fetch-Site` — behind a proxy that strips it, rely on same-origin `Origin` (which `cors()` does not weaken).
+- **Behind a TLS-terminating reverse proxy, forward `X-Forwarded-Proto`.** The `Origin` check compares against the request's own origin, and a proxy that terminates TLS leaves the app seeing `http://` where the browser sent `https://`. BractJS folds `X-Forwarded-Proto` / `X-Forwarded-Host` into that comparison when present, but nginx does not send them unless configured. Without it, plain `<Form>` posts (no JS, or pre-hydration) get a `403` while every JS-driven submit still works — see the [deployment guide](docs/deployment.md#behind-a-reverse-proxy). Honoring those headers does not widen the gate: browsers cannot set them cross-origin, and a client that can forge headers could already pass via `X-BractJS-Action`.
 - **Error messages.** In production, loader/action/api errors are surfaced to the client as a generic message; the real message + stack appear only in dev (`NODE_ENV=development`). For user-facing structured errors throw an `HttpError` (its message _is_ shown) — never put secrets in a raw `Error.message`.
 - **CSP `style-src`.** The opt-in `csp()` middleware nonces all scripts, but its default `style-src` includes `'unsafe-inline'` for ergonomics. Pass `csp({ strict: true })` (or override `style-src` with a nonce/hash) if you want to block inline-style injection.
 - **Request body size.** Beyond the per-handler caps (1 MiB JSON for actions/api, 10 MiB route forms), the Bun adapter enforces a hard `maxRequestBodySize` ceiling (default 16 MiB) so no path can stream an unbounded body into memory. Raise it via the `maxRequestBodySize` config for a dedicated large-upload endpoint.
 - **Already handled for you:** path traversal + symlink escape on `/public` and `/_image`, open-redirect neutralization (`redirect()` requires `{ allowExternal: true }` to go off-origin), XSS-safe SSR data island (`safeStringify`), prototype-pollution rejection on action **and** `/api` JSON bodies plus null-prototype objects for form/search inputs, request body-size caps + global backstop, signed/constant-time-verified cookie sessions, CSP defaults (`script-src` nonce + `strict-dynamic`, `form-action`/`base-uri`/`frame-ancestors` `'self'`, `object-src 'none'`), and CSRF via layered `Sec-Fetch-Site` + custom-header + `Origin` checks across actions, `/_stream`, route mutations, and `/api`.
+
+---
+
+## 28. Styling
+
+Import a stylesheet and you're done — there is no CSS config, no separate CLI step, and no `<link>` to hand-write:
+
+```tsx
+// app/root.tsx — app-wide styles
+import "./styles.css";
+```
+
+```tsx
+// app/routes/about.tsx — styles only this route needs
+import "./about.css";
+```
+
+The build extracts each stylesheet into a real, content-hashed `.css` file and records it in the route manifest; the server emits the `<link rel="stylesheet">` tags into the **streamed HTML**. That ordering is the point: the document arrives styled, so there is no flash of unstyled content and clients without JavaScript still get your CSS.
+
+**Per-route splitting is automatic.** Each route is its own bundle entry, so a stylesheet imported by one route ships only with that route. Visiting `/` never downloads `/about`'s CSS; on client navigation the router adds the incoming route's stylesheet and — because the links are rendered with React's `precedence` — waits for it to load before committing, so a route swap never paints unstyled.
+
+**Cascade order** is `entryCss` → `rootCss` → route CSS, so a route's styles win over app-wide ones regardless of load order.
+
+**In development**, editing a `.css` file hot-swaps the stylesheet in place: no page reload, no lost client state.
+
+### Tailwind v4
+
+```sh
+bun add -d bun-plugin-tailwind tailwindcss
+```
+
+```ts
+// bractjs.config.ts
+export default defineConfig({ tailwind: true });
+```
+
+```css
+/* app/styles.css — imported from app/root.tsx */
+@import "tailwindcss";
+@source "./**/*.{ts,tsx}";
+```
+
+That's the whole setup. Tailwind compiles as part of the bundle and its output flows through the same extract → hash → link path as any other stylesheet. If `tailwind: true` is set without the plugin installed, the build fails with an actionable message rather than silently emitting no styles. See [`examples/cms`](examples/cms/) for a full app using it.
+
+### CSS Modules
+
+`import styles from "./x.module.css"` is scoped by Bun at build time and extracted like any other stylesheet, and `bractjs codegen:seed` generates the ambient types so the import typechecks.
+
+> **Known limitation — CSS Modules do not have server/client class-name parity.** `bractjs dev` and `bractjs start` import route modules from source, and Bun's _runtime_ resolves a `.module.css` import to a file path rather than the bundler's class-name map. The server therefore renders no class where the browser renders the scoped one, producing a hydration mismatch and unstyled SSR output for those elements. Plain `.css` imports are unaffected and work correctly in every run mode — **prefer them for anything server-rendered**, and reserve CSS Modules for client-only components.
 
 ---
 

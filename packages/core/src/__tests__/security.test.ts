@@ -313,6 +313,127 @@ describe("CSRF — Sec-Fetch-Site (isAllowedMutation)", () => {
   });
 });
 
+describe("CSRF — behind a TLS-terminating reverse proxy", () => {
+  // The app is reached over plain HTTP from the proxy, so request.url says
+  // http://app.example.com while the browser truthfully says https://.
+  function proxied(headers: Record<string, string>): Request {
+    return new Request("http://app.example.com/posts", { method: "POST", headers });
+  }
+
+  test("no-JS form post is allowed when X-Forwarded-Proto explains the scheme", () => {
+    expect(
+      isAllowedMutation(
+        proxied({
+          "Sec-Fetch-Site": "same-origin",
+          Origin: "https://app.example.com",
+          "X-Forwarded-Proto": "https",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("a proxy chain's first X-Forwarded-Proto value wins", () => {
+    expect(
+      isAllowedMutation(
+        proxied({
+          "Sec-Fetch-Site": "same-origin",
+          Origin: "https://app.example.com",
+          "X-Forwarded-Proto": "https, http",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("X-Forwarded-Host is honored when the proxy rewrites the Host", () => {
+    expect(
+      isAllowedMutation(
+        new Request("http://internal-9000.svc.local/posts", {
+          method: "POST",
+          headers: {
+            "Sec-Fetch-Site": "same-origin",
+            Origin: "https://app.example.com",
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "app.example.com",
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("scheme mismatch WITHOUT a forwarded header is still rejected", () => {
+    expect(
+      isAllowedMutation(proxied({ "Sec-Fetch-Site": "same-origin", Origin: "https://app.example.com" })),
+    ).toBe(false);
+  });
+
+  test("forwarded headers never rescue a genuinely foreign Origin", () => {
+    expect(
+      isAllowedMutation(
+        proxied({
+          "Sec-Fetch-Site": "same-origin",
+          Origin: "https://evil.example",
+          "X-Forwarded-Proto": "https",
+          "X-Forwarded-Host": "app.example.com",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("Sec-Fetch-Site: cross-site still vetoes before forwarded headers are read", () => {
+    expect(
+      isAllowedMutation(
+        proxied({
+          "Sec-Fetch-Site": "cross-site",
+          Origin: "https://app.example.com",
+          "X-Forwarded-Proto": "https",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("a junk X-Forwarded-Proto falls back to the real scheme", () => {
+    // javascript: must not become a candidate origin, and the real http://
+    // origin must still be compared.
+    expect(
+      isAllowedMutation(
+        proxied({
+          "Sec-Fetch-Site": "same-origin",
+          Origin: "http://app.example.com",
+          "X-Forwarded-Proto": "javascript",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedMutation(
+        proxied({
+          "Sec-Fetch-Site": "same-origin",
+          Origin: "https://app.example.com",
+          "X-Forwarded-Proto": "javascript",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("a malformed X-Forwarded-Host does not throw and does not allow", () => {
+    expect(
+      isAllowedMutation(
+        proxied({
+          "Sec-Fetch-Site": "same-origin",
+          Origin: "https://app.example.com",
+          "X-Forwarded-Proto": "https",
+          "X-Forwarded-Host": "a b c://%%%",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("direct (unproxied) same-origin behavior is unchanged", () => {
+    expect(
+      isAllowedMutation(proxied({ "Sec-Fetch-Site": "same-origin", Origin: "http://app.example.com" })),
+    ).toBe(true);
+  });
+});
+
 // ── Item 5 — safeStringify ───────────────────────────────────────────────
 
 describe("safeStringify", () => {

@@ -1,9 +1,11 @@
-import { basename, extname, resolve } from "node:path";
-import { lintRouteModuleSource } from "../build/route-lint.ts";
+import { basename, extname, join, resolve } from "node:path";
+import { extractApiRouteDefs, lintRouteModuleSource } from "../build/route-lint.ts";
 import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
 import { loadUserConfig } from "../config/load.ts";
+import { loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts";
 import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
-import { setDevHmrPort, setRuntimeMode } from "../server/env.ts";
+import { listApiRoutes } from "../server/api-route.ts";
+import { bumpDevModuleGeneration, setDevHmrPort, setRuntimeMode } from "../server/env.ts";
 import type { LifecycleHooks } from "../server/lifecycle.ts";
 import { filePathToPattern, scanRoutes } from "../server/scanner.ts";
 import type { BractJSConfig } from "../server/serve.ts";
@@ -63,6 +65,52 @@ async function syncRouteTypes(appDir: string): Promise<void> {
   }
 }
 
+/**
+ * Warn about typed API routes that are defined but not live. Registration is
+ * an import side effect — a `route()` call in a module nothing imports
+ * silently doesn't exist, historically the framework's worst failure mode.
+ * server.ts was imported at boot; root.tsx is imported here (SSR would do it
+ * on the first request anyway), then the statically-scanned definitions are
+ * diffed against the live registry.
+ */
+async function warnUnregisteredApiRoutes(appDir: string): Promise<void> {
+  for (const root of ["root.tsx", "root.ts"]) {
+    try {
+      const rootPath = resolve(process.cwd(), appDir, root);
+      if (await Bun.file(rootPath).exists()) {
+        await import(rootPath);
+        break;
+      }
+    } catch {
+      // A broken root module surfaces properly on the first SSR render.
+    }
+  }
+
+  const defined: Array<{ file: string; method: string; path: string }> = [];
+  const glob = new Bun.Glob("**/*.{ts,tsx}");
+  for await (const rel of glob.scan(appDir)) {
+    if (rel.startsWith("_generated/")) continue;
+    let src: string;
+    try {
+      src = await Bun.file(join(appDir, rel)).text();
+    } catch {
+      continue;
+    }
+    for (const def of extractApiRouteDefs(src)) defined.push({ file: rel, ...def });
+  }
+  if (defined.length === 0) return;
+
+  const registered = new Set(listApiRoutes().map((r) => `${r.method} ${r.path}`));
+  for (const d of defined) {
+    if (registered.has(`${d.method} ${d.path}`)) continue;
+    console.warn(
+      `[bractjs] ${d.file} defines route("${d.method}", "${d.path}") but the endpoint is NOT live — ` +
+        `typed API routes register when their defining module is imported, and nothing imports this one. ` +
+        `Import it from app/root.tsx or app/server.ts.`,
+    );
+  }
+}
+
 export interface DevServerOptions {
   /** HTTP port for the app server. Default: config.port ?? 3000. */
   port?: number;
@@ -75,6 +123,15 @@ export interface DevServerOptions {
    * Useful when the caller supplies the full config via the `config` option.
    */
   skipUserConfig?: boolean;
+  /**
+   * Called when a change lands that the running process cannot absorb —
+   * `app/server.ts`, `lifecycle.ts`, any `*.server.ts`, a shared non-route
+   * module, or an added/removed route file. `bractjs dev` passes a callback
+   * that exits with a reserved code so its supervisor respawns the server;
+   * the default (programmatic use) logs a prominent restart warning and the
+   * dev loop continues with the previous server-side code.
+   */
+  onRestartRequired?: (file: string) => void;
 }
 
 export interface DevServer {
@@ -146,14 +203,26 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
   // Lint route modules + collect the route table (read sources once, no exec).
   const routeRows = await inspectRoutes(appDir);
 
+  // Route files known at boot. The watcher uses this to tell a TRUE route
+  // add/remove from an atomic-save rename: editors (vim, sed -i) replace files
+  // via rename, which fs.watch reports identically to a create/delete. A true
+  // add/remove restarts the process, so the set can't go stale while it
+  // matters; the no-supervisor fallback re-syncs it in the watcher.
+  const knownRouteFiles = new Set(routeRows.map((r) => r.file));
+
   // Load user lifecycle hooks if defined (<appDir>/lifecycle.ts)
-  let lifecycle: LifecycleHooks = {};
-  try {
-    const lifecyclePath = resolve(process.cwd(), appDir, "lifecycle.ts");
-    const mod = await import(lifecyclePath);
-    if (mod.default) lifecycle = mod.default;
-  } catch {
-    // No lifecycle file — that's fine
+  const lifecycle: LifecycleHooks = await loadLifecycleModule(appDir);
+
+  // Import <appDir>/server.ts for its pipeline.use(...) side effects (its own
+  // createServer() call is suppressed) so global middleware behaves the same
+  // in dev as under `bractjs start` and the compiled binary. Loaded once at
+  // boot — editing server.ts requires a restart, like all server modules.
+  const entry = await loadServerEntry(appDir);
+  if (entry.error) {
+    console.warn(
+      "[bractjs] app/server.ts failed to load — global middleware registered there is INACTIVE in dev:",
+      entry.error instanceof Error ? entry.error.message : entry.error,
+    );
   }
 
   let srv: ReturnType<typeof createServer>;
@@ -165,11 +234,61 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
     throw err;
   }
 
+  // After createServer so the "use client" SSR stub is installed before the
+  // root.tsx import this performs. Never fatal — it only prints warnings.
+  try {
+    await warnUnregisteredApiRoutes(appDir);
+  } catch (err) {
+    console.warn("[bractjs] API-route registration check skipped:", err instanceof Error ? err.message : err);
+  }
+
+  const requestRestart =
+    options?.onRestartRequired ??
+    ((file: string) => {
+      console.warn(
+        `[bractjs] ${file} is a server-side change this process cannot absorb — ` +
+          `restart the dev server to apply it (\`bractjs dev\` does this automatically).`,
+      );
+    });
+
   const watcher = watchApp(appDir, async (rawFile, info) => {
     // fs.watch yields backslash-separated paths on Windows; the checks and
     // pattern derivation below assume POSIX form (action-registry and the
     // codegen normalize the same way).
     const file = rawFile.split("\\").join("/");
+
+    // Our own codegen writes here (type-only output) — reacting would loop.
+    if (file.startsWith("_generated/")) return;
+
+    // ── Changes the running process cannot absorb ─────────────────────────
+    // Route-module CONTENT edits are handled in-process below (cache-busted
+    // re-imports). Everything else server-side is not: `*.server.ts` and
+    // shared non-route modules are reached through cached unversioned import
+    // specifiers inside route modules; `server.ts`/`lifecycle.ts` ran their
+    // side effects at boot; and the route trie/manifest is built once, so an
+    // added or removed route file would 404 / linger until restart.
+    const isScript = file.endsWith(".ts") || file.endsWith(".tsx");
+    const isRouteModule = file.startsWith("routes/") || file === "root.tsx" || file === "root.ts";
+    const isServerEntry = file === "server.ts" || file === "lifecycle.ts" || /\.server\.tsx?$/.test(file);
+
+    // A rename under routes/ is a route-set change only when file existence
+    // disagrees with the known set: added (exists, unknown) or removed
+    // (missing, known). Atomic saves (exists, known) and editor temp files
+    // (missing, unknown — e.g. sed's `.!1234!x.tsx`) are not set changes.
+    let routeSetChanged = false;
+    if (info.renameSeen && file.startsWith("routes/")) {
+      const exists = await Bun.file(resolve(process.cwd(), appDir, file)).exists();
+      routeSetChanged = exists !== knownRouteFiles.has(file);
+      if (exists) knownRouteFiles.add(file);
+      else knownRouteFiles.delete(file);
+    }
+
+    if (isServerEntry || routeSetChanged || (isScript && !isRouteModule)) {
+      // Under `bractjs dev` this exits for the supervisor to respawn us and
+      // never returns. Programmatic callers get the warning default; fall
+      // through so they keep the previous best-effort in-process behavior.
+      requestRestart(file);
+    }
 
     // Add/remove/rename of a route file changes the route set → regenerate
     // typed routes. Saves (content changes) never alter the generated output
@@ -178,12 +297,12 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
       await syncRouteTypes(appDir);
     }
 
-    // Add/remove/rename of an action-eligible file (routes/* or *.server.ts):
-    // the registry was populated once at boot, so a newly created "use server"
-    // module would 404 at /_action until restart, and a deleted one would
-    // linger. Re-scan from scratch (changed BODIES still need a restart — the
-    // module cache serves the old code).
-    if (info.renameSeen && (file.startsWith("routes/") || /\.server\.tsx?$/.test(file))) {
+    // Route-module change: bump the dev module generation so the next request
+    // re-imports fresh loader/action/beforeLoad code instead of Bun's cached
+    // copy, then re-register "use server" bodies so /_action resolves the
+    // fresh function refs (the registry holds references from the old import).
+    if (isScript && (isRouteModule || (info.renameSeen && /\.server\.tsx?$/.test(file)))) {
+      bumpDevModuleGeneration();
       clearActionRegistry();
       await loadServerActions(appDir);
     }
@@ -197,7 +316,14 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
     // Root, layouts, and other files: fall back to full page reload.
     const isRoute = file.startsWith("routes/") && !file.endsWith("layout.tsx") && !file.endsWith("layout.ts");
 
-    if (isRoute) {
+    if (file.endsWith(".css")) {
+      // Styles are extracted to real files, so a CSS edit needs no JS swap and
+      // no reload — the browser just re-fetches the rebuilt stylesheet. Checked
+      // before `isRoute` because a .css file living under routes/ would
+      // otherwise be mistaken for a route module.
+      hmr.broadcast({ type: "hmr:css", file, duration });
+      console.log(`✓ ${file} → style update in ${duration}ms`);
+    } else if (isRoute) {
       const pattern = filePathToPattern(file);
       // Chunk URL = same basename as route file; splitting build puts it in build/client/
       const chunkUrl = `/build/client/${basename(file, extname(file))}.js`;

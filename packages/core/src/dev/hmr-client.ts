@@ -3,6 +3,7 @@
  *
  * Message types:
  *   hmr:route  — swap a single route module without full page reload
+ *   hmr:css    — re-fetch stylesheets in place (no reload, no state loss)
  *   hmr:reload — full page reload (root/layout/non-route file changed)
  *
  * Module swap flow:
@@ -22,15 +23,35 @@ export const hmrClientScript: string = `
     });
   }
 
+  // Set once the socket has ever dropped: the dev server restarted (server
+  // module changed), so the next successful reconnect reloads the page to
+  // pick up fresh SSR output.
+  var wasDisconnected = false;
+
   function connect() {
     // Port published by the server's dev bootstrap (config hmrPort), else 3001.
     var port = window.__BRACTJS_HMR_PORT__ || 3001;
     var ws = new WebSocket("ws://localhost:" + port);
+    ws.onopen = function () {
+      if (wasDisconnected) location.reload();
+    };
     ws.onmessage = function (event) {
       try {
         var msg = JSON.parse(event.data);
         if (msg.type === "hmr:reload") {
           location.reload();
+        } else if (msg.type === "hmr:css") {
+          // Re-point every framework-emitted stylesheet at a cache-busted URL.
+          // Dev CSS paths are stable (unhashed), so mutating href in place is
+          // enough and preserves all client state. Only /build/ hrefs are
+          // touched, matching the same-origin check the route path enforces.
+          var links = document.querySelectorAll('link[rel="stylesheet"]');
+          for (var i = 0; i < links.length; i++) {
+            var el = links[i];
+            var href = el.getAttribute("href") || "";
+            if (!/^\\/build\\//.test(href)) continue;
+            el.setAttribute("href", href.split("?")[0] + "?t=" + Date.now());
+          }
         } else if (msg.type === "hmr:route" && msg.pattern != null && msg.chunkUrl) {
           // Validate chunk URL is a same-origin relative path before importing.
           // Prevents a compromised/MITM'd dev WS from executing arbitrary URLs.
@@ -52,7 +73,7 @@ export const hmrClientScript: string = `
         }
       } catch (_) {}
     };
-    ws.onclose = function () { setTimeout(connect, 1000); };
+    ws.onclose = function () { wasDisconnected = true; setTimeout(connect, 1000); };
   }
   connect();
 })();

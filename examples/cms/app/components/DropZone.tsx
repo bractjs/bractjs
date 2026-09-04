@@ -1,22 +1,22 @@
 "use client";
 // Admin-wide drag/drop upload. Drop one or many images ANYWHERE in the admin and
 // they POST to /api/media/upload (multipart), then we land on the media library.
-// "use client" → SSR-stubbed, so it renders null until `mounted` (no hydration
+// "use client" → SSR-stubbed, so it renders null until hydrated (no hydration
 // mismatch). The overlay is pointer-events:none so the drop still reaches window.
 
 import { useEffect, useRef, useState } from "react";
+import { useHydrated } from "../use-hydrated.ts";
 
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
 export function DropZone() {
-  const [mounted, setMounted] = useState(false);
+  const hydrated = useHydrated();
   const [active, setActive] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const depth = useRef(0);
-  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!hydrated) return;
     const onEnter = (e: DragEvent) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
@@ -60,9 +60,9 @@ export function DropZone() {
       window.removeEventListener("dragleave", onLeave);
       window.removeEventListener("drop", onDrop);
     };
-  }, [mounted]);
+  }, [hydrated]);
 
-  if (!mounted || (!active && !status)) return null;
+  if (!hydrated || (!active && !status)) return null;
   return (
     <div className="dropzone-overlay">
       <div className="dropzone-card">{status ?? "Drop image(s) anywhere to upload"}</div>

@@ -34,6 +34,24 @@ export function getDevHmrPort(): number {
 }
 
 /**
+ * Dev-only module-cache generation. Bumped by the dev watcher whenever a
+ * route module's content changes; `devBustedSpecifier` appends it as a query
+ * string so the next dynamic import re-evaluates the file instead of serving
+ * Bun's cached copy — this is what makes edited loaders/actions live in dev
+ * without a process restart. 0 (never bumped) and non-dev runtimes return the
+ * path untouched, so `bractjs start` and compiled binaries always import the
+ * plain specifier.
+ */
+let _devModuleGeneration = 0;
+export function bumpDevModuleGeneration(): void {
+  _devModuleGeneration++;
+}
+export function devBustedSpecifier(path: string): string {
+  if (!isDevRuntime() || _devModuleGeneration === 0) return path;
+  return `${path}?v=${_devModuleGeneration}`;
+}
+
+/**
  * Strict "is development?" check used to gate sensitive output (error
  * messages, stack traces) that would otherwise leak in production.
  *

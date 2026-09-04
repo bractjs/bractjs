@@ -82,7 +82,31 @@ async function runRoutePipeline(
   // is idempotent over the loader/action redirects `work` already sanitized.
   // Scoped to the SSR route handler on purpose: /api handlers and the global
   // pipeline (e.g. an OAuth start route that redirects off-origin) are not gated.
-  return sanitizeRedirect(res, request.url);
+  return envelopeActionRedirect(sanitizeRedirect(res, request.url), request);
+}
+
+/**
+ * For client-side action submits (fetches carrying `X-BractJS-Action`),
+ * convert a redirect into `204 No Content` + `X-BractJS-Redirect: <location>`.
+ * fetch() follows redirects opaquely, so a raw 3xx makes the browser burn a
+ * full document GET it then discards — consuming one-shot state on the way
+ * (e.g. a flash cookie the target layout reads-and-clears in `headers()`),
+ * which is why post-redirect toasts historically never fired. The envelope
+ * lets the router soft-navigate instead, so the `/_data` request is the FIRST
+ * to present the cookie. Runs after sanitizeRedirect, so the Location is
+ * already vetted; all other headers (Set-Cookie!) are preserved. Browser form
+ * posts (no header) keep the plain 3xx.
+ */
+function envelopeActionRedirect(res: Response, request: Request): Response {
+  if (res.status < 300 || res.status >= 400) return res;
+  if (!MUTATING_METHODS.has(request.method)) return res;
+  if (request.headers.get("X-BractJS-Action") !== "1") return res;
+  const location = res.headers.get("Location");
+  if (!location) return res;
+  const headers = new Headers(res.headers);
+  headers.delete("Location");
+  headers.set("X-BractJS-Redirect", location);
+  return new Response(null, { status: 204, headers });
 }
 
 export async function handleRequest(
@@ -330,6 +354,8 @@ async function route(
       matches,
       headers: routeHeaders,
       routeFile: match.routeFile.filePath,
+      // Manifest key for this route — selects its extracted CSS bundles.
+      routePattern: match.routeFile.urlPattern,
       // Set by the opt-in csp() middleware; undefined otherwise.
       nonce: getCspNonce(mwCtx.context),
       ssrMode,

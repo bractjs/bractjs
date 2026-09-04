@@ -1,7 +1,9 @@
-/* app/styles.css — compiled by Tailwind v4 to public/styles.css (see package.json
- * `css` / `css:watch` scripts) and linked from root.tsx. Tailwind utility classes
- * power the admin chrome + the sign-in screens; the editorial public site keeps
- * its hand-written component classes, which live here alongside the utilities. */
+/* app/styles.css — imported by app/root.tsx and compiled as part of the bundle
+ * (bractjs.config.ts sets `tailwind: true`). BractJS extracts it to a hashed
+ * CSS file and links it during SSR — there is no separate CLI step. Tailwind
+ * utility classes power the admin chrome + the sign-in screens; the editorial
+ * public site keeps its hand-written component classes, which live here
+ * alongside the utilities. */
 
 @import "tailwindcss";
 

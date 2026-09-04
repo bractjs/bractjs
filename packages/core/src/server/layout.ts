@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import type { RouteModule } from "../shared/route-types.ts";
+import { devBustedSpecifier } from "./env.ts";
 import { layoutDirsFromFilePath, type RouteFile } from "./scanner.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -80,7 +81,9 @@ export function resolveLayoutChainFromRegistry(
 // ── importRouteModule ──────────────────────────────────────────────────────
 
 export async function importRouteModule(filePath: string): Promise<RouteModule> {
-  const mod = await import(filePath);
+  // Dev: cache-busted so edited loaders/actions are live without a restart.
+  const spec = devBustedSpecifier(filePath);
+  const mod = await import(spec);
   return {
     loader: mod.loader,
     action: mod.action,

@@ -52,28 +52,32 @@ test("POST / runs action and returns 200 HTML", async () => {
   expect(res.headers.get("content-type")).toContain("text/html");
 });
 
-// Regression: an action that *returns* (not throws) a redirect must produce a
-// real 3xx with the Location header — previously it was wrapped into a 200 JSON
-// body, so `<Form>`/the browser never followed it.
-test("POST action that RETURNS redirect() yields a 302 with Location (X-BractJS-Action)", async () => {
+// A client-side action submit (X-BractJS-Action) gets the redirect as a
+// 204 + X-BractJS-Redirect envelope instead of a raw 3xx: fetch() would
+// otherwise auto-follow into a throwaway document GET that consumes one-shot
+// state (flash cookies) before the router's /_data request can read it.
+test("POST action that RETURNS redirect() is enveloped for client submits (X-BractJS-Action)", async () => {
   const res = await fetch(`${BASE}/redirect-action`, {
     method: "POST",
     body: new FormData(),
     headers: { Origin: BASE, "X-BractJS-Action": "1" },
     redirect: "manual",
   });
-  expect(res.status).toBe(302);
-  expect(res.headers.get("Location")).toBe("/");
+  expect(res.status).toBe(204);
+  expect(res.headers.get("X-BractJS-Redirect")).toBe("/");
+  expect(res.headers.get("Location")).toBeNull();
+  // The flash pattern: one-shot cookies attached to the redirect must survive.
+  expect(res.headers.get("Set-Cookie")).toContain("flash=saved");
 });
 
-test("full-page POST action that RETURNS redirect() also yields a 302", async () => {
+test("full-page POST action that RETURNS redirect() yields a real 3xx", async () => {
   const res = await fetch(`${BASE}/redirect-action`, {
     method: "POST",
     body: new FormData(),
     headers: { Origin: BASE },
     redirect: "manual",
   });
-  expect(res.status).toBe(302);
+  expect(res.status).toBe(303);
   expect(res.headers.get("Location")).toBe("/");
 });
 

@@ -2,8 +2,10 @@ import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
 import { clientEnvPlugin, serverModuleStubPlugin } from "../build/env-plugin.ts";
+import { collectCssBundles } from "../build/css-collect.ts";
 import { generateManifest, writeManifest } from "../build/manifest.ts";
-import { cssModulesPlugin } from "../build/plugins/css-modules.ts";
+import { tailwindPlugins } from "../build/plugins/tailwind.ts";
+import { routeShakePlugin } from "../build/plugins/route-shake.ts";
 import { reactDedupePlugin } from "../build/react-dedupe.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import type { BractJSConfig } from "../server/serve.ts";
@@ -54,12 +56,17 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
       // imports a `*.server.ts` module would have that server source compiled
       // and served to the browser over /build/client in dev; without
       // `clientEnvPlugin` server env vars would leak the same way.
+      // Required to learn which CSS bundle Bun extracted for each entry-point;
+      // dev must record the same CSS the production build does, or styles
+      // would only be linked in one of the two modes.
+      metafile: true,
       plugins: [
         reactDedupePlugin(process.cwd()),
         serverModuleStubPlugin,
         createUseServerProxyPlugin(appDir),
+        routeShakePlugin(appDir),
         clientEnvPlugin(config?.clientEnv ?? [], Bun.env as Record<string, string>),
-        cssModulesPlugin,
+        ...(await tailwindPlugins(config ?? {})),
         ...(config?.plugins ?? []),
       ],
     });
@@ -73,23 +80,41 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
   }
 
   const routeChunks = new Map<string, string>();
+  const routeCss = new Map<string, string[]>();
   const clientEntry = "/build/client/client.js";
   const shimBase = basename(SHIM, extname(SHIM)); // ".bractjs-entry"
   let rootChunk: string | undefined;
+  let entryCss: string[] | undefined;
+  let rootCss: string[] | undefined;
+
+  // Dev leaves outputs unhashed, so a CSS bundle's public path is just its
+  // location under the outdir — no rename step, unlike the production build.
+  const cssByEntry = collectCssBundles(result.metafile, outdir);
+  const cssPublicPaths = (jsAbs: string): string[] | undefined => {
+    const cssPaths = cssByEntry.get(jsAbs);
+    if (!cssPaths?.length) return undefined;
+    const out = cssPaths
+      .filter((p) => p.startsWith(outdir + "/"))
+      .map((p) => "/build/client/" + p.slice(outdir.length + 1).replace(/\\/g, "/"));
+    return out.length ? out : undefined;
+  };
 
   for (const output of result.outputs) {
     if (output.kind !== "entry-point") continue;
     const outBase = basename(output.path, extname(output.path));
     // rel: path of this output relative to outdir, e.g. "app/routes/_index.js"
     const rel = output.path.slice(outdir.length + 1);
+    const css = cssPublicPaths(resolve(output.path));
 
     if (outBase === shimBase) {
       // Rename shim output → client.js
       const target = join(outdir, "client.js");
       if (output.path !== target) await rename(output.path, target);
+      entryCss = css;
     } else if (rel === join(appDirClean, "root.js")) {
       // Root component chunk — the shell that wraps <Outlet />
       rootChunk = "/build/client/" + rel;
+      rootCss = css;
     } else {
       // Match by full relative path to avoid basename collisions (_index appears N times).
       // Input: appDirClean/r.filePath. Output mirrors that structure under outdir.
@@ -99,10 +124,14 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
       });
       if (matched) {
         routeChunks.set(matched.urlPattern, "/build/client/" + rel);
+        if (css) routeCss.set(matched.urlPattern, css);
       }
     }
   }
 
-  await writeManifest(generateManifest({ clientEntry, rootChunk, routeChunks }), buildDir);
+  await writeManifest(
+    generateManifest({ clientEntry, rootChunk, routeChunks, routeCss, entryCss, rootCss }),
+    buildDir,
+  );
   return { duration: Date.now() - start };
 }

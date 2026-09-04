@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in the framework doesn't behave as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a **security** issue, don't file here — report it privately via
+        [Security → Report a vulnerability](https://github.com/bractjs/bractjs/security/advisories/new).
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Which run mode?
+      description: >
+        BractJS has three, and they load modules differently — a bug in one is
+        often absent from the others, so this narrows it down fast.
+      multiple: true
+      options:
+        - bractjs dev
+        - bractjs start (after bractjs build)
+        - compiled binary (bun build --compile)
+        - not sure
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `bun --version` and your `@bractjs/bractjs` version.
+      placeholder: "bun 1.3.14, @bractjs/bractjs 0.3.2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        A route module or a `curl` command beats a description. If it only
+        reproduces in a full app, a link to a minimal repo is ideal.
+      render: tsx
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Server console, browser console, or build output.
+      render: shell

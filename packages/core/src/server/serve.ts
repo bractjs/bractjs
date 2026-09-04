@@ -49,8 +49,15 @@ export interface BractJSConfig {
   sourcemap?: "none" | "linked" | "inline" | "external";
   minify?: boolean;
   clientEnv?: string[];
-  /** User Bun bundler plugins appended to the client build (e.g. bun-plugin-tailwind). */
+  /** User Bun bundler plugins appended to the client build. */
   plugins?: import("bun").BunPlugin[];
+  /**
+   * Compile Tailwind v4 as part of the CSS graph. Requires `bun-plugin-tailwind`
+   * and `tailwindcss` in the app's devDependencies; import a stylesheet
+   * containing `@import "tailwindcss";` from `app/root.tsx` (or a route) and
+   * BractJS extracts, hashes, and `<link>`s it — no CLI step, no manual tag.
+   */
+  tailwind?: boolean;
   buildDir?: string;
   /** Directory for transformed image cache. Defaults to .bract-image-cache */
   imageCacheDir?: string;
@@ -105,13 +112,20 @@ async function readDevManifest(buildDir: string): Promise<ServerManifest> {
   const m = (await f.json()) as {
     clientEntry?: string;
     rootChunk?: string;
-    routes?: Record<string, { chunk?: string }>;
+    entryCss?: string[];
+    rootCss?: string[];
+    routes?: Record<string, { chunk?: string; css?: string[] }>;
   };
   return {
     clientEntry: m.clientEntry ?? DEFAULT_MANIFEST.clientEntry,
     rootChunk: m.rootChunk,
+    entryCss: m.entryCss,
+    rootCss: m.rootCss,
     routes: Object.fromEntries(
-      Object.entries(m.routes ?? {}).map(([pat, e]) => [pat, { file: e.chunk ?? "", chunk: e.chunk }]),
+      Object.entries(m.routes ?? {}).map(([pat, e]) => [
+        pat,
+        { file: e.chunk ?? "", chunk: e.chunk, css: e.css },
+      ]),
     ),
   };
 }
@@ -132,8 +146,10 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       ? loadManifest(buildDir).then((m) => ({
           clientEntry: m.clientEntry,
           rootChunk: m.rootChunk,
+          entryCss: m.entryCss,
+          rootCss: m.rootCss,
           routes: Object.fromEntries(
-            Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk }]),
+            Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk, css: e.css }]),
           ),
         }))
       : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);
@@ -403,9 +419,21 @@ async function shutdownAll(signal?: string): Promise<void> {
   await Promise.all([...activeServers].map((rec) => shutdownServer(rec)));
 }
 
+// `bractjs dev` / `bractjs start` import `<appDir>/server.ts` purely for its
+// side effects (pipeline.use(...) registrations). That file also calls
+// createServer() at module scope — the compile entrypoint contract — which
+// must NOT bind a second server during such an import. loadServerEntry()
+// (src/config/server-entry.ts) sets this flag around the import.
+let createServerSuppressed = false;
+export function setCreateServerSuppressed(v: boolean): void {
+  createServerSuppressed = v;
+}
+
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
 } {
+  if (createServerSuppressed) return { stop() {} };
+
   const port = config?.port ?? 3000;
 
   if (!isDevRuntime()) {

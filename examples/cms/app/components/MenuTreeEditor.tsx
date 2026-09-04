@@ -5,11 +5,12 @@
 // (unlimited depth). Inline-edit each item's label + CSS class, remove items, then
 // "Save layout" submits the whole tree (flattened to {id,parentId,position,label,
 // cssClass}) to the route action. "use client" → SSR-stubbed, so it renders null
-// until mounted (no hydration mismatch); the admin requires JS, like RichEditor.
+// until hydrated (no hydration mismatch); the admin requires JS, like RichEditor.
 
 import { Form } from "@bractjs/bractjs";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ghostButton, input, primaryButton } from "../ui.tsx";
+import { useHydrated } from "../use-hydrated.ts";
 
 const ids = (ns: EditorNode[]): string[] => ns.flatMap((n) => [n.id, ...ids(n.children)]);
 
@@ -69,16 +70,19 @@ export function MenuTreeEditor({ items }: { items: EditorNode[] }) {
   const [tree, setTree] = useState<EditorNode[]>(items);
   const [over, setOver] = useState<{ id: string; zone: Zone } | null>(null);
   const dragId = useRef<string | null>(null); // ref, not state → dragging never re-renders/remounts
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const hydrated = useHydrated();
   // Re-sync only when the server item-SET changes (e.g. after Add revalidates the
   // loader), keyed on ids — so a local drag/edit (no server change) is never clobbered.
+  // Adjusting state *during render* rather than in an effect is React's documented
+  // way to derive state from changed props: it re-renders before the browser
+  // paints, so the stale tree is never shown (an effect would flash it first).
   const sig = ids(items).join(",");
-  useEffect(() => {
+  const [prevSig, setPrevSig] = useState(sig);
+  if (sig !== prevSig) {
+    setPrevSig(sig);
     setTree(items);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: re-sync only when the server item-set (sig) changes, never on local drag/edit
-  }, [sig]);
-  if (!mounted) return null;
+  }
+  if (!hydrated) return null;
 
   const zoneOf = (e: React.DragEvent): Zone => {
     const r = e.currentTarget.getBoundingClientRect();
