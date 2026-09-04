@@ -26,7 +26,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   },
   "//": "Pin react/react-dom to one version to avoid a dual-React 'invalid hook call' at hydration for \"use client\" components. In the pnpm workspace, react is hoisted/shared across the workspace-linked framework so a single copy is used; root-level pnpm.overrides enforce the version repo-wide."
