@@ -48,15 +48,29 @@ export function createRateLimiter(limit: number, windowMs: number): RateLimiter 
 
 // Proxy-set forwarding headers are trivially spoofable by a direct client, so we
 // only trust them when explicitly told we're behind a trusted reverse proxy
-// (TRUST_PROXY=1). Otherwise IP-keyed limits collapse to a single "unknown"
-// bucket — deliberately conservative. The strong brute-force guarantees in this
-// app are keyed by username / per-code attempt caps, which don't depend on IP.
+// (TRUST_PROXY=1). Otherwise the IP is UNKNOWN_IP and callers SKIP their
+// IP-keyed limits: one shared "unknown" bucket would let any anonymous client
+// lock every user out (30 junk logins → nobody can sign in). The strong
+// brute-force guarantees in this app are keyed by username / per-code attempt
+// caps, which don't depend on IP.
 const TRUST_PROXY = /^(1|true|yes)$/i.test(process.env.TRUST_PROXY ?? "");
+
+/** Returned by clientIp() when no trustworthy client address is available. */
+export const UNKNOWN_IP = "unknown";
 
 /** Best-effort client IP. Only honors proxy headers when TRUST_PROXY is set. */
 export function clientIp(req: Request): string {
-  if (!TRUST_PROXY) return "unknown";
+  if (!TRUST_PROXY) return UNKNOWN_IP;
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
+  if (xff) return xff.split(",")[0]!.trim() || UNKNOWN_IP;
+  return req.headers.get("x-real-ip")?.trim() || UNKNOWN_IP;
+}
+
+/**
+ * Check an IP-keyed limiter — a no-op pass for UNKNOWN_IP, which would
+ * otherwise be one global bucket shared by every visitor (a lockout DoS).
+ */
+export function checkIpLimit(limiter: RateLimiter, ip: string): { ok: boolean; retryAfterMs: number } {
+  if (ip === UNKNOWN_IP) return { ok: true, retryAfterMs: 0 };
+  return limiter.check(ip);
 }

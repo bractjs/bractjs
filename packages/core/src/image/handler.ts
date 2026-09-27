@@ -6,6 +6,14 @@ import type { ImageFit, ImageFormat, ImageTransformParams } from "./types.ts";
 import { ALLOWED_FITS, FIT_DEFAULT, FORMAT_DEFAULT, MIME, QUALITY_DEFAULT } from "./types.ts";
 
 const ALLOWED_DIMS = new Set([320, 640, 768, 1024, 1280, 1536, 1920, 3840]);
+// SECURITY(medium): only raster sources are ever handed to ImageMagick. Its
+// vector/script coders (SVG, MVG, MSL, PS, TXT…) can read local files, so a
+// file under public/ must never be able to select one — see optimizer.ts,
+// which also pins the input coder to this extension.
+const RASTER_EXTS = new Set(["jpg", "jpeg", "png", "webp", "avif", "gif"]);
+// SECURITY(low): quality is snapped to a fixed ladder so one image can't be
+// fanned out into ~100 cache variants (each an ImageMagick run + a disk file).
+const QUALITY_STEPS = [25, 50, 60, 70, 75, 80, 85, 90, 95, 100];
 const MAX_AREA = 4_000_000;
 const CACHE_CTRL = "public, max-age=31536000, immutable";
 
@@ -19,6 +27,8 @@ async function parseParams(
   // realpath()/prefix check below is the authoritative escape guard.
   if (!src || !src.startsWith("/public/")) return null;
   if (src.split("/").includes("..")) return null;
+  const ext = src.split(".").pop()?.toLowerCase() ?? "";
+  if (!RASTER_EXTS.has(ext)) return null;
 
   const rel = src.slice("/public/".length);
   const root = resolve(publicDir);
@@ -43,7 +53,9 @@ async function parseParams(
   if (h !== undefined && (isNaN(h) || !ALLOWED_DIMS.has(h))) return null;
   if (w !== undefined && h !== undefined && w * h > MAX_AREA) return null;
 
-  const q = Math.min(100, Math.max(1, parseInt(sp.get("q") ?? String(QUALITY_DEFAULT), 10)));
+  const qRaw = parseInt(sp.get("q") ?? String(QUALITY_DEFAULT), 10);
+  if (isNaN(qRaw)) return null;
+  const q = snapQuality(qRaw);
   const fmt = (sp.get("format") ?? FORMAT_DEFAULT) as ImageFormat;
   const fitRaw = sp.get("fit") ?? FIT_DEFAULT;
   if (!MIME[fmt]) return null;
@@ -51,6 +63,15 @@ async function parseParams(
   const fit = fitRaw as ImageFit;
 
   return { src, filePath, params: { w, h, q, format: fmt, fit } };
+}
+
+/** Nearest step on {@link QUALITY_STEPS} (ties round up). */
+export function snapQuality(q: number): number {
+  let best = QUALITY_STEPS[0];
+  for (const step of QUALITY_STEPS) {
+    if (Math.abs(step - q) <= Math.abs(best - q)) best = step;
+  }
+  return best;
 }
 
 function imageResponse(result: { data: ArrayBuffer; contentType: string }, cacheStatus: string): Response {

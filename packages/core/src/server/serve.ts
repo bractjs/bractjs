@@ -4,6 +4,7 @@ import { handleImageRequest } from "../image/handler.ts";
 import { handleActionRequest } from "./action-handler.ts";
 import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
+import { isAllowedDevHost } from "./dev-host.ts";
 import { isDevRuntime, isExplicitDev } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
@@ -29,6 +30,19 @@ export interface BractJSConfig {
   manifest: ServerManifest;
   /** WebSocket port for dev HMR (used by `bractjs dev` only). Default 3001. */
   hmrPort?: number;
+  /**
+   * Interface to listen on. Default: all interfaces for `bractjs start` / the
+   * compiled binary; `127.0.0.1` under `bractjs dev` (pass `--host` or set
+   * this to expose the dev server on your network).
+   */
+  hostname?: string;
+  /**
+   * Dev only: extra `Host` header names the dev server accepts, beyond
+   * `localhost`, `*.localhost` and IP literals (a leading dot allows
+   * subdomains: `".example.test"`). Other names are rejected with 403 to block
+   * DNS-rebinding reads of dev-only endpoints.
+   */
+  allowedHosts?: string[];
   /** Optional custom adapter (Cloudflare Workers, Deno, Node, etc.). Defaults to Bun.serve(). */
   adapter?: BractAdapter;
   /** i18n locale prefix routing (E2). */
@@ -46,6 +60,7 @@ export interface BractJSConfig {
    */
   prerender?: string[] | (() => string[] | Promise<string[]>);
   // Build options (used by src/build/bundler.ts)
+  /** Client bundle sourcemaps. Default `"none"`: build/client/ is publicly served, so maps would publish module source. */
   sourcemap?: "none" | "linked" | "inline" | "external";
   minify?: boolean;
   clientEnv?: string[];
@@ -176,6 +191,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   const moduleRegistry = config.moduleRegistry;
   const onError = config.onError;
   const ssrEnabled = config.ssr !== false;
+  const allowedHosts = config.allowedHosts ?? [];
 
   // SPA shell: production prefers the file `bractjs build` wrote; dev (or a
   // missing file) renders it on demand so root.tsx edits show up. Cached per
@@ -215,7 +231,9 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // than isDev() (NODE_ENV !== "production"). An operator who forgets to set
     // NODE_ENV would otherwise expose /_hmr/module in production, letting
     // anyone compile and download arbitrary appDir .ts/.tsx files as JS.
-    if (isExplicitDev() && pathname === "/_hmr/module") {
+    // Also require the dev RUNTIME: `NODE_ENV=development bractjs start` must
+    // not turn these on for a production server.
+    if (isDevRuntime() && isExplicitDev() && pathname === "/_hmr/module") {
       const { handleHmrModuleRequest } = await import("../dev/hmr-module-handler.ts");
       return handleHmrModuleRequest(url, appDir);
     }
@@ -223,7 +241,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // Dev-only: serve the DevTools panel module imported by hmr-client.
     // SECURITY(high): gated by isExplicitDev() so production never compiles
     // and ships package internals as JS.
-    if (isExplicitDev() && pathname === "/_bractjs/devtools.js") {
+    if (isDevRuntime() && isExplicitDev() && pathname === "/_bractjs/devtools.js") {
       const devtoolsEntry = resolve(import.meta.dir, "../dev/devtools.ts");
       const built = await Bun.build({
         entrypoints: [devtoolsEntry],
@@ -326,6 +344,15 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   }
 
   return async function fetch(request: Request): Promise<Response> {
+    // DNS-rebinding guard for the dev server (see dev-host.ts). Runs before
+    // everything, global middleware included. Production is unaffected.
+    if (isDevRuntime() && !isAllowedDevHost(request.headers.get("Host"), allowedHosts)) {
+      return new Response(
+        `Blocked request: Host "${request.headers.get("Host")}" is not allowed by the dev server. ` +
+          "Add it to `allowedHosts` in bractjs.config.ts.",
+        { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+      );
+    }
     // Run the global middleware pipeline around the ENTIRE dispatch so
     // cors()/csp()/logging/auth attached via `pipeline.use(...)` apply to
     // API routes, server actions, /_stream, /_image and static assets — not
@@ -443,7 +470,7 @@ export function createServer(config?: Partial<BractJSConfig>): {
   const fetchHandler = buildFetchHandler(config ?? {});
 
   // Use provided adapter or fall back to the default Bun adapter.
-  const adapter = config?.adapter ?? new BunAdapter(config?.maxRequestBodySize);
+  const adapter = config?.adapter ?? new BunAdapter(config?.maxRequestBodySize, config?.hostname);
 
   if (adapter instanceof BunAdapter) {
     adapter.setHandler(fetchHandler);
@@ -475,7 +502,8 @@ export function createServer(config?: Partial<BractJSConfig>): {
   };
   activeServers.add(rec);
 
-  console.log(`[bract] Server running at http://localhost:${port}`);
+  const shownHost = !config?.hostname || config.hostname === "127.0.0.1" ? "localhost" : config.hostname;
+  console.log(`[bract] Server running at http://${shownHost}:${port}`);
 
   const gracefulShutdown = (signal?: string, exitCode = 0): void => {
     void shutdownAll(signal).finally(() => process.exit(exitCode));

@@ -24,7 +24,7 @@ import {
 } from "./models/users.server.ts";
 import type { OAuthProvider } from "./oauth.server.ts";
 import type { Permission } from "./permissions.ts";
-import { createRateLimiter } from "./ratelimit.server.ts";
+import { checkIpLimit, createRateLimiter } from "./ratelimit.server.ts";
 
 // SESSION_SECRET is validated in env.server.ts (boot fails in prod if it's weak).
 const secrets = [SESSION_SECRET];
@@ -92,7 +92,7 @@ export type LoginRate = { ok: true } | { ok: false; retryAfterMs: number };
 export function checkLoginRate(username: string, ip: string): LoginRate {
   const u = loginPerUser.check(username.trim().toLowerCase());
   if (!u.ok) return { ok: false, retryAfterMs: u.retryAfterMs };
-  const i = loginPerIp.check(ip);
+  const i = checkIpLimit(loginPerIp, ip);
   if (!i.ok) return { ok: false, retryAfterMs: i.retryAfterMs };
   return { ok: true };
 }

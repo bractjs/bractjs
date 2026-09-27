@@ -116,6 +116,12 @@ export interface DevServerOptions {
   port?: number;
   /** WebSocket port for HMR. Default: 3001. */
   hmrPort?: number;
+  /**
+   * Interface for the app + HMR servers. Default: config.hostname ??
+   * "127.0.0.1" (loopback only). Pass "0.0.0.0" to reach the dev server from
+   * other devices — `bractjs dev --host` does this.
+   */
+  hostname?: string;
   /** Merged over values from bractjs.config.ts. */
   config?: Partial<BractJSConfig>;
   /**
@@ -167,6 +173,10 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
   const hmrPort = options?.hmrPort ?? merged.hmrPort ?? 3001;
   const appPort = options?.port ?? merged.port ?? 3000;
+  // SECURITY(medium): loopback by default. The dev server exposes source-
+  // derived endpoints (/_hmr/module, dev error messages) that must not be
+  // reachable from the local network unless the developer opts in.
+  const hostname = options?.hostname ?? merged.hostname ?? "127.0.0.1";
   // Publish the port so the SSR dev bootstrap tells the HMR client where to connect.
   setDevHmrPort(hmrPort);
 
@@ -190,7 +200,7 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
   let hmr: ReturnType<typeof createHmrServer>;
   try {
-    hmr = createHmrServer(hmrPort);
+    hmr = createHmrServer(hmrPort, hostname);
   } catch (err) {
     if ((err as { code?: string }).code === "EADDRINUSE") onPortInUse("HMR socket", hmrPort);
     throw err;
@@ -227,7 +237,7 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
   let srv: ReturnType<typeof createServer>;
   try {
-    srv = createServer({ port: appPort, ...merged, ...lifecycle });
+    srv = createServer({ port: appPort, ...merged, hostname, ...lifecycle });
   } catch (err) {
     hmr.stop();
     if ((err as { code?: string }).code === "EADDRINUSE") onPortInUse("app server", appPort);

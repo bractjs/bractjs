@@ -33,6 +33,12 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
       c.maxRequestBodySize > 0,
     "a positive finite number",
   );
+  check("hostname", typeof c.hostname === "string", "a string");
+  check(
+    "allowedHosts",
+    Array.isArray(c.allowedHosts) && c.allowedHosts.every((h) => typeof h === "string"),
+    "an array of strings",
+  );
   check("appDir", typeof c.appDir === "string", "a string");
   check("publicDir", typeof c.publicDir === "string", "a string");
   check("buildDir", typeof c.buildDir === "string", "a string");

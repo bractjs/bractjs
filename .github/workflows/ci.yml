@@ -11,6 +11,10 @@ on:
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
+# CI only reads the repo; never hand PR code a write-capable token.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

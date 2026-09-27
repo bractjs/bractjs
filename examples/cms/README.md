@@ -17,7 +17,7 @@ bun run css:watch    # (optional, 2nd terminal) live-recompile Tailwind on class
 
 **Signing in** (`/admin/login`):
 
-1. Username + password — seeded `admin` / `admin123`.
+1. Username + password — seeded `admin` / `admin123` in dev (production requires `SEED_ADMIN_PASSWORD` on first boot).
 2. A 6-digit code is emailed as the second factor. With no SMTP configured (the
    default), the code is **printed to the dev server console** — copy it into the
    verify screen. `ADMIN_EMAIL` (default `admin@example.com`) sets where the
@@ -29,6 +29,7 @@ bun run css:watch    # (optional, 2nd terminal) live-recompile Tailwind on class
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `SESSION_SECRET`                                                    | HMAC secret for the signed cookies (≥16 chars; set in prod).                               |
 | `ADMIN_EMAIL`                                                       | Email for the seeded admin's 2FA code.                                                     |
+| `SEED_ADMIN_PASSWORD`                                               | Seeded admin password on first boot. Required in prod (≥12 chars); dev uses `admin123`.    |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Real email delivery; omit for the console fallback.                                        |
 | `APP_URL`                                                           | Public origin used to build OAuth redirect URIs (default `http://localhost:3200`).         |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`                         | Enables "Continue with Google". Redirect URI: `${APP_URL}/api/auth/google/callback`.       |

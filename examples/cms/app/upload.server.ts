@@ -17,6 +17,29 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/gif": ".gif",
 };
 
+// Leading magic bytes per allowlisted MIME type. `file.type` is client-supplied,
+// so the bytes must agree with it before we store anything: an SVG/MVG/HTML
+// payload labelled image/png would otherwise land in public/ as `x.png`, where
+// the /_image optimizer (ImageMagick) or a sniffing client might interpret it.
+const MAGIC: Record<string, (b: Uint8Array) => boolean> = {
+  "image/png": (b) => startsWith(b, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  "image/jpeg": (b) => startsWith(b, [0xff, 0xd8, 0xff]),
+  "image/gif": (b) => ascii(b, 0, 6) === "GIF87a" || ascii(b, 0, 6) === "GIF89a",
+  "image/webp": (b) => ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 12) === "WEBP",
+};
+
+function startsWith(b: Uint8Array, sig: number[]): boolean {
+  return sig.every((v, i) => b[i] === v);
+}
+function ascii(b: Uint8Array, from: number, to: number): string {
+  return String.fromCharCode(...b.subarray(from, to));
+}
+
+/** Whether `bytes` really is the raster type `mime` claims (see MAGIC). */
+export function matchesMagic(mime: string, bytes: Uint8Array): boolean {
+  return MAGIC[mime]?.(bytes) ?? false;
+}
+
 export type UploadResult = { ok: true; media: Media } | { ok: false; reason: string };
 
 export async function saveUpload(file: unknown, alt = ""): Promise<UploadResult> {
@@ -29,9 +52,14 @@ export async function saveUpload(file: unknown, alt = ""): Promise<UploadResult>
   const ext = EXT_BY_MIME[file.type];
   if (!ext) return { ok: false, reason: "Unsupported file type. Use PNG, JPEG, WEBP or GIF." };
 
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!matchesMagic(file.type, bytes)) {
+    return { ok: false, reason: "That file isn't a valid PNG, JPEG, WEBP or GIF image." };
+  }
+
   const filename = `${crypto.randomUUID()}${ext}`;
   await mkdir(UPLOAD_DIR, { recursive: true });
-  await Bun.write(join(UPLOAD_DIR, filename), await file.arrayBuffer());
+  await Bun.write(join(UPLOAD_DIR, filename), bytes);
 
   const media = insertMedia({
     filename,

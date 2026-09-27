@@ -32,6 +32,16 @@ export function isSafeInternalRedirect(url: string): boolean {
   return true;
 }
 
+/** Absolute or protocol-relative URL whose scheme is http/https. */
+function isHttpUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url, "https://base.invalid");
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function redirect(
   url: string,
   status: number = 302,
@@ -43,6 +53,14 @@ export function redirect(
       `[bractjs] redirect: unsafe Location "${url}". ` +
         `Pass { allowExternal: true } to redirect off-origin.`,
     );
+  }
+  // SECURITY(medium): `allowExternal` opts into other *origins*, not other
+  // schemes. The client router follows an action redirect with
+  // location.assign(), where a `javascript:` Location would execute — so an
+  // app that forwards user input here must not be able to turn an open
+  // redirect into XSS.
+  if (options?.allowExternal && !isSafeInternalRedirect(url) && !isHttpUrl(url)) {
+    throw new Error(`[bractjs] redirect: Location "${url}" must be an http(s) URL.`);
   }
   const h = new Headers(headers);
   h.set("Location", url);

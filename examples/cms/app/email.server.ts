@@ -7,7 +7,7 @@
 // nodemailer is a Node-only dependency; importing it in a `.server.ts` module
 // guarantees it never reaches the client bundle (it'd be stubbed there).
 
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import { APP_NAME, APP_URL, IS_PROD, smtp } from "./env.server.ts";
 
 const APP_HOST = (() => {
@@ -18,9 +18,9 @@ const APP_HOST = (() => {
   }
 })();
 
-let transport: nodemailer.Transporter | null = null;
+let transport: Transporter | null = null;
 
-function getTransport(): nodemailer.Transporter | null {
+function getTransport(): Transporter | null {
   if (!smtp.configured) return null;
   transport ??= nodemailer.createTransport({
     host: smtp.host,

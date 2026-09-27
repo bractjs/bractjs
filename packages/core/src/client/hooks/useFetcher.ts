@@ -11,7 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
-import { toSamePath } from "../nav-utils.ts";
+import { assignExternal, toSamePath } from "../nav-utils.ts";
 import { triggerRevalidation } from "../revalidation.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -171,7 +171,8 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
         const envelope = res.headers.get("X-BractJS-Redirect");
         if (envelope !== null) {
           const to = toSamePath(envelope);
-          window.location.assign(to ?? envelope);
+          if (to) window.location.assign(to);
+          else assignExternal(envelope);
           return;
         }
         // If the action redirected, do a real navigation rather than parsing the

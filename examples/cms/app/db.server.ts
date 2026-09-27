@@ -265,13 +265,30 @@ db.run("CREATE UNIQUE INDEX IF NOT EXISTS uniq_users_email ON users(email) WHERE
 // Runs once on a fresh DB so the example boots populated. Guarded by a row
 // count so restarts never duplicate.
 
+// The well-known demo password is fine locally, but a fresh PRODUCTION database
+// must never come up with `admin` / `admin123` (only the email code would stand
+// between the internet and the admin account). Fail closed instead.
+function seedAdminPassword(): string {
+  const fromEnv = process.env.SEED_ADMIN_PASSWORD;
+  if (process.env.NODE_ENV === "production") {
+    if (!fromEnv || fromEnv === "admin123" || fromEnv.length < 12) {
+      throw new Error(
+        "Refusing to seed a new production database with the demo admin password. " +
+          "Set SEED_ADMIN_PASSWORD (>= 12 chars) for the first boot.",
+      );
+    }
+    return fromEnv;
+  }
+  return fromEnv || "admin123";
+}
+
 async function seed() {
   const userCount = db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM users").get()?.n ?? 0;
   if (userCount > 0) return;
 
   const now = Date.now();
   const adminId = newId();
-  const hash = await Bun.password.hash("admin123");
+  const hash = await Bun.password.hash(seedAdminPassword());
   // ADMIN_EMAIL is where the seeded admin's second-factor code is sent (and the
   // address Google/Microsoft sign-in matches against). Defaults to a dev inbox.
   const adminEmail = (process.env.ADMIN_EMAIL ?? "admin@example.com").trim().toLowerCase();

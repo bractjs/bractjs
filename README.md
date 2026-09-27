@@ -1274,7 +1274,7 @@ import { Image } from "@bractjs/bractjs";
 | `src`              | `string`                              | —         | Path under `/public/` (required)            |
 | `alt`              | `string`                              | —         | Required                                    |
 | `width` / `height` | `number`                              | —         | Intrinsic size                              |
-| `quality`          | `number`                              | `80`      | 1–100                                       |
+| `quality`          | `number`                              | `80`      | 1–100, rounded to the nearest step          |
 | `format`           | `"webp" \| "avif" \| "jpeg" \| "png"` | `"webp"`  | `ImageFormat`                               |
 | `fit`              | `"cover" \| "contain" \| "fill"`      | `"cover"` | `ImageFit`                                  |
 | `priority`         | `boolean`                             | `false`   | Disable lazy load, set `fetchpriority=high` |
@@ -1330,7 +1330,7 @@ await runBuild({
   appDir: "./app",
   buildDir: "./build",
   minify: true,
-  sourcemap: "external", // "none" | "linked" | "inline" | "external"
+  sourcemap: "none", // default; "linked" | "inline" | "external" publish client maps
   clientEnv: ["PUBLIC_API_URL"],
   plugins: [], // extra Bun plugins
 });
@@ -1522,12 +1522,14 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | ------------------------------------ | ------------------------- | ---------------------- | ------------------------------------------------------------------- |
 | `port`                               | `number`                  | `3000`                 | TCP port                                                            |
 | `hmrPort`                            | `number`                  | `3001`                 | Dev HMR WebSocket port (`bractjs dev` only)                         |
+| `hostname`                           | `string`                  | all; dev `127.0.0.1`   | Listen address; `bractjs dev --host` exposes dev on the network     |
+| `allowedHosts`                       | `string[]`                | `[]`                   | Extra dev `Host` names (anti DNS-rebinding; `.x.test` = subdomains) |
 | `appDir`                             | `string`                  | `"./app"`              | Contains `routes/` and `root.tsx`                                   |
 | `publicDir`                          | `string`                  | `"./public"`           | Static assets (served no-cache)                                     |
 | `buildDir`                           | `string`                  | `"./build"`            | Build output                                                        |
 | `imageCacheDir`                      | `string`                  | `".bract-image-cache"` | Optimized-image disk cache                                          |
 | `maxRequestBodySize`                 | `number`                  | `16777216` (16 MiB)    | Hard ceiling on any request body, enforced by the Bun adapter (§27) |
-| `sourcemap`                          | `string`                  | `"external"`           | `"none" \| "linked" \| "inline" \| "external"`                      |
+| `sourcemap`                          | `string`                  | `"none"`               | `"none" \| "linked" \| "inline" \| "external"`                      |
 | `minify`                             | `boolean`                 | `true`                 | Minify client bundles                                               |
 | `clientEnv`                          | `string[]`                | `[]`                   | `process.env` keys exposed to the client                            |
 | `plugins`                            | `BunPlugin[]`             | `[]`                   | Extra client-build plugins                                          |

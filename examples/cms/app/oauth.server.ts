@@ -108,13 +108,18 @@ async function exchangeMicrosoft(code: string): Promise<OAuthProfile> {
   });
   if (!infoRes.ok) throw new Error(`Microsoft Graph failed: ${await infoRes.text()}`);
   const info = (await infoRes.json()) as {
-    mail?: string;
     userPrincipalName?: string;
     displayName?: string;
   };
-  const email = info.mail ?? info.userPrincipalName;
-  if (!email) throw new Error("Microsoft account has no email");
-  // Graph exposes no email_verified. For work/school accounts mail/UPN are
-  // tenant-controlled (trustworthy); prefer a specific MS_TENANT in production.
+  // SECURITY(high): match on userPrincipalName, NEVER `mail`. `mail` is a free-
+  // text directory attribute any tenant admin can set to any address — with a
+  // multi-tenant app ("organizations"), an attacker's own Entra tenant could
+  // claim `mail: admin@your-company.com` and sign in as that CMS user
+  // ("nOAuth"). A UPN's domain must be DNS-verified by the tenant that issues
+  // it, so a foreign tenant can't mint one in your domain. Guest UPNs
+  // (`alice_contoso.com#EXT#@fabrikam.onmicrosoft.com`) aren't an email at all.
+  const email = info.userPrincipalName?.trim().toLowerCase();
+  if (!email || !email.includes("@")) throw new Error("Microsoft account has no sign-in name");
+  if (email.includes("#ext#")) throw new Error("Microsoft guest accounts can't sign in");
   return { email, name: info.displayName ?? null, avatarUrl: null };
 }

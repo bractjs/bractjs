@@ -59,11 +59,29 @@ test("exchangeCode(google) rejects an unverified email", async () => {
   await expect(exchangeCode("google", "code")).rejects.toThrow(/not verified/i);
 });
 
-test("exchangeCode(microsoft) reads mail/displayName from Graph", async () => {
+test("exchangeCode(microsoft) matches on userPrincipalName, never the free-text mail attribute", async () => {
+  // nOAuth: another tenant's admin can set `mail` to any address. Only the
+  // domain-verified UPN may identify the user.
   queueFetch([
     { body: { access_token: "tok" } },
-    { body: { mail: "person@contoso.com", displayName: "Person" } },
+    {
+      body: {
+        mail: "admin@example.com",
+        userPrincipalName: "Mallory@Attacker.onmicrosoft.com",
+        displayName: "M",
+      },
+    },
   ]);
   const profile = await exchangeCode("microsoft", "code");
-  expect(profile).toEqual({ email: "person@contoso.com", name: "Person", avatarUrl: null });
+  expect(profile).toEqual({ email: "mallory@attacker.onmicrosoft.com", name: "M", avatarUrl: null });
+});
+
+test("exchangeCode(microsoft) rejects guest (#EXT#) and missing UPNs", async () => {
+  queueFetch([
+    { body: { access_token: "tok" } },
+    { body: { mail: "admin@example.com", userPrincipalName: "admin_example.com#EXT#@evil.onmicrosoft.com" } },
+  ]);
+  await expect(exchangeCode("microsoft", "code")).rejects.toThrow(/guest/i);
+  queueFetch([{ body: { access_token: "tok" } }, { body: { mail: "admin@example.com" } }]);
+  await expect(exchangeCode("microsoft", "code")).rejects.toThrow(/sign-in name/i);
 });

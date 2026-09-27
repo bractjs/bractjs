@@ -76,6 +76,14 @@ switch (command) {
     // /_bractjs/devtools.js) are reachable when the user hasn't set NODE_ENV.
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
 
+    // `--host [addr]` exposes the dev server beyond loopback (bare `--host` =
+    // all interfaces). Carried to the respawned child through the env.
+    const hostIdx = process.argv.indexOf("--host");
+    if (hostIdx !== -1) {
+      const next = process.argv[hostIdx + 1];
+      process.env.BRACTJS_DEV_HOST = next && !next.startsWith("-") ? next : "0.0.0.0";
+    }
+
     // Reserved child exit code meaning "a server module changed — respawn me".
     // 75 = EX_TEMPFAIL, chosen to never collide with real failure codes.
     const DEV_RESTART_EXIT_CODE = 75;
@@ -89,6 +97,7 @@ switch (command) {
       const { createDevServer, DevServerError } = await import("../src/dev/server.ts");
       try {
         await createDevServer({
+          hostname: process.env.BRACTJS_DEV_HOST || undefined,
           onRestartRequired: (file) => {
             console.log(`[bractjs] ${file} changed — restarting dev server…`);
             process.exit(DEV_RESTART_EXIT_CODE);
@@ -275,7 +284,7 @@ switch (command) {
     console.log(
       "Usage: bractjs <command>\n" +
         "  new      <app-name>            Scaffold a new BractJS app\n" +
-        "  dev                            Start dev server with HMR\n" +
+        "  dev      [--host [addr]]       Start dev server with HMR (loopback unless --host)\n" +
         "  build                          Build for production (build/ dir)\n" +
         "  start                          Start production server\n" +
         "  codegen  [app] [out]           Generate typed route types\n" +

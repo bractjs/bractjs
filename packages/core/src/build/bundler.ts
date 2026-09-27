@@ -17,6 +17,7 @@ import { reactDedupePlugin } from "./react-dedupe.ts";
 export interface BuildConfig {
   appDir?: string;
   buildDir?: string;
+  /** Client bundle sourcemaps. Default `"none"`: build/client/ is publicly served, so maps would publish module source. */
   sourcemap?: "none" | "linked" | "inline" | "external";
   minify?: boolean;
   clientEnv?: string[];
@@ -93,7 +94,12 @@ export async function runBuild(config: BuildConfig): Promise<void> {
       // No publicPath: relative chunk refs work correctly when files are served
       // at URLs matching their outdir structure (e.g. /build/client/chunk-xxx.js).
       minify: config.minify ?? true,
-      sourcemap: config.sourcemap ?? "external",
+      // SECURITY(medium): client maps default OFF. Everything under
+      // build/client/ is publicly served, and a map's `sourcesContent` holds
+      // module-scope code the minifier tree-shook out of the JS — e.g. a route
+      // file's top-level constant/helper that only its (stripped) loader used.
+      // Opt in with `sourcemap: "external"` (and ideally gate *.map at the edge).
+      sourcemap: config.sourcemap ?? "none",
       define: buildDefines(config),
       // Bun pairs each JS entry-point output with the CSS bundle it extracted;
       // the mapping is only available via the metafile.

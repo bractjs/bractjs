@@ -15,18 +15,26 @@ on:
         description: "Tag to draft a release for (e.g. v0.3.3)"
         required: true
 
+# Least privilege: the job that installs dependencies and runs the test suite
+# (third-party code) gets a read-only token; only the tiny `draft` job, which
+# runs nothing but `gh`, can write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The dispatch input is untrusted text: never splice ${{ … }} into `run:`
+    # scripts (shell injection) — pass it through the environment instead.
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -43,7 +51,6 @@ jobs:
       - name: Version agreement (tag == package.json == newest CHANGELOG heading)
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           TAG_VERSION="${TAG#v}"
           PKG_VERSION="$(node -p "require('./packages/core/package.json').version")"
           LOG_VERSION="$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | tr -d '#[] ')"
@@ -75,7 +82,6 @@ jobs:
         id: notes
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           # Everything between this version's heading and the next `## [` heading.
           awk -v ver="${TAG#v}" '
             $0 ~ "^## \\[" ver "\\]" { inside = 1; next }
@@ -88,12 +94,30 @@ jobs:
           fi
           wc -l notes.md
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: notes.md
+          retention-days: 1
+
+  draft:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
       - name: Draft the GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           # Drafted, not published: a human skims the notes and hits publish.
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file notes.md
