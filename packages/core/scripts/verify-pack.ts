@@ -38,6 +38,7 @@ const required = [
   "README.md",
   "src/index.ts",
   "bin/cli.ts",
+  "bin/scaffold-template.ts",
   "types/index.d.ts",
   "types/build-entry.d.ts",
   "types/codegen-entry.d.ts",

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { fillTemplate } from "./scaffold-template.ts";
 
 const command = process.argv[2];
 
@@ -58,8 +59,7 @@ async function copyDir(src: string, dest: string, appName: string, bractPath: st
     const destPath = join(dest, rel);
     await Bun.write(destPath, ""); // creates parent dirs
     let content = await Bun.file(srcPath).text();
-    content = content.replaceAll("{{APP_NAME}}", appName);
-    content = content.replaceAll("{{BRACT_PATH}}", bractPath);
+    content = fillTemplate(content, { APP_NAME: appName, BRACT_PATH: bractPath });
     await Bun.write(destPath, content);
   }
 }
