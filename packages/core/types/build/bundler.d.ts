@@ -3,6 +3,7 @@ import type { BunPlugin } from "bun";
 export interface BuildConfig {
     appDir?: string;
     buildDir?: string;
+    /** Client bundle sourcemaps. Default `"none"`: build/client/ is publicly served, so maps would publish module source. */
     sourcemap?: "none" | "linked" | "inline" | "external";
     minify?: boolean;
     clientEnv?: string[];

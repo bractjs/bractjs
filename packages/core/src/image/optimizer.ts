@@ -57,16 +57,31 @@ function resizeArgs(params: ImageTransformParams): string[] {
   return args;
 }
 
-function buildArgs(binary: string, input: string, params: ImageTransformParams): string[] {
+// Input coder per raster extension (the handler rejects every other type).
+const INPUT_CODER: Record<string, string> = {
+  jpg: "jpeg",
+  jpeg: "jpeg",
+  png: "png",
+  webp: "webp",
+  avif: "avif",
+  gif: "gif",
+};
+
+export function buildArgs(binary: string, input: string, params: ImageTransformParams): string[] {
   const base = binary === "magick" ? ["magick", "convert"] : ["convert"];
-  // SECURITY(low): prefix the input with `file:` so ImageMagick treats it as
-  // a filesystem path even if it contains a coder prefix like `mvg:` or
-  // `https:` (e.g. an attacker who plants a file named "https:evil.txt"
-  // inside publicDir). Defense in depth — realpath() already constrains the
-  // path to publicDir, so this prevents the "format coder hijack" class only.
+  // SECURITY(medium): name the input coder explicitly from the (allowlisted)
+  // extension. A bare path — even `file:` — lets ImageMagick sniff the format
+  // from the file's magic bytes, so an MVG/SVG/MSL payload saved as `x.png`
+  // (e.g. an upload whose MIME type the client lied about) would reach coders
+  // that read local files ("ImageTragick"). With `png:` a non-PNG simply fails
+  // to decode. The explicit coder also stops a filename like "https:evil.txt"
+  // from being read as a URL.
+  const ext = input.split(".").pop()?.toLowerCase() ?? "";
+  const coder = INPUT_CODER[ext];
+  if (!coder) throw new Error(`[bractjs] refusing to transform non-raster file ${input}`);
   return [
     ...base,
-    `file:${input}`,
+    `${coder}:${input}`,
     ...resizeArgs(params),
     "-quality",
     String(params.q),

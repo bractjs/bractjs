@@ -9,7 +9,7 @@
 import { Buffer } from "node:buffer";
 import { db } from "./db.server.ts";
 import { sendLoginCode } from "./email.server.ts";
-import { createRateLimiter } from "./ratelimit.server.ts";
+import { checkIpLimit, createRateLimiter } from "./ratelimit.server.ts";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
@@ -39,7 +39,7 @@ export async function issueLoginCode(
   if (!user.email) {
     return { ok: false, reason: "This account has no email set for two-factor sign-in.", status: 400 };
   }
-  const ipLimit = issuePerIp.check(ip);
+  const ipLimit = checkIpLimit(issuePerIp, ip);
   if (!ipLimit.ok) return tooMany(ipLimit.retryAfterMs);
   const userLimit = issuePerUser.check(user.id);
   if (!userLimit.ok) return tooMany(userLimit.retryAfterMs);
@@ -64,7 +64,7 @@ export async function issueLoginCode(
 
 /** Check a submitted code for `userId`; consumes it on success. */
 export function verifyLoginCode(userId: string, code: string, ip: string): MfaResult {
-  const ipLimit = verifyPerIp.check(ip);
+  const ipLimit = checkIpLimit(verifyPerIp, ip);
   if (!ipLimit.ok) return tooMany(ipLimit.retryAfterMs);
 
   const row = db

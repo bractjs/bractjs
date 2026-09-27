@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
+import { UNKNOWN_IP } from "../ratelimit.server.ts";
 import {
+  _resetLoginRateLimits,
   authenticatePassword,
+  checkLoginRate,
   beginPendingMfa,
   clearPendingMfa,
   getAdmin,
@@ -83,4 +86,22 @@ test("OAuth state cookie round-trips state + provider", async () => {
   const set = await setOAuthState("google", state);
   const read = await readOAuthState(reqWith(set));
   expect(read).toEqual({ state, provider: "google" });
+});
+
+test("checkLoginRate: anonymous junk logins can't lock out everyone (no shared 'unknown' IP bucket)", () => {
+  _resetLoginRateLimits();
+  try {
+    // Without TRUST_PROXY every client's IP is UNKNOWN_IP. 100 attempts with
+    // random usernames used to exhaust a single global 30/15min bucket.
+    for (let i = 0; i < 100; i++) checkLoginRate(`junk-${i}`, UNKNOWN_IP);
+    expect(checkLoginRate("admin", UNKNOWN_IP).ok).toBe(true);
+    // The per-username limit still holds.
+    for (let i = 0; i < 10; i++) checkLoginRate("victim", UNKNOWN_IP); // limit is 10/window
+    expect(checkLoginRate("victim", UNKNOWN_IP).ok).toBe(false);
+    // A real (proxy-attested) IP is still limited.
+    for (let i = 0; i < 30; i++) checkLoginRate(`spray-${i}`, "203.0.113.9");
+    expect(checkLoginRate("someone", "203.0.113.9").ok).toBe(false);
+  } finally {
+    _resetLoginRateLimits();
+  }
 });

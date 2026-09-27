@@ -41,12 +41,20 @@ export async function resolveLayoutChain(routeFile: RouteFile, appDir: string): 
     layoutFiles.push(rootPath);
   }
 
-  // Intermediate layout.tsx files, outermost → innermost. Derived from the
-  // file path so route-group folders ((marketing)/…) contribute their layout.
+  // Intermediate layout.tsx / layout.ts files, outermost → innermost. Derived
+  // from the file path so route-group folders ((marketing)/…) contribute their
+  // layout.
+  // SECURITY(high): probe `.ts` too, exactly like codegen and the registry
+  // path. A guard-only `layout.ts` (middleware/beforeLoad, no JSX) is an auth
+  // gate; skipping it here enforced it in compiled binaries but NOT under
+  // `bractjs dev` / `bractjs start`.
   for (const dir of layoutDirsFromFilePath(routeFile.filePath)) {
-    const layoutPath = resolve(join(appDir, "routes", dir, "layout.tsx"));
-    if (await Bun.file(layoutPath).exists()) {
-      layoutFiles.push(layoutPath);
+    for (const ext of ["tsx", "ts"]) {
+      const layoutPath = resolve(join(appDir, "routes", dir, `layout.${ext}`));
+      if (await Bun.file(layoutPath).exists()) {
+        layoutFiles.push(layoutPath);
+        break;
+      }
     }
   }
 

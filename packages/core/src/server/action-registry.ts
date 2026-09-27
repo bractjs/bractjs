@@ -21,13 +21,21 @@ export function clearActionRegistry(): void {
 // could be invoked directly over the wire, bypassing search/param validation
 // and (for /_stream) with zero arguments. Authors who genuinely want an action
 // must export it under a different name.
+// Keep in step with every lifecycle export RouteModule defines — a missing
+// name (headers/middleware/shouldRevalidate/…) becomes a callable RPC.
 const RESERVED_ROUTE_EXPORTS = new Set([
   "default",
   "loader",
   "action",
+  "clientLoader",
+  "clientAction",
   "meta",
+  "headers",
+  "middleware",
   "beforeLoad",
+  "shouldRevalidate",
   "context",
+  "handle",
   "ErrorBoundary",
   "Fallback",
   "config",

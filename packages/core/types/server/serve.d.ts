@@ -14,6 +14,19 @@ export interface BractJSConfig {
     manifest: ServerManifest;
     /** WebSocket port for dev HMR (used by `bractjs dev` only). Default 3001. */
     hmrPort?: number;
+    /**
+     * Interface to listen on. Default: all interfaces for `bractjs start` / the
+     * compiled binary; `127.0.0.1` under `bractjs dev` (pass `--host` or set
+     * this to expose the dev server on your network).
+     */
+    hostname?: string;
+    /**
+     * Dev only: extra `Host` header names the dev server accepts, beyond
+     * `localhost`, `*.localhost` and IP literals (a leading dot allows
+     * subdomains: `".example.test"`). Other names are rejected with 403 to block
+     * DNS-rebinding reads of dev-only endpoints.
+     */
+    allowedHosts?: string[];
     /** Optional custom adapter (Cloudflare Workers, Deno, Node, etc.). Defaults to Bun.serve(). */
     adapter?: BractAdapter;
     /** i18n locale prefix routing (E2). */
@@ -30,6 +43,7 @@ export interface BractJSConfig {
      * SSR in production; requests with a query string stay dynamic.
      */
     prerender?: string[] | (() => string[] | Promise<string[]>);
+    /** Client bundle sourcemaps. Default `"none"`: build/client/ is publicly served, so maps would publish module source. */
     sourcemap?: "none" | "linked" | "inline" | "external";
     minify?: boolean;
     clientEnv?: string[];

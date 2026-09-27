@@ -53,19 +53,36 @@ export const google = {
   },
 };
 
+// Tenants that admit personal Microsoft accounts, whose sign-in name isn't a
+// domain-verified identity. Refused outright (fail closed).
+const PERSONAL_ACCOUNT_TENANTS = new Set(["common", "consumers"]);
+
 export const microsoft = {
   clientId: process.env.MS_CLIENT_ID,
   clientSecret: process.env.MS_CLIENT_SECRET,
-  // Default to "organizations" (work/school accounts only) rather than "common".
-  // "common" also accepts personal Microsoft accounts, whose email is not
-  // tenant-controlled — combined with the lack of an email_verified signal in
-  // Graph, that would let an arbitrary personal account match a CMS admin email.
-  // Set a specific tenant id for the tightest scope.
+  // Default to "organizations" (work/school accounts only). Sign-in matches on
+  // the domain-verified userPrincipalName (see oauth.server.ts), so any tenant
+  // is safe here; a specific tenant id is still the tightest scope.
   tenant: process.env.MS_TENANT ?? "organizations",
   get configured(): boolean {
-    return Boolean(this.clientId && this.clientSecret);
+    if (!this.clientId || !this.clientSecret) return false;
+    if (PERSONAL_ACCOUNT_TENANTS.has(this.tenant.toLowerCase())) {
+      warnOnce(
+        `[cms] Microsoft sign-in disabled: MS_TENANT="${this.tenant}" admits personal accounts. ` +
+          `Use "organizations" or your tenant id.`,
+      );
+      return false;
+    }
+    return true;
   },
 };
+
+let warned = false;
+function warnOnce(msg: string): void {
+  if (warned) return;
+  warned = true;
+  console.warn(msg);
+}
 
 export type OAuthProvider = "google" | "microsoft";
 

@@ -4,6 +4,12 @@ export interface DevServerOptions {
     port?: number;
     /** WebSocket port for HMR. Default: 3001. */
     hmrPort?: number;
+    /**
+     * Interface for the app + HMR servers. Default: config.hostname ??
+     * "127.0.0.1" (loopback only). Pass "0.0.0.0" to reach the dev server from
+     * other devices — `bractjs dev --host` does this.
+     */
+    hostname?: string;
     /** Merged over values from bractjs.config.ts. */
     config?: Partial<BractJSConfig>;
     /**

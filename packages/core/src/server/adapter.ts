@@ -38,9 +38,12 @@ export class BunAdapter implements BractAdapter {
   private server: ReturnType<typeof Bun.serve> | null = null;
   private handler: ((request: Request) => Promise<Response>) | null = null;
   private maxRequestBodySize: number;
+  private hostname: string | undefined;
 
-  constructor(maxRequestBodySize: number = DEFAULT_MAX_REQUEST_BODY_BYTES) {
+  /** `hostname` omitted → Bun's default (all interfaces). */
+  constructor(maxRequestBodySize: number = DEFAULT_MAX_REQUEST_BODY_BYTES, hostname?: string) {
     this.maxRequestBodySize = maxRequestBodySize;
+    this.hostname = hostname;
   }
 
   setHandler(handler: (request: Request) => Promise<Response>): void {
@@ -57,6 +60,7 @@ export class BunAdapter implements BractAdapter {
     const handler = this.handler;
     this.server = Bun.serve({
       port,
+      ...(this.hostname ? { hostname: this.hostname } : {}),
       maxRequestBodySize: this.maxRequestBodySize,
       fetch: handler,
       error(err: Error) {

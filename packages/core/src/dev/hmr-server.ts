@@ -11,12 +11,17 @@ interface HmrMessage {
 
 const clients = new Set<ServerWebSocket<unknown>>();
 
-export function createHmrServer(port = 3001): {
+export function createHmrServer(
+  port = 3001,
+  hostname = "127.0.0.1",
+): {
   broadcast(msg: HmrMessage): void;
   stop(): void;
 } {
   const server = Bun.serve({
     port,
+    // Loopback by default — the HMR socket has no business on the network.
+    hostname,
     fetch(req, srv) {
       // SECURITY(medium): reject WebSocket upgrades that don't come from a
       // loopback Origin. Without this, any website the developer visits could

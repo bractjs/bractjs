@@ -11,6 +11,13 @@ import type { ServerManifest } from "../server/render.ts";
  */
 export declare function toSamePath(loc: string): string | null;
 /**
+ * Full-page navigation to an off-origin redirect target (the `null` branch of
+ * {@link toSamePath}). SECURITY(medium): only http(s) targets are followed —
+ * `location.assign("javascript:…")` would execute script in this origin, which
+ * would turn an app-level open redirect into XSS. Anything else is dropped.
+ */
+export declare function assignExternal(loc: string): void;
+/**
  * Split an internal navigation target ("/path", "/path?q", "/path#h",
  * "/path?q#h") into its parts. Callers must normalize absolute URLs through
  * `toSamePath()` first — this is a pure string split, not a URL parser.

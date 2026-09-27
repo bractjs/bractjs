@@ -22,6 +22,26 @@ export function toSamePath(loc: string): string | null {
   }
 }
 
+/**
+ * Full-page navigation to an off-origin redirect target (the `null` branch of
+ * {@link toSamePath}). SECURITY(medium): only http(s) targets are followed —
+ * `location.assign("javascript:…")` would execute script in this origin, which
+ * would turn an app-level open redirect into XSS. Anything else is dropped.
+ */
+export function assignExternal(loc: string): void {
+  let protocol: string;
+  try {
+    protocol = new URL(loc, window.location.href).protocol;
+  } catch {
+    protocol = "";
+  }
+  if (protocol !== "http:" && protocol !== "https:") {
+    console.error(`[bractjs] refused to navigate to non-http(s) redirect target "${loc}"`);
+    return;
+  }
+  window.location.assign(loc);
+}
+
 // ── Navigation target parsing ──────────────────────────────────────────────
 
 /**

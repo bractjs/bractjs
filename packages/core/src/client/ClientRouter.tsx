@@ -19,7 +19,7 @@ import {
 import type { MetaDescriptor, RouteMatch, RouterLocation } from "../shared/route-types.ts";
 import { cacheKey, loaderCache } from "./cache.ts";
 import { moduleView, parseDataPayload } from "./data-payload.ts";
-import { createLocationKey, matchPatternForPath, parseTo, toSamePath } from "./nav-utils.ts";
+import { assignExternal, createLocationKey, matchPatternForPath, parseTo, toSamePath } from "./nav-utils.ts";
 import { type RevalidationInfo, registerRevalidator } from "./revalidation.ts";
 import {
   type HydrationPending,
@@ -137,7 +137,7 @@ export function ClientRouter({
           void navigateRef.current(safe);
           return;
         }
-        window.location.href = loc;
+        assignExternal(loc);
       };
       try {
         const { pathname: toPathname, search: toSearch, hash: toHash } = parseTo(to);
@@ -520,7 +520,7 @@ export function ClientRouter({
               await navigateRef.current(safe);
               return REDIRECTED;
             }
-            window.location.assign(envelope);
+            assignExternal(envelope);
             return REDIRECTED;
           }
           if (res.redirected) {

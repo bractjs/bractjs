@@ -17,7 +17,9 @@ export declare class BunAdapter implements BractAdapter {
     private server;
     private handler;
     private maxRequestBodySize;
-    constructor(maxRequestBodySize?: number);
+    private hostname;
+    /** `hostname` omitted → Bun's default (all interfaces). */
+    constructor(maxRequestBodySize?: number, hostname?: string);
     setHandler(handler: (request: Request) => Promise<Response>): void;
     fetch(request: Request): Promise<Response>;
     listen(port: number): void;
