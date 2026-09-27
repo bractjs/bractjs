@@ -23,8 +23,14 @@ if (code !== 0) {
 interface PackReport {
   files: Array<{ path: string }>;
 }
-const report = JSON.parse(out) as PackReport[];
-const files = new Set(report[0]?.files.map((f) => f.path) ?? []);
+// npm ≤ 11 prints `[report]`; npm 12 prints `{ "<pkg name>": report }`.
+const parsed = JSON.parse(out) as PackReport[] | Record<string, PackReport>;
+const report = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+if (!report || !Array.isArray(report.files)) {
+  console.error(`[verify-pack] unrecognized \`npm pack --json\` output:\n${out.slice(0, 500)}`);
+  process.exit(1);
+}
+const files = new Set(report.files.map((f) => f.path));
 
 const required = [
   "package.json",
