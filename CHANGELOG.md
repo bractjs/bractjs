@@ -6,6 +6,12 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.4.0] — 2026-09-27
+
 ### Added
 
 - **Styling now works out of the box — `import "./styles.css"` is the entire setup.** Previously BractJS had no CSS story you could actually use: `*.module.css` resolved to a JS module that built a `<style>` tag _at runtime_, so SSR shipped unstyled HTML and the styles only appeared after hydration (a guaranteed flash of unstyled content, and nothing at all for no-JS clients), while a plain `.css` import was bundled to a file that nothing ever referenced. The build now collects the stylesheets Bun extracts for each entry-point (via `Bun.build({ metafile: true })` → `cssBundle`), content-hashes them alongside the JS, and records them in the route manifest (`entryCss` / `rootCss` / `routes[pattern].css`); the server renders `<link rel="stylesheet">` into the **streamed HTML**, so documents arrive styled. Because the client build already uses one entrypoint per route, **per-route CSS splitting is automatic** — `/` never downloads `/about`'s styles. The links are rendered with React 19's `precedence`, which dedupes by href across the server and client trees and makes the router wait for an incoming route's stylesheet to load before committing, so soft navigation never paints unstyled. Hashed CSS inherits the existing immutable `Cache-Control`, and all three run modes (`dev`, `start`, compiled binary) emit identical links. New `collectCssBundles` export on `@bractjs/bractjs/build` for custom `Bun.build` pipelines.
@@ -48,6 +54,7 @@ All notable changes to BractJS are documented here.
 
 ### Tests / tooling
 
+- **The publish gate works with npm 12.** `scripts/verify-pack.ts` (run by `prepublishOnly` and CI's tarball gate) read `npm pack --json` as an array; npm 12 keys the report by package name, so the gate saw an empty tarball and blocked every publish. Both shapes are now accepted, and an unrecognized shape fails loudly instead of reporting every file missing.
 - **CI is green again.** Two of the six CI steps had been failing on every push. (a) **ESLint crashed on startup** — `typescript-eslint` needs the TypeScript compiler API, and TypeScript 7 is the native Go port, which exposes none of it (`ts.ModuleKind`, `ts.sys` and friends are simply absent); no `typescript-eslint` release supports it yet. The root workspace now pins TypeScript 5.9.3 for the lint toolchain while `packages/core` and both examples keep their own TypeScript 7 for `tsc`, so typechecking and typegen are unchanged. ESLint itself is pinned to 9.39.5, since `eslint-plugin-react` and `eslint-plugin-jsx-a11y` cap at ESLint 9 and crashed on ESLint 10's removed rule-context API. (b) **`prettier --check` failed on 88 files**, 74 of them the generated `packages/core/types/*.d.ts` — formatting those is unwinnable, because the next `typegen` writes tsc's own formatting back and the drift guard then fails, so the directory is now Prettier- and ESLint-ignored the way other generated output already is.
 - **`@types/bun` is pinned in both examples** (it floated on `latest`, which can turn CI red with no commit).
 - CI now runs on a Bun matrix (pinned + latest) and uploads no artifacts; a scheduled weekly run catches upstream breakage on a quiet repo.
