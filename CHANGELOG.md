@@ -6,7 +6,9 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- **`bractjs new` scaffolds a working app again.** The template's `<title>{{APP_NAME}}</title>` had been reformatted to `{{ APP_NAME }}` (valid JSX, so formatters normalize it), and the scaffolder's exact-string replace no longer matched — every new app's document render crashed with `ReferenceError: APP_NAME is not defined` (500 on every page; broken since 0.3.0). Placeholders are now matched whitespace-tolerantly, and a test fails if any placeholder survives substitution in a shipped template file.
 
 ---
 
