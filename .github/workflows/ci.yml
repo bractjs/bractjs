@@ -33,13 +33,13 @@ jobs:
     continue-on-error: ${{ matrix.bun == 'latest' }}
     name: check (bun ${{ matrix.bun }})
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # pnpm manages dependencies (version pinned via package.json#packageManager);
       # Bun is the runtime, test runner, and bundler.
       - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
