@@ -6,6 +6,12 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.5.0] — 2026-09-28
+
 ### Added
 
 - **`getRequest()` — server actions can authorize themselves.** A `"use server"` function receives only the caller's arguments, so it had no way to read cookies or the session; the documented pattern of taking `request` as the first parameter could not work (the caller supplies every argument). `getRequest()` returns the current HTTP request anywhere in its async call chain — server actions, `/_stream`, loaders, typed `/api` handlers — and throws a clear error outside one. The README and authentication guide now show `requireUser(getRequest())`.
