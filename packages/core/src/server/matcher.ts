@@ -69,14 +69,27 @@ function walk(node: TrieNode, parts: string[], idx: number, params: Record<strin
   if (idx === parts.length) {
     if (node.routeFile) return { routeFile: node.routeFile, params };
     // An optional param's segment was omitted (e.g. /users for [[id]]). The
-    // route lives one node deeper; the param is simply left unset.
-    if (node.optionalChild?.node.routeFile) {
-      return { routeFile: node.optionalChild.node.routeFile, params };
-    }
+    // route lives deeper; the param is simply left unset. Recursing (rather
+    // than peeking one level) also covers consecutive optionals.
+    if (node.optionalChild) return walk(node.optionalChild.node, parts, idx, params);
     return null;
   }
 
   const part = parts[idx];
+  const opt = node.optionalChild;
+  let triedSkip = false;
+  const skipOptional = (): MatchResult => {
+    triedSkip = true;
+    return opt ? walk(opt.node, parts, idx, params) : null;
+  };
+
+  // 0. An omitted optional segment followed by a static one — "/about" for
+  //    [[lang]]/about.tsx. Reading "about" as that static segment beats binding
+  //    it to the optional param (static > dynamic), so try the skip first.
+  if (opt?.node.children.has(part)) {
+    const result = skipOptional();
+    if (result) return result;
+  }
 
   // 1. Prefer static match
   const staticChild = node.children.get(part);
@@ -95,14 +108,15 @@ function walk(node: TrieNode, parts: string[], idx: number, params: Record<strin
   }
 
   // 3. Try optional param — consume this part as the param (the "present"
-  //    case). The "absent" case is handled at the all-parts-consumed branch
-  //    above. Param-before-catch-all keeps optional more specific than splat.
-  if (node.optionalChild) {
-    const result = walk(node.optionalChild.node, parts, idx + 1, {
-      ...params,
-      [node.optionalChild.name]: part,
-    });
+  //    case), then the "absent" case mid-path ("/42" for [[lang]]/[id].tsx).
+  //    Param-before-catch-all keeps optional more specific than splat.
+  if (opt) {
+    const result = walk(opt.node, parts, idx + 1, { ...params, [opt.name]: part });
     if (result) return result;
+    if (!triedSkip) {
+      const skipped = skipOptional();
+      if (skipped) return skipped;
+    }
   }
 
   // 4. Try catch-all — consumes remaining segments

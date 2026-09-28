@@ -89,6 +89,35 @@ describe("optional segments [[id]]", () => {
     expect(r?.routeFile.urlPattern).toBe("users/me");
   });
 
+  // The Remix `($lang).about.tsx` shape: an optional segment that is NOT last.
+  test("mid-path optional matches with the segment absent", () => {
+    const trie = buildTrie([makeRoute("[[lang]]/about")]);
+    expect(matchRoute("/about", trie)?.params).toEqual({});
+    expect(matchRoute("/en/about", trie)?.params).toEqual({ lang: "en" });
+  });
+
+  test("static segment after an optional beats binding it to the param", () => {
+    const trie = buildTrie([makeRoute("[[lang]]"), makeRoute("[[lang]]/about")]);
+    expect(matchRoute("/about", trie)?.routeFile.urlPattern).toBe("[[lang]]/about");
+    expect(matchRoute("/fr", trie)).toEqual({ routeFile: expect.anything(), params: { lang: "fr" } });
+    expect(matchRoute("/fr", trie)?.routeFile.urlPattern).toBe("[[lang]]");
+    expect(matchRoute("/", trie)?.routeFile.urlPattern).toBe("[[lang]]");
+  });
+
+  test("mid-path optional followed by a param", () => {
+    const trie = buildTrie([makeRoute("[[lang]]/posts/[id]")]);
+    expect(matchRoute("/posts/7", trie)?.params).toEqual({ id: "7" });
+    expect(matchRoute("/de/posts/7", trie)?.params).toEqual({ lang: "de", id: "7" });
+    expect(matchRoute("/de/posts", trie)).toBeNull();
+  });
+
+  test("consecutive optionals can each be omitted", () => {
+    const trie = buildTrie([makeRoute("[[lang]]/[[region]]/shop")]);
+    expect(matchRoute("/shop", trie)?.params).toEqual({});
+    expect(matchRoute("/en/shop", trie)?.params).toEqual({ lang: "en" });
+    expect(matchRoute("/en/us/shop", trie)?.params).toEqual({ lang: "en", region: "us" });
+  });
+
   test("does not over-consume — extra segment falls through to catch-all", () => {
     const trie = buildTrie([makeRoute("users/[[id]]"), makeRoute("users/[...rest]")]);
     const r = matchRoute("/users/1/2", trie);
