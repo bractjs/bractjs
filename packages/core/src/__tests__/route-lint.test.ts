@@ -105,3 +105,41 @@ describe("extractApiRouteDefs", () => {
     expect(extractApiRouteDefs(`navigate(route("home"))\n`)).toEqual([]);
   });
 });
+
+describe("lintRouteModuleSource — Remix / React Router exports", () => {
+  test("`links` is flagged with the CSS-import replacement", () => {
+    const w = lintRouteModuleSource(
+      `export default () => null;\nexport const links = () => [{ rel: "stylesheet", href: s }];\n`,
+      "routes/ported.tsx",
+    );
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain('export "links" is ignored');
+    expect(w[0]).toContain('import "./x.css"');
+  });
+
+  test("`HydrateFallback` points at Fallback + ssr", () => {
+    const w = lintRouteModuleSource(
+      `export default () => null;\nexport function HydrateFallback() { return null; }\n`,
+      "routes/ported.tsx",
+    );
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain("`Fallback`");
+  });
+
+  test("`unstable_middleware` points at the `middleware` rename", () => {
+    const w = lintRouteModuleSource(
+      `export default () => null;\nexport const unstable_middleware = [];\n`,
+      "routes/ported.tsx",
+    );
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain("rename it to `middleware`");
+  });
+
+  test("native BractJS exports produce no porting warnings", () => {
+    const w = lintRouteModuleSource(
+      `export default () => null;\nexport const middleware = [];\nexport function Fallback() { return null; }\nexport const ssr = false;\n`,
+      "routes/native.tsx",
+    );
+    expect(w).toEqual([]);
+  });
+});

@@ -32,6 +32,11 @@ export default tseslint.config(
       "**/.tmp-*",
       "examples/*/src/client/**",
       "examples/cms/app/styles.css",
+      "bench/apps/next/.next/**",
+      "bench/apps/next/next-env.d.ts",
+      "bench/apps/next/tsconfig.json",
+      "bench/apps/react-router/.react-router/**",
+      "bench/results/**",
     ],
   },
 

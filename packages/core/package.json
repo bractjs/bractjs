@@ -38,6 +38,10 @@
     "bractjs": "bin/cli.ts"
   },
   "types": "./types/index.d.ts",
+  "sideEffects": [
+    "./src/client/entry.tsx",
+    "./src/dev/devtools.ts"
+  ],
   "exports": {
     ".": {
       "types": "./types/index.d.ts",

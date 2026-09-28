@@ -44,6 +44,7 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
   check("buildDir", typeof c.buildDir === "string", "a string");
   check("imageCacheDir", typeof c.imageCacheDir === "string", "a string");
   check("minify", typeof c.minify === "boolean", "a boolean");
+  check("compression", typeof c.compression === "boolean", "a boolean");
   check(
     "sourcemap",
     typeof c.sourcemap === "string" &&

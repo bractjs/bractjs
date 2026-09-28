@@ -11,8 +11,8 @@ const PUBLIC_PATHS = new Set(["/admin/login", "/admin/verify", "/admin/logout"])
 type LayoutData = { user: AdminUser | null; flash: Flash | null };
 
 // Gating runs here (covers full-page GET and /_data soft-nav); the returned
-// `user` rides in useMatches() so the chrome (rendered in root.tsx, since bractjs
-// doesn't mount intermediate layout components) can label itself. `flash` rides
+// `user` rides in useMatches() so the chrome (rendered in root.tsx, which also
+// covers the public sign-in pages) can label itself. `flash` rides
 // along too, so AdminShell can pop a one-shot toast after a redirecting action.
 export async function loader({ request }: LoaderArgs): Promise<LayoutData> {
   const pathname = new URL(request.url).pathname;

@@ -26,6 +26,7 @@ interface DiskManifest {
         chunk: string;
         pattern: string;
         css?: string[];
+        layouts?: string[];
     }>;
 }
 /**

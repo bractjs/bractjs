@@ -172,17 +172,20 @@ The endpoint chain runs before body parsing, so an unauthorized request is rejec
 
 ## 5. Server actions authorize themselves
 
-Every exported function of a `"use server"` module is a public RPC endpoint at `POST /_action`. The CSRF gate proves the call came from your origin — **it does not prove who is calling**. No middleware surface wraps individual actions, so the function body is the guard:
+Every exported function of a `"use server"` module is a public RPC endpoint at `POST /_action`. The CSRF gate proves the call came from your origin — **it does not prove who is calling**. No middleware surface wraps individual actions, so the function body is the guard. An action receives only the arguments the caller passed; read the session from the current request with `getRequest()`:
 
 ```ts
 "use server";
+import { getRequest } from "@bractjs/bractjs";
 import { requireUser } from "./auth.server.ts";
 
-export async function deletePost(request: Request, postId: string) {
-  const user = await requireUser(request); // first line, every action
+export async function deletePost(postId: string) {
+  const user = await requireUser(getRequest()); // first line, every action
   await db.posts.deleteOwned(postId, user.id);
 }
 ```
+
+Never accept the user, a user ID, or a role as an action _argument_ and trust it — the caller controls every argument.
 
 Streaming actions (`GET /_stream`) are invoked with _no caller input_ — they must be safe to call with none, and must authorize themselves the same way. ([§27](../README.md#27-security-model))
 

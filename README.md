@@ -13,7 +13,7 @@
 
 This README is a **step-by-step guide to every function and feature** BractJS exports. Each section is self-contained and ordered from "first app" to "advanced". Every symbol shown here is a real export from `@bractjs/bractjs` (see [packages/core/src/index.ts](packages/core/src/index.ts)).
 
-> **New to BractJS?** Start with the guides in [`docs/`](docs/README.md): a [15-minute tutorial](docs/tutorial.md), the [mental model](docs/concepts.md) (request lifecycle, run modes), [authentication end to end](docs/authentication.md), and [deployment](docs/deployment.md). This README is the reference; those are the learning path.
+> **New to BractJS?** Start with the guides in [`docs/`](docs/README.md): a [15-minute tutorial](docs/tutorial.md), the [mental model](docs/concepts.md) (request lifecycle, run modes), [authentication end to end](docs/authentication.md), [deployment](docs/deployment.md), and [migrating from Remix / React Router 7](docs/migrating-from-remix.md). This README is the reference; those are the learning path.
 
 ---
 
@@ -156,14 +156,15 @@ Drop a file in `app/routes/`; it becomes a route. BractJS scans at startup and b
 | `routes/blog/_index.tsx`       | `/blog`                                  |
 | `routes/blog/[id].tsx`         | `/blog/:id`                              |
 | `routes/users/[[id]].tsx`      | `/users` **and** `/users/:id` (optional) |
+| `routes/[[lang]]/about.tsx`    | `/about` **and** `/:lang/about`          |
 | `routes/docs/[...slug].tsx`    | `/docs/*` (catch-all)                    |
 | `routes/blog/layout.tsx`       | wraps all `/blog/*` routes               |
 | `routes/(marketing)/about.tsx` | `/about` (group adds no URL segment)     |
 
 - `[param]` → a dynamic segment, read via `useParams()` / `params` arg.
-- `[[param]]` → an **optional** dynamic segment: the route matches whether the segment is present or not (when absent, `params.param` is simply unset).
+- `[[param]]` → an **optional** dynamic segment, in any position: the route matches whether the segment is present or not (when absent, `params.param` is simply unset). When a path could fill either, a static segment wins: `/about` goes to `[[lang]]/about.tsx`, not to `[[lang]]/_index.tsx` with `lang="about"`.
 - `[...name]` → a catch-all; the rest of the path lands in `params.name`.
-- `layout.tsx` in any directory wraps every route under it (layouts nest: `root → blog/layout → blog/[id]`).
+- `layout.tsx` in any directory wraps every route under it (layouts nest: `root → blog/layout → blog/[id]`). Its component renders around the route through its own `<Outlet />`, stays mounted — keeping its state — while you navigate between routes it wraps, and reads its **own** loader data with `useLoaderData()`. A `layout.ts` with no default export (just `loader`/`middleware`) is a transparent guard. Layout CSS is linked before the route's.
 - `(group)/` → a **route group**: the folder organizes files and contributes its `layout.tsx`, but adds **no** URL segment. Use it to give a set of routes a shared layout without a shared path prefix.
 - Match priority per segment: **static > dynamic > optional > catch-all**.
 
@@ -214,7 +215,10 @@ export function beforeLoad({ context, params, location }) {
   }
 }
 
-// 5) ErrorBoundary — renders when this segment's loader/component throws.
+// 5) ErrorBoundary — renders in the route's place when its loader throws
+//    (an HttpError keeps its status: 404 → a 404 page) or its component
+//    throws while rendering. Without one, root.tsx's ErrorBoundary is used,
+//    else a minimal built-in fallback.
 export function ErrorBoundary({ error }: { error: unknown }) {
   return <p>Something broke: {error instanceof Error ? error.message : String(error)}</p>;
 }
@@ -299,7 +303,7 @@ global pipeline → searchSchema → route middleware (root → layout → route
 
 - **Route middleware** wraps everything after search validation: it runs in chain order with a shared `context`, can short-circuit with a `Response`, and (being outermost-first) can also post-process the final response. It runs inside the app-wide `pipeline` (§14).
 - **Loaders run concurrently** (root, every layout, and the route loader all in one `Promise.all`).
-- A loader that throws an `HttpError`/redirect `Response` is intentional control flow. Any _other_ thrown error is caught, sanitized (generic message in production, full message+stack only when `NODE_ENV=development`), and rendered via the nearest `ErrorBoundary`.
+- A loader that throws a redirect `Response` redirects. A **route** loader that throws an `HttpError` renders the nearest `ErrorBoundary` (the route's, else root's, else a built-in fallback) in the route's place, with that status code — on full page loads and client navigation alike; `error` is the `HttpError`, so `error.status` works. Any _other_ thrown error does the same with status 500 and a sanitized message (generic in production, the real message only when `NODE_ENV=development`), and is reported to `onError`. An `HttpError` thrown by a **root or layout** loader still ends the request with a JSON error body of that status, since no boundary can render without the root's data.
 
 > **Security:** put auth checks in `beforeLoad` (per route) or middleware (cross-cutting) — never in a component. `/_data` (used by `<Link>` soft-nav) runs `beforeLoad` and the loader, so a component-only check would still leak loader JSON. See §14.
 
@@ -375,7 +379,7 @@ Serialize a value as `application/json`.
 return json({ ok: true }, { status: 201 });
 ```
 
-### `redirect(url, status?, headers?, options?)`
+### `redirect(url, status | init?, headers?, options?)`
 
 Throw or return a redirect. **Open-redirect safe by default** — rejects `//evil.com`, `/\evil`, `https://…`, `javascript:` unless you pass `{ allowExternal: true }`.
 
@@ -384,6 +388,10 @@ return redirect("/dashboard"); // 302
 return redirect("/login", 303); // custom status
 return redirect("/x", 302, { "Set-Cookie": cookie }); // with headers
 return redirect("https://other.com", 302, undefined, { allowExternal: true });
+
+// Or the Remix / React Router init-object form:
+return redirect("/x", { status: 303, headers: { "Set-Cookie": cookie } });
+return redirect("https://other.com", { allowExternal: true });
 ```
 
 ### `error(message, status?)`
@@ -470,6 +478,8 @@ export default function BlogPost() {
 }
 ```
 
+On a full page load the document streams: the `fallback` renders first and the resolved content follows in the same response, then the value is handed to the client for hydration. On client-side navigation the `/_data` request waits for deferred values before responding, so the new page arrives complete rather than streaming. A deferred value that rejects renders the route's `ErrorBoundary`; an `HttpError`'s message and status carry through, while other errors show a generic message outside development. Deferred values must be JSON-serializable, like all loader data.
+
 ### `<Await resolve={promise | Deferred} fallback={…}>{(data) => …}</Await>`
 
 Unwraps a promise (or a `Deferred` field from a `defer()` loader) with React 19's `use()` inside its own `<Suspense>`. `isDeferred(value)` and the `Deferred` class are exported if you need to detect/construct deferred values manually.
@@ -482,7 +492,7 @@ All hooks are SSR-safe (they return sensible values during SSR) and imported fro
 
 ### `useLoaderData<T>()` → `T`
 
-The current route's loader return value. **Pass the loader function type** to infer it (`Response` branch excluded, `Deferred` fields preserved) — no hand-written type to keep in sync. An explicit object type still works.
+The current route's loader return value — or, inside a `layout.tsx` component, that layout's own loader data (`root.tsx` reads the route's). **Pass the loader function type** to infer it (`Response` branch excluded, `Deferred` fields preserved) — no hand-written type to keep in sync. An explicit object type still works.
 
 ```ts
 const { post } = useLoaderData<typeof loader>(); // inferred from loader()
@@ -777,7 +787,9 @@ export async function createPost(formData: FormData) {
 }
 
 export async function deletePost(id: string) {
-  await db.delete(posts).where(eq(posts.id, id));
+  // Actions get only the caller's arguments — authorize from the request.
+  const user = await requireUser(getRequest());
+  await db.delete(posts).where(and(eq(posts.id, id), eq(posts.authorId, user.id)));
 }
 ```
 
@@ -795,6 +807,7 @@ export default function NewPost() {
 }
 ```
 
+- **Every exported action is a public endpoint.** It receives only the caller's arguments; call `getRequest()` (imported from `@bractjs/bractjs`) to read cookies/the session and authorize inside the function (§27).
 - Accepts a single `FormData` (sent as `multipart/form-data`) **or** a JSON-serializable argument array.
 - Unknown action IDs return 404 — only functions registered at startup are callable.
 - Bodies are size-capped (1 MiB JSON) and prototype-pollution scanned.
@@ -1529,6 +1542,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | `buildDir`                           | `string`                  | `"./build"`            | Build output                                                        |
 | `imageCacheDir`                      | `string`                  | `".bract-image-cache"` | Optimized-image disk cache                                          |
 | `maxRequestBodySize`                 | `number`                  | `16777216` (16 MiB)    | Hard ceiling on any request body, enforced by the Bun adapter (§27) |
+| `compression`                        | `boolean`                 | `true`                 | Brotli/gzip responses; `false` if a proxy or CDN already compresses |
 | `sourcemap`                          | `string`                  | `"none"`               | `"none" \| "linked" \| "inline" \| "external"`                      |
 | `minify`                             | `boolean`                 | `true`                 | Minify client bundles                                               |
 | `clientEnv`                          | `string[]`                | `[]`                   | `process.env` keys exposed to the client                            |
@@ -1550,7 +1564,7 @@ The package has three entries: `@bractjs/bractjs` (everything app code needs), `
 
 Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `getRequest`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
 **Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
 
@@ -1598,7 +1612,7 @@ From `@bractjs/bractjs/codegen` ([packages/core/src/codegen-entry.ts](packages/c
 
 BractJS ships secure defaults, but a few behaviors are worth understanding so you don't accidentally widen your attack surface.
 
-- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any _other_ exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** (read the session, check the user). The CSRF gate only proves the call is same-origin; it does not authenticate the user.
+- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any _other_ exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** — an action receives only the caller's arguments, so read the session via `getRequest()` and check the user; never trust a user ID passed as an argument. The CSRF gate only proves the call is same-origin; it does not authenticate the user.
 - **`/_stream` calls actions with no arguments.** A streaming action invoked over `GET /_stream` receives no caller input. It must be safe to call with none and must authorize itself.
 - **Typed `/api` routes are CSRF-protected by default.** Mutating routes (`POST`/`PUT`/`PATCH`/`DELETE`) require a same-origin proof just like server actions; cross-site requests get `403`. Opt out with `route(..., { csrf: false })` **only** for endpoints that don't trust ambient credentials (webhooks, token-authenticated/public APIs). As with actions, the CSRF gate is not authentication — authorize inside the handler.
 - **Global middleware covers every endpoint.** Anything attached to `pipeline.use(...)` — `cors()`, `csp()`, `authGuard()`, a rate limiter, custom logging — runs for typed `/api` routes, `/_action`, `/_stream`, `/_image`, static assets, and SSR documents alike. (This was previously SSR-only; a cross-cutting guard you register globally now actually applies to your API surface.)

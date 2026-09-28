@@ -104,6 +104,7 @@ If your proxy strips `Sec-Fetch-Site` (some WAFs do), the gate falls back to thi
 
 **Operations**
 
+- [ ] Responses are compressed (brotli/gzip) by default. Behind a CDN or proxy that already compresses, set `compression: false` to skip the duplicate work
 - [ ] `onShutdown` closes what `onStart` opened (DB connections, telemetry flush) — it fires on any exit signal
 - [ ] `onError` wired to your error tracker; it receives every unexpected loader/action/process error, with redirects and `HttpError`s already filtered out
 - [ ] Health check: any cheap route works; `/api` endpoints register by import from `root.tsx`, so a compiled binary 404ing on one means the import chain broke, not the deploy

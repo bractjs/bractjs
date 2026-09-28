@@ -1,4 +1,4 @@
-import { type ReactElement, type ReactNode } from "react";
+import { type ComponentType, type ReactElement, type ReactNode } from "react";
 import type { ServerManifest } from "../server/render.ts";
 import type { MetaDescriptor } from "../shared/route-types.ts";
 import { type RouteModuleClient, type RouteState } from "./router.tsx";
@@ -12,6 +12,14 @@ interface ClientRouterProps {
     children: ReactNode;
     initialData: BractJSInitialData;
     initialModule?: RouteModuleClient | null;
+    /** The initial route's layout.tsx modules, outermost first. */
+    initialLayouts?: Array<RouteModuleClient | null>;
+    /** root.tsx's ErrorBoundary export, if any. */
+    rootErrorBoundary?: ComponentType<{
+        error: unknown;
+    }>;
 }
-export declare function ClientRouter({ children, initialData, initialModule, }: ClientRouterProps): ReactElement;
+/** Import a route's layout.tsx chunks (outermost first); a chunk that fails to load renders nothing. */
+export declare function loadLayoutModules(urls: string[] | undefined): Promise<Array<RouteModuleClient | null>>;
+export declare function ClientRouter({ children, initialData, initialModule, initialLayouts, rootErrorBoundary, }: ClientRouterProps): ReactElement;
 export {};

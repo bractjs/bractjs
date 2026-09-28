@@ -9,6 +9,16 @@ export const ROUTE_EXPORT_NAMES = [
   "handle", "ErrorBoundary", "config", "loaderDeps", "context",
 ] as const;
 
+// Remix / React Router route exports BractJS does not read — a ported route
+// keeps compiling but the export silently does nothing. Name → what to do instead.
+const PORTED_EXPORT_ADVICE: Record<string, string> = {
+  links: 'BractJS has no `links` export — import stylesheets directly (`import "./x.css"`) and they are linked automatically; put other <link> tags in root.tsx.',
+  HydrateFallback: 'BractJS has no `HydrateFallback` — export `Fallback` together with `ssr = false` (or "data-only").',
+  unstable_middleware: "rename it to `middleware` — BractJS only reads that name.",
+  clientMiddleware: "BractJS has no client middleware — use `clientLoader`, or server `middleware`.",
+  unstable_clientMiddleware: "BractJS has no client middleware — use `clientLoader`, or server `middleware`.",
+};
+
 const CANONICAL_LOWER = new Map(ROUTE_EXPORT_NAMES.map((n) => [n.toLowerCase(), n]));
 const CANONICAL_SET = new Set<string>(ROUTE_EXPORT_NAMES);
 
@@ -18,8 +28,9 @@ const MEANINGFUL = ["default", "loader", "action", "beforeLoad"];
 /**
  * Static lint of a route module's SOURCE (no execution). Returns human-readable
  * warning strings. Used by the dev rebuilder and the production build to catch
- * two common, silent mistakes: a route that renders nothing, and an export
- * whose casing doesn't match a framework export (so it's ignored).
+ * common, silent mistakes: a route that renders nothing, an export whose casing
+ * doesn't match a framework export, and a Remix / React Router export BractJS
+ * doesn't read (all three are otherwise ignored without a trace).
  */
 /** A typed API route definition found in source: `route("GET", "/api/x", …)`. */
 export interface ApiRouteDef {
@@ -61,6 +72,11 @@ export function lintRouteModuleSource(src: string, filePath: string): string[] {
 
   for (const name of exportSet) {
     if (CANONICAL_SET.has(name)) continue;
+    const advice = PORTED_EXPORT_ADVICE[name];
+    if (advice) {
+      warnings.push(`${filePath}: export "${name}" is ignored — ${advice}`);
+      continue;
+    }
     const canonical = CANONICAL_LOWER.get(name.toLowerCase());
     if (canonical && canonical !== name) {
       warnings.push(

@@ -14,6 +14,38 @@ describe("redirect", () => {
     expect(redirect("/perm", 308).status).toBe(308);
   });
 
+  describe("init-object form (Remix / React Router shape)", () => {
+    test("carries status and headers", () => {
+      const res = redirect("/dashboard", { status: 303, headers: { "Set-Cookie": "s=1; Path=/" } });
+      expect(res.status).toBe(303);
+      expect(res.headers.get("Location")).toBe("/dashboard");
+      expect(res.headers.get("Set-Cookie")).toBe("s=1; Path=/");
+    });
+
+    test("status defaults to 302", () => {
+      expect(redirect("/x", { headers: { "X-A": "1" } }).status).toBe(302);
+    });
+
+    test("merges a positional headers argument without dropping multiple Set-Cookie", () => {
+      const res = redirect("/x", { headers: [["Set-Cookie", "a=1"]] }, [["Set-Cookie", "b=2"]]);
+      expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]);
+    });
+
+    test("init headers cannot override Location", () => {
+      expect(redirect("/safe", { headers: { Location: "//evil.com" } }).headers.get("Location")).toBe(
+        "/safe",
+      );
+    });
+
+    test("open-redirect guard still applies; allowExternal opts in", () => {
+      expect(() => redirect("https://evil.com/", { status: 302 })).toThrow();
+      expect(redirect("https://other.com/", { allowExternal: true }).headers.get("Location")).toBe(
+        "https://other.com/",
+      );
+      expect(() => redirect("javascript:alert(1)", { allowExternal: true })).toThrow();
+    });
+  });
+
   test("body is null", async () => {
     const res = redirect("/");
     expect(await res.text()).toBe("");

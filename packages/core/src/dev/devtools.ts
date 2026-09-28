@@ -175,5 +175,9 @@ export function injectDevtools(): void {
  * Called by ClientRouter on every navigation.
  */
 export function updateDevtoolsState(state: Partial<DevtoolsState>): void {
-  window.__BRACTJS_DEVTOOLS__ = { ...window.__BRACTJS_DEVTOOLS__, ...state } as DevtoolsState;
+  // Merge over the defaults, not just the previous state: the first update is
+  // partial (the router never sends beforeLoadTrace), and renderPanel reads
+  // every field — merging onto `undefined` left beforeLoadTrace unset and
+  // opening the panel threw "Cannot read properties of undefined".
+  window.__BRACTJS_DEVTOOLS__ = { ...readState(), ...state };
 }

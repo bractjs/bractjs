@@ -4,6 +4,7 @@ import { handleImageRequest } from "../image/handler.ts";
 import { handleActionRequest } from "./action-handler.ts";
 import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
+import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
 import { isDevRuntime, isExplicitDev } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
@@ -11,6 +12,7 @@ import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import { buildTrie, matchRoute } from "./matcher.ts";
 import { type MiddlewareContext, pipeline } from "./middleware.ts";
 import type { ServerManifest } from "./render.ts";
+import { runWithRequest } from "./request-context.ts";
 import { type HandlerConfig, handleRequest } from "./request-handler.ts";
 import { error } from "./response.ts";
 import { type RouteFile, scanRoutes } from "./scanner.ts";
@@ -84,6 +86,15 @@ export interface BractJSConfig {
    * dedicated large-upload endpoint. Only applies to the default Bun adapter.
    */
   maxRequestBodySize?: number;
+  /**
+   * Compress responses (brotli, else gzip — whichever the client accepts) for
+   * HTML, JSON, JS, CSS, SVG and other text. Default `true`. Hashed client
+   * assets are compressed once at maximum quality and cached in memory;
+   * streamed SSR stays streamed. Set `false` when a reverse proxy or CDN in
+   * front already compresses. Applies to `createServer()` (dev, start, the
+   * compiled binary), not to a bare `buildFetchHandler()`.
+   */
+  compression?: boolean;
   /** Called once after the server starts listening. Use to open DB connections, warm caches, etc. */
   onStart?: () => Promise<void> | void;
   /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */
@@ -129,7 +140,7 @@ async function readDevManifest(buildDir: string): Promise<ServerManifest> {
     rootChunk?: string;
     entryCss?: string[];
     rootCss?: string[];
-    routes?: Record<string, { chunk?: string; css?: string[] }>;
+    routes?: Record<string, { chunk?: string; css?: string[]; layouts?: string[] }>;
   };
   return {
     clientEntry: m.clientEntry ?? DEFAULT_MANIFEST.clientEntry,
@@ -139,7 +150,7 @@ async function readDevManifest(buildDir: string): Promise<ServerManifest> {
     routes: Object.fromEntries(
       Object.entries(m.routes ?? {}).map(([pat, e]) => [
         pat,
-        { file: e.chunk ?? "", chunk: e.chunk, css: e.css },
+        { file: e.chunk ?? "", chunk: e.chunk, css: e.css, layouts: e.layouts },
       ]),
     ),
   };
@@ -164,7 +175,10 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
           entryCss: m.entryCss,
           rootCss: m.rootCss,
           routes: Object.fromEntries(
-            Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk, css: e.css }]),
+            Object.entries(m.routes).map(([pat, e]) => [
+              pat,
+              { file: e.chunk, chunk: e.chunk, css: e.css, layouts: e.layouts },
+            ]),
           ),
         }))
       : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);
@@ -366,7 +380,8 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // all. Log, fire onError (so observability still sees it), and return a
     // generic 500 with the message gated to dev — matching every other path.
     try {
-      return await pipeline.run(ctx, () => dispatch(request, ctx.context));
+      // getRequest() works anywhere below this point (server actions above all).
+      return await runWithRequest(request, () => pipeline.run(ctx, () => dispatch(request, ctx.context)));
     } catch (err) {
       console.error("[bract] unhandled request error:", err);
       await fireOnError(onError, err, request);
@@ -467,7 +482,8 @@ export function createServer(config?: Partial<BractJSConfig>): {
     void warnIfStaleBuild(resolve(config?.buildDir ?? "./build"));
   }
 
-  const fetchHandler = buildFetchHandler(config ?? {});
+  const appHandler = buildFetchHandler(config ?? {});
+  const fetchHandler = config?.compression === false ? appHandler : withCompression(appHandler);
 
   // Use provided adapter or fall back to the default Bun adapter.
   const adapter = config?.adapter ?? new BunAdapter(config?.maxRequestBodySize, config?.hostname);

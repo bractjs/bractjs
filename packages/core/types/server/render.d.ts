@@ -12,6 +12,8 @@ export interface ServerManifest {
         chunk?: string;
         imports?: string[];
         css?: string[];
+        /** Layout chunk URLs, outermost → innermost — the client loads them to render the same tree. */
+        layouts?: string[];
     }>;
 }
 export interface RenderOptions {

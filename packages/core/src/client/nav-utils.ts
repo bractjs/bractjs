@@ -72,28 +72,36 @@ export function createLocationKey(): string {
 
 /**
  * Tests whether a pathname matches a manifest route pattern.
- * Pattern segments: "static", "[param]", "[...catchAll]"
+ * Pattern segments: "static", "[param]", "[[optional]]", "[...catchAll]"
  */
 function patternMatches(pathname: string, pattern: string): boolean {
   const pathSegs = pathname.replace(/^\//, "").split("/").filter(Boolean);
   const patSegs = pattern === "" ? [] : pattern.split("/");
-  let p = 0;
-  for (const seg of patSegs) {
-    if (seg.startsWith("[...") && seg.endsWith("]")) return true; // catch-all: rest matches
-    if (p >= pathSegs.length) return false;
-    if (!(seg.startsWith("[") && seg.endsWith("]"))) {
-      if (seg !== pathSegs[p]) return false; // static: must be exact
-    }
-    p++; // param or matching static: consume one segment
+  return segmentsMatch(pathSegs, 0, patSegs, 0);
+}
+
+function segmentsMatch(pathSegs: string[], p: number, patSegs: string[], i: number): boolean {
+  if (i === patSegs.length) return p === pathSegs.length;
+  const seg = patSegs[i];
+  if (seg.startsWith("[...") && seg.endsWith("]")) return true; // catch-all: rest matches
+  if (seg.startsWith("[[") && seg.endsWith("]]")) {
+    // optional: consume one segment, or skip it (mirrors the server trie)
+    return (
+      (p < pathSegs.length && segmentsMatch(pathSegs, p + 1, patSegs, i + 1)) ||
+      segmentsMatch(pathSegs, p, patSegs, i + 1)
+    );
   }
-  return p === pathSegs.length;
+  if (p >= pathSegs.length) return false;
+  const isParam = seg.startsWith("[") && seg.endsWith("]");
+  if (!isParam && seg !== pathSegs[p]) return false; // static: must be exact
+  return segmentsMatch(pathSegs, p + 1, patSegs, i + 1);
 }
 
 /**
  * Specificity score for a matching pattern, used to pick the best match the
- * same way the server's trie does: static > dynamic > catch-all. Higher wins.
- * Object key order is not reliable for priority, so we must score, not
- * first-match (otherwise `[...slug]` can shadow `_index` / static routes).
+ * same way the server's trie does: static > dynamic > optional > catch-all.
+ * Higher wins. Object key order is not reliable for priority, so we must
+ * score, not first-match (otherwise `[...slug]` can shadow `_index` / static routes).
  */
 function patternScore(pattern: string): number {
   if (pattern === "") return 1_000_000; // index route — most specific for "/"
@@ -102,9 +110,11 @@ function patternScore(pattern: string): number {
     score *= 10;
     if (seg.startsWith("[...") && seg.endsWith("]"))
       score += 1; // catch-all
+    else if (seg.startsWith("[[") && seg.endsWith("]]"))
+      score += 2; // optional
     else if (seg.startsWith("[") && seg.endsWith("]"))
-      score += 2; // dynamic
-    else score += 3; // static
+      score += 3; // dynamic
+    else score += 4; // static
   }
   return score;
 }

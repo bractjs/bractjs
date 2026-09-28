@@ -1,8 +1,10 @@
 import { createElement } from "react";
 import { BractJSProvider } from "../shared/context.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
+import { pickErrorBoundary, routeErrorStatus, routeLoaderError } from "../shared/route-error.ts";
 import { getCspNonce } from "./csp.ts";
 import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
+import { settleDeferred } from "./deferred-wire.ts";
 import { isExplicitDev } from "./env.ts";
 import { resolveHeaders } from "./headers.ts";
 import { type ModuleRegistry, resolveRouteChain } from "./layout.ts";
@@ -109,6 +111,31 @@ function envelopeActionRedirect(res: Response, request: Request): Response {
   return new Response(null, { status: 204, headers });
 }
 
+/**
+ * The chain minus the route's `meta`/`headers` when its loader failed: they
+ * expect the loader's data and would receive the `{ __error }` slot instead.
+ * Root and layout meta/headers still apply to the error page.
+ */
+function withoutFailedRouteHead<C extends { route: { meta?: unknown; headers?: unknown } }>(
+  chain: C,
+  routeSlot: unknown,
+): C {
+  if (!routeLoaderError(routeSlot)) return chain;
+  return { ...chain, route: { ...chain.route, meta: undefined, headers: undefined } };
+}
+
+/** `request` with `formData()` answering from an already-parsed body (callable repeatedly). */
+function withParsedFormData(request: Request, formData: FormData): Request {
+  return new Proxy(request, {
+    get(target, prop) {
+      if (prop === "formData") return () => Promise.resolve(formData);
+      // Receiver = target: Request's native getters (url, headers, …) need the real object.
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 export async function handleRequest(
   request: Request,
   trie: TrieNode,
@@ -182,21 +209,26 @@ async function route(
         // Merged meta must ride along: ClientRouter re-renders the document head
         // from this payload on soft navigation, and the initial __BRACTJS_DATA__
         // already carries the merged shape.
-        const meta = mergeMeta(resolveMeta(chain, results, match.params));
+        const headChain = withoutFailedRouteHead(chain, results.route);
+        const meta = mergeMeta(resolveMeta(headChain, results, match.params));
         const matches = buildMatches(chain, results, match.params, targetPathname);
-        const dataRes = json({
-          root: results.root,
-          layouts: results.layouts,
-          route: results.route,
-          params: match.params,
-          meta,
-          search,
-          matches,
-        });
+        // defer() fields are awaited and inlined: JSON can't stream them, and a
+        // Deferred would otherwise serialize as an empty object.
+        const dataRes = json(
+          await settleDeferred({
+            root: results.root,
+            layouts: results.layouts,
+            route: results.route,
+            params: match.params,
+            meta,
+            search,
+            matches,
+          }),
+        );
         // Apply the route `headers()` chain so a soft navigation gets the same
         // Cache-Control/ETag/Vary as the full document load (renderRoute applies
         // them there). Content-Type stays application/json.
-        const dataHeaders = resolveHeaders(chain, results, match.params, loaderRequest);
+        const dataHeaders = resolveHeaders(headChain, results, match.params, loaderRequest);
         if (dataHeaders) {
           dataHeaders.forEach((value, key) => {
             if (key.toLowerCase() === "content-type") return;
@@ -254,7 +286,11 @@ async function route(
         const isFormLike =
           ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded");
         const formData = isFormLike ? await request.formData() : new FormData();
-        actionData = await runAction(chain.route, { ...args, formData });
+        // The body is consumed above, so the Remix/React Router habit of
+        // `await request.formData()` inside the action would throw "Body
+        // already used" — hand the action a request that returns the parsed copy.
+        const actionRequest = isFormLike ? withParsedFormData(args.request, formData) : args.request;
+        actionData = await runAction(chain.route, { ...args, request: actionRequest, formData });
       } catch (err) {
         if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
         if (isHttpError(err)) return error(err.message, err.status);
@@ -308,9 +344,20 @@ async function route(
 
     // ── SSR render ────────────────────────────────────────────────────────
     const RootComponent = chain.root.default ?? (() => null);
+    // A failed route loader renders the nearest ErrorBoundary in the route's
+    // place, with the error's status (404 for HttpError(404), else 500).
+    const routeError = routeSsr === true ? routeLoaderError(loaderResults.route) : null;
+    const Boundary = routeError
+      ? pickErrorBoundary(chain.route.ErrorBoundary, chain.root.ErrorBoundary)
+      : null;
     // Non-default SSR modes render the Fallback (or nothing) in the component's
     // place; the client swaps in the real component after hydration.
-    const RouteComponent = routeSsr === true ? chain.route.default : chain.route.Fallback;
+    const RouteComponent =
+      Boundary && routeError
+        ? () => createElement(Boundary, { error: routeError })
+        : routeSsr === true
+          ? chain.route.default
+          : chain.route.Fallback;
     const ssrMode =
       routeSsr === true ? undefined : routeSsr === false ? ("client-only" as const) : ("data-only" as const);
 
@@ -329,6 +376,7 @@ async function route(
         pathname,
         manifest: manifest as unknown as import("../shared/context.ts").RouteManifest,
         RouteComponent,
+        LayoutModules: chain.layouts,
         location: { pathname, search: url.search, hash: "", state: null, key: "default" },
         search,
         matches,
@@ -336,11 +384,16 @@ async function route(
       children: createElement(RootComponent),
     });
 
-    const meta = resolveMeta(chain, loaderResults, match.params);
+    const meta = resolveMeta(withoutFailedRouteHead(chain, loaderResults.route), loaderResults, match.params);
     // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
     // baseline document headers in renderRoute. Uses the loaders that actually
     // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
-    const routeHeaders = resolveHeaders(loaderChain, loaderResults, match.params, request);
+    const routeHeaders = resolveHeaders(
+      withoutFailedRouteHead(loaderChain, loaderResults.route),
+      loaderResults,
+      match.params,
+      request,
+    );
 
     return renderRoute({
       shell,
@@ -359,6 +412,7 @@ async function route(
       // Set by the opt-in csp() middleware; undefined otherwise.
       nonce: getCspNonce(mwCtx.context),
       ssrMode,
+      status: routeError ? routeErrorStatus(routeError) : undefined,
     });
   });
 }

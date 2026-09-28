@@ -104,6 +104,7 @@ export { defineLifecycle } from "./server/lifecycle.ts";
 export type { MiddlewareContext, MiddlewareFn, RouteMiddleware } from "./server/middleware.ts";
 // Middleware
 export { MiddlewarePipeline, pipeline } from "./server/middleware.ts";
+export { getRequest } from "./server/request-context.ts";
 export type { RouteFile, Segment } from "./server/scanner.ts";
 export { searchParamsToObject, validateSearch } from "./server/search.ts";
 export type { I18nConfig } from "./server/serve.ts";

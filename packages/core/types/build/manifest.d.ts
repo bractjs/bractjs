@@ -1,8 +1,10 @@
 export interface RouteManifestEntry {
     chunk: string;
     pattern: string;
-    /** Public paths of this route's extracted CSS bundles, linked when it renders. */
+    /** Public paths of this route's extracted CSS bundles (its layouts' first), linked when it renders. */
     css?: string[];
+    /** Chunk URLs of this route's intermediate layout.tsx modules, outermost → innermost. */
+    layouts?: string[];
 }
 export interface RouteManifest {
     version: 1;
@@ -27,6 +29,8 @@ export declare function generateManifest(opts: {
     routeChunks: Map<string, string>;
     /** Per-pattern CSS bundles, keyed like `routeChunks`. */
     routeCss?: Map<string, string[]>;
+    /** Per-pattern layout chunk URLs (outermost first), keyed like `routeChunks`. */
+    routeLayouts?: Map<string, string[]>;
     entryCss?: string[];
     rootCss?: string[];
     mode?: "production";
