@@ -102,3 +102,15 @@ coverage/
 
 # Playwright MCP scratch output
 .playwright-mcp/
+
+# Benchmark (bench/, see docs/benchmarks.md): npm-installed comparison apps and
+# their build output. Versions are pinned exactly in each package.json.
+bench/**/package-lock.json
+bench/apps/next/.next/
+bench/apps/next/next-env.d.ts
+bench/apps/next/tsconfig.json
+bench/apps/react-router/.react-router/
+bench/results/logs/
+bench/apps/*/build/
+bench/apps/bractjs/app/_generated/
+bench/apps/bractjs/app/route-types.gen.ts

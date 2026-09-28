@@ -1,0 +1,14 @@
+{
+  "name": "bench-bractjs",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "NODE_ENV=production bractjs build",
+    "start": "NODE_ENV=production bractjs start"
+  },
+  "dependencies": {
+    "@bractjs/bractjs": "workspace:*",
+    "react": "^19",
+    "react-dom": "^19"
+  }
+}

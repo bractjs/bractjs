@@ -18,3 +18,10 @@ examples/cms/app/styles.css
 # Generated Tailwind output (built by `bun run css`, gitignored) — must not be
 # formatted or the next css build re-minifies it and fails the format check.
 examples/*/public/styles.css
+
+# Benchmark apps: framework build/codegen output (bench/, see docs/benchmarks.md).
+bench/apps/next/.next
+bench/apps/next/next-env.d.ts
+bench/apps/next/tsconfig.json
+bench/apps/react-router/.react-router
+bench/results
