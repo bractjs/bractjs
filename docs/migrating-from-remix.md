@@ -189,7 +189,6 @@ Plain CSS imports (`import "./styles.css"`) work in every run mode and are split
 As of 0.4.x, these have no clean equivalent. Plan around them:
 
 - **Thrown `HttpError`s are not rendered by `ErrorBoundary`.** On a direct page load, `throw new HttpError(404, "…")` from a loader or action returns a JSON body (`{"error":"…"}`) with that status, not your route's error UI. During client-side navigation, the router logs the failed `/_data` request and stays on the current page. `ErrorBoundary` currently catches errors thrown while _rendering_. Until this is fixed, render not-found states from the component (for example, return `{ notFound: true }` from the loader and branch on it).
-- **Server actions can't read the incoming request.** `"use server"` functions receive only the arguments the client passed, so they can't read cookies or the session to authorize the caller. Put anything that needs the user's identity in a route `action` or a typed `/api` endpoint instead.
 - **No `useOutletContext`, `useSubmit`, `useRouteError`, or `links` export.** Replacements are listed in the tables above.
 - **No Vite ecosystem, no Node runtime** — see [platform differences](#before-you-start-platform-differences).
 

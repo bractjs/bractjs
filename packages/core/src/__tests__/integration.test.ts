@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { brotliDecompressSync } from "node:zlib";
 import { reviveDeferred } from "../client/deferred-revive.ts";
+import { getRequest } from "../server/request-context.ts";
 import { createServer } from "../server/serve.ts";
 import type { Deferred } from "../shared/deferred.ts";
 
@@ -331,4 +332,30 @@ test("defer() values are settled and inlined in /_data", async () => {
   expect(failed.route.slow).toEqual({
     __bractDeferred: { ok: false, error: { message: "slow-thing-missing", status: 404 } },
   });
+});
+
+// Server actions receive only the caller's arguments; getRequest() is how they
+// see the session cookie to authorize themselves.
+test("getRequest() inside a server action returns the incoming request", async () => {
+  const raw = new TextEncoder().encode("lib/whoami.server.ts#whoami");
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", raw));
+  const id = Array.from(digest, (b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 16);
+  const res = await fetch(`${BASE}/_action?id=${id}`, {
+    method: "POST",
+    headers: {
+      Origin: BASE,
+      "X-BractJS-Action": "1",
+      "Content-Type": "application/json",
+      Cookie: "session=abc123",
+    },
+    body: JSON.stringify(["hello"]),
+  });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ label: "hello", cookie: "session=abc123" });
+});
+
+test("getRequest() outside a request throws a clear error", () => {
+  expect(() => getRequest()).toThrow(/outside a request/);
 });

@@ -12,6 +12,7 @@ import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import { buildTrie, matchRoute } from "./matcher.ts";
 import { type MiddlewareContext, pipeline } from "./middleware.ts";
 import type { ServerManifest } from "./render.ts";
+import { runWithRequest } from "./request-context.ts";
 import { type HandlerConfig, handleRequest } from "./request-handler.ts";
 import { error } from "./response.ts";
 import { type RouteFile, scanRoutes } from "./scanner.ts";
@@ -376,7 +377,8 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // all. Log, fire onError (so observability still sees it), and return a
     // generic 500 with the message gated to dev — matching every other path.
     try {
-      return await pipeline.run(ctx, () => dispatch(request, ctx.context));
+      // getRequest() works anywhere below this point (server actions above all).
+      return await runWithRequest(request, () => pipeline.run(ctx, () => dispatch(request, ctx.context)));
     } catch (err) {
       console.error("[bract] unhandled request error:", err);
       await fireOnError(onError, err, request);

@@ -784,7 +784,9 @@ export async function createPost(formData: FormData) {
 }
 
 export async function deletePost(id: string) {
-  await db.delete(posts).where(eq(posts.id, id));
+  // Actions get only the caller's arguments — authorize from the request.
+  const user = await requireUser(getRequest());
+  await db.delete(posts).where(and(eq(posts.id, id), eq(posts.authorId, user.id)));
 }
 ```
 
@@ -802,6 +804,7 @@ export default function NewPost() {
 }
 ```
 
+- **Every exported action is a public endpoint.** It receives only the caller's arguments; call `getRequest()` (imported from `@bractjs/bractjs`) to read cookies/the session and authorize inside the function (§27).
 - Accepts a single `FormData` (sent as `multipart/form-data`) **or** a JSON-serializable argument array.
 - Unknown action IDs return 404 — only functions registered at startup are callable.
 - Bodies are size-capped (1 MiB JSON) and prototype-pollution scanned.
@@ -1558,7 +1561,7 @@ The package has three entries: `@bractjs/bractjs` (everything app code needs), `
 
 Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `getRequest`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
 **Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
 
@@ -1606,7 +1609,7 @@ From `@bractjs/bractjs/codegen` ([packages/core/src/codegen-entry.ts](packages/c
 
 BractJS ships secure defaults, but a few behaviors are worth understanding so you don't accidentally widen your attack surface.
 
-- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any _other_ exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** (read the session, check the user). The CSRF gate only proves the call is same-origin; it does not authenticate the user.
+- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any _other_ exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** — an action receives only the caller's arguments, so read the session via `getRequest()` and check the user; never trust a user ID passed as an argument. The CSRF gate only proves the call is same-origin; it does not authenticate the user.
 - **`/_stream` calls actions with no arguments.** A streaming action invoked over `GET /_stream` receives no caller input. It must be safe to call with none and must authorize itself.
 - **Typed `/api` routes are CSRF-protected by default.** Mutating routes (`POST`/`PUT`/`PATCH`/`DELETE`) require a same-origin proof just like server actions; cross-site requests get `403`. Opt out with `route(..., { csrf: false })` **only** for endpoints that don't trust ambient credentials (webhooks, token-authenticated/public APIs). As with actions, the CSRF gate is not authentication — authorize inside the handler.
 - **Global middleware covers every endpoint.** Anything attached to `pipeline.use(...)` — `cors()`, `csp()`, `authGuard()`, a rate limiter, custom logging — runs for typed `/api` routes, `/_action`, `/_stream`, `/_image`, static assets, and SSR documents alike. (This was previously SSR-only; a cross-cutting guard you register globally now actually applies to your API surface.)
