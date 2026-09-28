@@ -10,6 +10,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
+import { reviveDeferred } from "../deferred-revive.ts";
 import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
 import { assignExternal, toSamePath } from "../nav-utils.ts";
 import { triggerRevalidation } from "../revalidation.ts";
@@ -133,7 +134,7 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
       fetcherStore.update(key, { state: "loading" });
       try {
         const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
-        const json = (await res.json()) as { route?: unknown };
+        const json = reviveDeferred((await res.json()) as { route?: unknown });
         fetcherStore.update(key, { data: json.route });
       } finally {
         fetcherStore.update(key, { state: "idle" });

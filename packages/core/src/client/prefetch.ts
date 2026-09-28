@@ -1,5 +1,6 @@
 import type { ServerManifest } from "../server/render.ts";
 import { cacheKey, loaderCache } from "./cache.ts";
+import { reviveDeferred } from "./deferred-revive.ts";
 import { matchPatternForPath, parseTo } from "./nav-utils.ts";
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -82,7 +83,7 @@ async function doPrefetch(path: string, manifest: ServerManifest): Promise<void>
       priority: "low",
     } as RequestInit);
     if (!res.ok) return;
-    const data = (await res.json()) as Record<string, unknown>;
+    const data = reviveDeferred((await res.json()) as Record<string, unknown>);
     loaderCache.set(
       key,
       data,

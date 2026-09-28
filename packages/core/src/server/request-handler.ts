@@ -3,6 +3,7 @@ import { BractJSProvider } from "../shared/context.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
 import { getCspNonce } from "./csp.ts";
 import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
+import { settleDeferred } from "./deferred-wire.ts";
 import { isExplicitDev } from "./env.ts";
 import { resolveHeaders } from "./headers.ts";
 import { type ModuleRegistry, resolveRouteChain } from "./layout.ts";
@@ -196,15 +197,19 @@ async function route(
         // already carries the merged shape.
         const meta = mergeMeta(resolveMeta(chain, results, match.params));
         const matches = buildMatches(chain, results, match.params, targetPathname);
-        const dataRes = json({
-          root: results.root,
-          layouts: results.layouts,
-          route: results.route,
-          params: match.params,
-          meta,
-          search,
-          matches,
-        });
+        // defer() fields are awaited and inlined: JSON can't stream them, and a
+        // Deferred would otherwise serialize as an empty object.
+        const dataRes = json(
+          await settleDeferred({
+            root: results.root,
+            layouts: results.layouts,
+            route: results.route,
+            params: match.params,
+            meta,
+            search,
+            matches,
+          }),
+        );
         // Apply the route `headers()` chain so a soft navigation gets the same
         // Cache-Control/ETag/Vary as the full document load (renderRoute applies
         // them there). Content-Type stays application/json.

@@ -19,6 +19,7 @@ import {
 import type { MetaDescriptor, RouteMatch, RouterLocation } from "../shared/route-types.ts";
 import { cacheKey, loaderCache } from "./cache.ts";
 import { moduleView, parseDataPayload } from "./data-payload.ts";
+import { reviveDeferred } from "./deferred-revive.ts";
 import { assignExternal, createLocationKey, matchPatternForPath, parseTo, toSamePath } from "./nav-utils.ts";
 import { type RevalidationInfo, registerRevalidator } from "./revalidation.ts";
 import {
@@ -233,7 +234,7 @@ export function ClientRouter({
             .then((r) => (r.ok ? r.json() : null))
             .then((fresh) => {
               if (!fresh) return;
-              const freshData = fresh as Record<string, unknown>;
+              const freshData = reviveDeferred(fresh as Record<string, unknown>);
               loaderCache.set(key, freshData, staleTime, gcTime);
               startTransition(() => applyPayload(freshData));
             });
@@ -250,7 +251,7 @@ export function ClientRouter({
           setNavState("idle");
           return;
         }
-        const data = (await res.json()) as Record<string, unknown>;
+        const data = reviveDeferred((await res.json()) as Record<string, unknown>);
 
         // clientLoader (RR7-style): when the route exports one, it runs in the
         // browser and its result replaces the route's loader slice. It receives a
@@ -351,7 +352,7 @@ export function ClientRouter({
           console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
           return;
         }
-        const data = (await res.json()) as Record<string, unknown>;
+        const data = reviveDeferred((await res.json()) as Record<string, unknown>);
         startTransition(() => applyPayload(data));
       } catch (err) {
         console.error("[bractjs] revalidate error:", err);
@@ -426,7 +427,7 @@ export function ClientRouter({
           return;
         }
         if (res.ok) {
-          const data = (await res.json()) as Record<string, unknown>;
+          const data = reviveDeferred((await res.json()) as Record<string, unknown>);
           startTransition(() => {
             applyPayload(data);
             setHydrationPending(false);

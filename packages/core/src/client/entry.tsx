@@ -1,6 +1,7 @@
 import type { ComponentType, ReactElement } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { ClientRouter } from "./ClientRouter.tsx";
+import { reviveDeferred } from "./deferred-revive.ts";
 import { Outlet } from "./components/Outlet.tsx";
 import { matchPatternForPath } from "./nav-utils.ts";
 import type { RouteModuleClient } from "./router.tsx";
@@ -79,14 +80,19 @@ function FallbackApp(): ReactElement {
     key: "default",
   };
 
+  // defer() fields arrive as markers; their values follow at the end of the
+  // document (possibly after hydration starts — <Await> suspends until then).
+  const { matches, ...loaderData } = reviveDeferred({ ...data.loaderData, matches: data.matches ?? [] });
+
   hydrateRoot(
     document,
     <ClientRouter
       initialData={{
         ...data,
+        loaderData,
         location: initialLocation,
         search: data.search ?? {},
-        matches: data.matches ?? [],
+        matches,
       }}
       initialModule={initialModule}
     >

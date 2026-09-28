@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { brotliDecompressSync } from "node:zlib";
+import { reviveDeferred } from "../client/deferred-revive.ts";
 import { createServer } from "../server/serve.ts";
+import type { Deferred } from "../shared/deferred.ts";
 
 const PORT = 3999;
 const BASE = `http://localhost:${PORT}`;
@@ -290,4 +292,43 @@ test("createServer({ compression: false }) sends identity responses", async () =
   } finally {
     plain.stop();
   }
+});
+
+// defer(): the document's data island carries a marker, the value follows the
+// HTML stream in a trailing script, and the client revives it — replayed here
+// the way the browser runs it. Previously the island held `{"promise":{}}` and
+// <Await> crashed hydration (React error #438).
+test("defer() round-trips through the SSR document", async () => {
+  const html = await (await fetch(`${BASE}/deferred`)).text();
+  expect(html).toMatch(/items: (<!-- -->)?a,b/); // server-rendered through <Await>
+  const island = /window\.__BRACTJS_DATA__=(\{[\s\S]*?\});/.exec(html)?.[1];
+  const trailing = /<script[^>]*>(\(function\(r\)[\s\S]*?)<\/script>$/.exec(html)?.[1];
+  expect(island).toBeDefined();
+  expect(trailing).toBeDefined();
+  const g = globalThis as { __BRACTJS_DEFERRED__?: unknown; __BRACTJS_RESOLVE__?: unknown };
+  try {
+    new Function("self", trailing as string)(globalThis);
+    const data = JSON.parse(island as string) as { loaderData: Record<string, unknown> };
+    const { route } = reviveDeferred(data.loaderData) as { route: { fast: string; slow: Deferred<unknown> } };
+    expect(route.fast).toBe("shell-ready");
+    expect(await route.slow.promise).toEqual({ items: ["a", "b"] });
+  } finally {
+    delete g.__BRACTJS_DEFERRED__;
+    delete g.__BRACTJS_RESOLVE__;
+  }
+});
+
+test("defer() values are settled and inlined in /_data", async () => {
+  const ok = (await (await fetch(`${BASE}/_data?path=/deferred`)).json()) as {
+    route: Record<string, unknown>;
+  };
+  expect(ok.route.slow).toEqual({ __bractDeferred: { ok: true, value: { items: ["a", "b"] } } });
+  const failed = (await (
+    await fetch(`${BASE}/_data?path=${encodeURIComponent("/deferred?fail")}`)
+  ).json()) as {
+    route: Record<string, unknown>;
+  };
+  expect(failed.route.slow).toEqual({
+    __bractDeferred: { ok: false, error: { message: "slow-thing-missing", status: 404 } },
+  });
 });

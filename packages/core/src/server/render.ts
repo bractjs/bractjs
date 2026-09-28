@@ -11,6 +11,7 @@ import {
   StyleLinks,
 } from "../shared/style-links.tsx";
 import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
+import { appendDeferredScript, encodeDeferred } from "./deferred-wire.ts";
 import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
 import { mergeMeta } from "./meta.ts";
 
@@ -75,9 +76,13 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   const mergedMeta = mergeMeta(options.meta ?? []);
   // The merged descriptor array is what the client reads to keep the document
   // head in sync on soft navigation — keep it shaped, not stringified HTML.
+  // defer() fields can't be JSON-serialized: the data island carries id markers
+  // and the settled values follow at the end of the HTML stream.
+  const { payload: wire, pending: deferred } = encodeDeferred({ ...loaderData, matches: options.matches });
+  const { matches: wireMatches, ...wireLoaderData } = wire;
   const bootstrapScriptContent =
     devOverlay +
-    `window.__BRACTJS_DATA__=${safeStringify({ loaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: options.matches, ssrMode: options.ssrMode })};`;
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, ssrMode: options.ssrMode })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers
@@ -148,5 +153,8 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     });
   }
 
-  return new Response(stream, { status: responseStatus, headers });
+  return new Response(appendDeferredScript(stream, deferred, options.nonce), {
+    status: responseStatus,
+    headers,
+  });
 }

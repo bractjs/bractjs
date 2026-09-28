@@ -475,6 +475,8 @@ export default function BlogPost() {
 }
 ```
 
+On a full page load the document streams: the `fallback` renders first and the resolved content follows in the same response, then the value is handed to the client for hydration. On client-side navigation the `/_data` request waits for deferred values before responding, so the new page arrives complete rather than streaming. A deferred value that rejects renders the route's `ErrorBoundary`; an `HttpError`'s message and status carry through, while other errors show a generic message outside development. Deferred values must be JSON-serializable, like all loader data.
+
 ### `<Await resolve={promise | Deferred} fallback={…}>{(data) => …}</Await>`
 
 Unwraps a promise (or a `Deferred` field from a `defer()` loader) with React 19's `use()` inside its own `<Suspense>`. `isDeferred(value)` and the `Deferred` class are exported if you need to detect/construct deferred values manually.
