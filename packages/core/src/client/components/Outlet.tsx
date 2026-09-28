@@ -1,12 +1,14 @@
 import {
   Component,
   type ComponentType,
+  createElement,
   type ReactElement,
   type ReactNode,
   Suspense,
   useContext,
 } from "react";
 import { BractJSContext } from "../../shared/context.ts";
+import { pickErrorBoundary, routeLoaderError } from "../../shared/route-error.ts";
 import { RouterContext } from "../router.tsx";
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
@@ -59,6 +61,27 @@ export function Outlet(): ReactElement | null {
     : (routerCtx?.currentModule?.default ?? bractCtx?.RouteComponent);
   const ErrorFallback: ComponentType<{ error: Error }> =
     routerCtx?.currentModule?.ErrorBoundary ?? DefaultErrorFallback;
+
+  // A failed route loader leaves `{ __error }` in the route slot: render the
+  // nearest ErrorBoundary in the route's place — the same component the server
+  // rendered (request-handler.ts), so hydration matches. (On the server,
+  // RouteComponent is already that boundary.)
+  const loaderError = routerCtx && !pending ? routeLoaderError(routerCtx.loaderData?.route) : null;
+  if (loaderError) {
+    // Selects an existing component (route's, root's, or the built-in one).
+    const boundary = createElement(
+      pickErrorBoundary(
+        routerCtx?.currentModule?.ErrorBoundary as ComponentType<{ error: unknown }> | undefined,
+        routerCtx?.rootErrorBoundary,
+      ),
+      { error: loaderError },
+    );
+    return (
+      <RouteErrorBoundary fallback={ErrorFallback}>
+        <Suspense fallback={null}>{boundary}</Suspense>
+      </RouteErrorBoundary>
+    );
+  }
 
   if (!RouteComponent) {
     return <Suspense fallback={null}>{null}</Suspense>;

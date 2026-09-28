@@ -84,26 +84,26 @@ Type names: `LoaderFunctionArgs` / `Route.LoaderArgs` → `LoaderArgs`, `ActionF
 
 ## Route module exports
 
-| Remix / RR7                                       | BractJS                                                                                                                                                                    |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `loader({ request, params, context })`            | Same, plus `search` (validated query params when the route has a `searchSchema`).                                                                                          |
-| `action({ request, params, context })`            | Same, plus a pre-parsed **`formData`** argument. `await request.formData()` also still works — it returns the same parsed copy.                                            |
-| `meta({ data, params, matches })`                 | `meta({ loaderData, params })` — rename `data` → `loaderData`. No `matches`/`location`. Same descriptor array format.                                                      |
-| `links()`                                         | **Not supported.** Import the stylesheet (`import "./route.css"`); other `<link>` tags go in `root.tsx`. The dev server and build warn when a route still exports `links`. |
-| `headers()`, `handle`, `shouldRevalidate`         | Same names and roles.                                                                                                                                                      |
-| `clientLoader`, `clientAction`, `.hydrate = true` | Same, including `serverLoader()` / `serverAction()`.                                                                                                                       |
-| `HydrateFallback`                                 | `export const ssr = false` (or `"data-only"`) plus `export function Fallback()`.                                                                                           |
-| `middleware` / `unstable_middleware` (RR7)        | `middleware` — an array of `(ctx, next) => Response`, running root → layouts → route. **Scope differs; read [Middleware](#middleware-and-auth).**                          |
-| `ErrorBoundary` + `useRouteError()`               | `ErrorBoundary` receives the error as a prop: `function ErrorBoundary({ error })`. There is no `useRouteError` / `isRouteErrorResponse`. See [known gaps](#known-gaps).    |
-| `Route.ComponentProps` (`loaderData` prop)        | Components receive no props — use `useLoaderData<typeof loader>()`.                                                                                                        |
-| —                                                 | New: `beforeLoad` (auth/redirect gate that also guards `/_data`), `searchSchema`, `context` via `defineContext` ([§5](../README.md#5-route-module-api)).                   |
+| Remix / RR7                                       | BractJS                                                                                                                                                                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `loader({ request, params, context })`            | Same, plus `search` (validated query params when the route has a `searchSchema`).                                                                                                                                                          |
+| `action({ request, params, context })`            | Same, plus a pre-parsed **`formData`** argument. `await request.formData()` also still works — it returns the same parsed copy.                                                                                                            |
+| `meta({ data, params, matches })`                 | `meta({ loaderData, params })` — rename `data` → `loaderData`. No `matches`/`location`. Same descriptor array format.                                                                                                                      |
+| `links()`                                         | **Not supported.** Import the stylesheet (`import "./route.css"`); other `<link>` tags go in `root.tsx`. The dev server and build warn when a route still exports `links`.                                                                 |
+| `headers()`, `handle`, `shouldRevalidate`         | Same names and roles.                                                                                                                                                                                                                      |
+| `clientLoader`, `clientAction`, `.hydrate = true` | Same, including `serverLoader()` / `serverAction()`.                                                                                                                                                                                       |
+| `HydrateFallback`                                 | `export const ssr = false` (or `"data-only"`) plus `export function Fallback()`.                                                                                                                                                           |
+| `middleware` / `unstable_middleware` (RR7)        | `middleware` — an array of `(ctx, next) => Response`, running root → layouts → route. **Scope differs; read [Middleware](#middleware-and-auth).**                                                                                          |
+| `ErrorBoundary` + `useRouteError()`               | `ErrorBoundary` receives the error as a prop: `function ErrorBoundary({ error })`. There is no `useRouteError` / `isRouteErrorResponse` — check `isHttpError(error)` and `error.status` instead. A route without one falls back to root's. |
+| `Route.ComponentProps` (`loaderData` prop)        | Components receive no props — use `useLoaderData<typeof loader>()`.                                                                                                                                                                        |
+| —                                                 | New: `beforeLoad` (auth/redirect gate that also guards `/_data`), `searchSchema`, `context` via `defineContext` ([§5](../README.md#5-route-module-api)).                                                                                   |
 
 ## Responses and data
 
 - **Returning plain objects** from loaders and actions works as in RR7. `json(data, init)` exists for when you need a status or headers; it replaces RR7's `data(value, init)`.
 - **`redirect()`** accepts both the Remix/RR7 form `redirect(url, { status, headers })` and the positional form `redirect(url, 303, headers)`. It refuses off-origin URLs unless you pass `allowExternal: true` — a Remix `redirect("https://…")` needs that added.
 - **Streaming: wrap promises in `defer()`.** RR7 streams any promise you return; BractJS only streams fields wrapped with `defer({ … })`. `<Await resolve={…}>` works the same, with the render function as its child ([§8](../README.md#8-streaming-data)).
-- **Throwing `redirect()` / `new HttpError(404)`** works as control flow. See [known gaps](#known-gaps) for how an `HttpError` currently reaches the browser.
+- **Throwing `redirect()` / `new HttpError(404)`** works as control flow: a route loader's `HttpError` renders its `ErrorBoundary` with that status, like a thrown `Response` in Remix.
 
 ## Hooks and components
 
@@ -188,7 +188,7 @@ Plain CSS imports (`import "./styles.css"`) work in every run mode and are split
 
 As of 0.4.x, these have no clean equivalent. Plan around them:
 
-- **Thrown `HttpError`s are not rendered by `ErrorBoundary`.** On a direct page load, `throw new HttpError(404, "…")` from a loader or action returns a JSON body (`{"error":"…"}`) with that status, not your route's error UI. During client-side navigation, the router logs the failed `/_data` request and stays on the current page. `ErrorBoundary` currently catches errors thrown while _rendering_. Until this is fixed, render not-found states from the component (for example, return `{ notFound: true }` from the loader and branch on it).
+- **`HttpError` from a root or layout loader** ends the request with a JSON error body rather than rendering a boundary; only route loaders render `ErrorBoundary`.
 - **No `useOutletContext`, `useSubmit`, `useRouteError`, or `links` export.** Replacements are listed in the tables above.
 - **No Vite ecosystem, no Node runtime** — see [platform differences](#before-you-start-platform-differences).
 

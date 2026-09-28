@@ -106,12 +106,20 @@ export async function runLoaders(
       onError,
       files?.root,
     ),
+    // A route loader's HttpError (e.g. 404 "no such post") is captured into
+    // the route slot rather than aborting the page: root still renders, and
+    // the route's ErrorBoundary renders in the route's place with that status
+    // (see shared/route-error.ts). Its message is meant for users, so it's
+    // kept as-is. Root/layout HttpErrors still abort — they have no boundary.
     safeRun(
       chain.route.loader as ((a: LoaderArgs) => Promise<unknown>) | undefined,
       args,
       onError,
       files?.route,
-    ),
+    ).catch((err: unknown) => {
+      if (isHttpError(err)) return { __error: { message: err.message, status: err.status } };
+      throw err;
+    }),
     ...layoutLoaders,
   ]);
 

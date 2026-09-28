@@ -359,3 +359,38 @@ test("getRequest() inside a server action returns the incoming request", async (
 test("getRequest() outside a request throws a clear error", () => {
   expect(() => getRequest()).toThrow(/outside a request/);
 });
+
+// A route loader's HttpError renders the route's ErrorBoundary with that status
+// (previously: a raw JSON body on document loads, and a dead click on soft nav).
+test("route-loader HttpError renders the route's ErrorBoundary with its status", async () => {
+  const res = await fetch(`${BASE}/missing`);
+  expect(res.status).toBe(404);
+  expect(res.headers.get("content-type")).toContain("text/html");
+  const html = await res.text();
+  expect(html).toMatch(/<p id="route-boundary">404(<!-- -->)?: (<!-- -->)?No such widget<\/p>/);
+  expect(html).not.toContain("unreachable");
+});
+
+test("without an ErrorBoundary the built-in fallback renders", async () => {
+  const res = await fetch(`${BASE}/missing-bare`);
+  expect(res.status).toBe(410);
+  const html = await res.text();
+  expect(html).toContain('data-bract-error="410"');
+  expect(html).toContain("Gone for good");
+});
+
+test("an unexpected route-loader error renders the fallback with a 500", async () => {
+  const res = await fetch(`${BASE}/boom`);
+  expect(res.status).toBe(500);
+  const html = await res.text();
+  expect(html).toContain('data-bract-error="500"');
+  expect(html).not.toContain("unreachable");
+  expect(html).not.toContain("kaboom"); // production: message sanitized
+});
+
+test("/_data carries the route-loader HttpError so client navigation can render it", async () => {
+  const res = await fetch(`${BASE}/_data?path=/missing`);
+  expect(res.status).toBe(200);
+  const data = (await res.json()) as { route: unknown };
+  expect(data.route).toEqual({ __error: { message: "No such widget", status: 404 } });
+});

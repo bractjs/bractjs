@@ -1,4 +1,5 @@
 import {
+  type ComponentType,
   type ReactElement,
   type ReactNode,
   startTransition,
@@ -45,6 +46,8 @@ interface ClientRouterProps {
   children: ReactNode;
   initialData: BractJSInitialData;
   initialModule?: RouteModuleClient | null;
+  /** root.tsx's ErrorBoundary export, if any. */
+  rootErrorBoundary?: ComponentType<{ error: unknown }>;
 }
 
 /** History-entry init carried into loadRoute by navigate/popstate. */
@@ -59,6 +62,7 @@ export function ClientRouter({
   children,
   initialData,
   initialModule = null,
+  rootErrorBoundary,
 }: ClientRouterProps): ReactElement {
   const [loaderData, setLoaderData] = useState(initialData.loaderData);
   const [actionData, setActionData] = useState<unknown>(initialData.actionData);
@@ -585,6 +589,7 @@ export function ClientRouter({
   return (
     <RouterContext.Provider
       value={{
+        rootErrorBoundary,
         loaderData,
         actionData,
         params,

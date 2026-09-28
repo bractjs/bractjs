@@ -215,7 +215,10 @@ export function beforeLoad({ context, params, location }) {
   }
 }
 
-// 5) ErrorBoundary — renders when this segment's loader/component throws.
+// 5) ErrorBoundary — renders in the route's place when its loader throws
+//    (an HttpError keeps its status: 404 → a 404 page) or its component
+//    throws while rendering. Without one, root.tsx's ErrorBoundary is used,
+//    else a minimal built-in fallback.
 export function ErrorBoundary({ error }: { error: unknown }) {
   return <p>Something broke: {error instanceof Error ? error.message : String(error)}</p>;
 }
@@ -300,7 +303,7 @@ global pipeline → searchSchema → route middleware (root → layout → route
 
 - **Route middleware** wraps everything after search validation: it runs in chain order with a shared `context`, can short-circuit with a `Response`, and (being outermost-first) can also post-process the final response. It runs inside the app-wide `pipeline` (§14).
 - **Loaders run concurrently** (root, every layout, and the route loader all in one `Promise.all`).
-- A loader that throws an `HttpError`/redirect `Response` is intentional control flow. Any _other_ thrown error is caught, sanitized (generic message in production, full message+stack only when `NODE_ENV=development`), and rendered via the nearest `ErrorBoundary`.
+- A loader that throws a redirect `Response` redirects. A **route** loader that throws an `HttpError` renders the nearest `ErrorBoundary` (the route's, else root's, else a built-in fallback) in the route's place, with that status code — on full page loads and client navigation alike; `error` is the `HttpError`, so `error.status` works. Any _other_ thrown error does the same with status 500 and a sanitized message (generic in production, the real message only when `NODE_ENV=development`), and is reported to `onError`. An `HttpError` thrown by a **root or layout** loader still ends the request with a JSON error body of that status, since no boundary can render without the root's data.
 
 > **Security:** put auth checks in `beforeLoad` (per route) or middleware (cross-cutting) — never in a component. `/_data` (used by `<Link>` soft-nav) runs `beforeLoad` and the loader, so a component-only check would still leak loader JSON. See §14.
 

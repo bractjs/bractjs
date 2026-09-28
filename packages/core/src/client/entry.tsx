@@ -48,9 +48,11 @@ function FallbackApp(): ReactElement {
   // 1. Import the root component (app/root.tsx) so the client tree matches
   //    the server-rendered shell (html, head, body, header, nav, etc.).
   let RootComponent: ComponentType = FallbackApp;
+  let rootErrorBoundary: ComponentType<{ error: unknown }> | undefined;
   if (data.manifest.rootChunk) {
     const rootMod = await import(data.manifest.rootChunk);
     if (rootMod.default) RootComponent = rootMod.default;
+    rootErrorBoundary = rootMod.ErrorBoundary;
   }
 
   // The SPA shell is built once for "/" and served for every document path —
@@ -95,6 +97,7 @@ function FallbackApp(): ReactElement {
         matches,
       }}
       initialModule={initialModule}
+      rootErrorBoundary={rootErrorBoundary}
     >
       <RootComponent />
     </ClientRouter>,

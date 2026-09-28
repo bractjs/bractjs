@@ -41,6 +41,10 @@ export interface RouterContextValue extends RouteState {
     /** "loading" while a revalidation is in flight. Distinct from the navigation state. */
     revalidationState: "idle" | "loading";
     hydrationPending: HydrationPending;
+    /** root.tsx's ErrorBoundary — the fallback when a failing route has none. */
+    rootErrorBoundary?: ComponentType<{
+        error: unknown;
+    }>;
 }
 export declare const RouterContext: import("react").Context<RouterContextValue>;
 export declare function useRouterContext(): RouterContextValue;
