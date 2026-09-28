@@ -29,6 +29,7 @@ const ROUNDS = flag("rounds", 3);
 const DURATION = flag("duration", 10);
 const CONNECTIONS = flag("connections", 50);
 const WARMUP = 5;
+const ACCEPT_ENCODING = "gzip, deflate, br, zstd";
 
 interface App {
   name: string;
@@ -131,7 +132,20 @@ async function waitFor200(url: string, timeoutMs = 30_000): Promise<void> {
 
 async function autocannon(url: string, seconds: number) {
   const out = await run(
-    ["node", "node_modules/.bin/autocannon", "-j", "-c", String(CONNECTIONS), "-d", String(seconds), url],
+    [
+      "node",
+      "node_modules/.bin/autocannon",
+      "-j",
+      "-c",
+      String(CONNECTIONS),
+      "-d",
+      String(seconds),
+      // What every browser sends: each server pays for the compression it does
+      // in real use (autocannon sends no Accept-Encoding by default).
+      "-H",
+      `accept-encoding=${ACCEPT_ENCODING}`,
+      url,
+    ],
     BENCH,
   );
   const r = JSON.parse(out);
@@ -174,6 +188,7 @@ interface Result {
   rssMbAfterLoad: number;
   jsGzipKb: number;
   jsRawKb: number;
+  jsWireKb: number;
   jsFiles: number;
   htmlGzipKb: number;
   compression: string;
@@ -201,6 +216,10 @@ for (const app of APPS) {
     console.log(`  cold start   ${coldStartMs.toFixed(0)} ms`);
 
     const html = await (await fetch(url)).text();
+    const loadEncoding =
+      (await fetch(url, { headers: { "Accept-Encoding": ACCEPT_ENCODING }, decompress: false })).headers.get(
+        "content-encoding",
+      ) ?? "none";
     if (!html.includes("Product 100")) throw new Error(`${app.name}: / did not render the workload`);
 
     const weight = JSON.parse(await run(["node", "page-weight.mjs", url], BENCH));
@@ -227,9 +246,10 @@ for (const app of APPS) {
       rssMbAfterLoad: Math.round(rssMb),
       jsGzipKb: +(weight.js.gzip / 1024).toFixed(1),
       jsRawKb: +(weight.js.raw / 1024).toFixed(1),
+      jsWireKb: +(weight.js.wire / 1024).toFixed(1),
       jsFiles: weight.js.count,
       htmlGzipKb: +(weight.html.gzip / 1024).toFixed(1),
-      compression: weight.documentEncoding,
+      compression: loadEncoding,
       rounds,
     });
   } finally {
@@ -275,6 +295,7 @@ const row = (label: string, f: (r: Result) => string) =>
 row("Requests/s (`/`, median)", (r) => r.rps.toLocaleString("en-US"));
 row("Latency p50 / p99", (r) => `${r.p50Ms} / ${r.p99Ms} ms`);
 row("First-load JS (gzip)", (r) => `${r.jsGzipKb} KB (${r.jsFiles} files)`);
+row("First-load JS over the wire", (r) => `${r.jsWireKb} KB`);
 row("HTML (gzip)", (r) => `${r.htmlGzipKb} KB`);
 row("Server memory after load", (r) => `${r.rssMbAfterLoad} MB`);
 row("Cold start → first 200", (r) => `${r.coldStartMs} ms`);

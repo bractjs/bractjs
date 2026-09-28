@@ -4,24 +4,27 @@ BractJS, React Router 7, and Next.js serving the same page, measured with the ha
 
 ## Results
 
-Run on 2026-09-27. Raw data: [`bench/results/2026-09-27.json`](../bench/results/2026-09-27.json).
+Run on 2026-09-28. Raw data: [`bench/results/2026-09-28.json`](../bench/results/2026-09-28.json).
 
 |                                          |     BractJS 0.4.1 | React Router 7.18.4 |     Next.js 16.3.6 |
 | ---------------------------------------- | ----------------: | ------------------: | -----------------: |
 | Runtime                                  |         Bun 1.4.2 |        Node 24.15.0 |       Node 24.15.0 |
-| **Requests/s** (`/`, median of 3 rounds) |         **6,127** |               2,998 |              1,152 |
-| Latency p50 / p99                        |         7 / 15 ms |          16 / 25 ms |         42 / 55 ms |
+| **Requests/s** (`/`, median of 3 rounds) |         **4,525** |               1,772 |              1,010 |
+| Latency p50 / p99                        |        12 / 17 ms |          27 / 34 ms |         48 / 66 ms |
+| **First-load JS over the wire**          |       **55.8 KB** |            102.1 KB |           134.2 KB |
 | First-load JS, gzipped                   | 64.2 KB (7 files) |  100.9 KB (4 files) | 134.0 KB (7 files) |
 | First-load JS, uncompressed              |          196.6 KB |            310.4 KB |           451.5 KB |
-| **Compression the server applies**       |       **none** ⚠️ |              brotli |               gzip |
 | HTML document, gzipped                   |            3.8 KB |              4.8 KB |             4.9 KB |
-| Server memory (RSS) after load           |            137 MB |              461 MB |             523 MB |
-| Cold start → first `200`                 |             35 ms |              131 ms |             177 ms |
-| Clean production build                   |            0.08 s |              0.78 s |             2.25 s |
+| Server memory (RSS) after load           |            196 MB |              330 MB |             608 MB |
+| Cold start → first `200`                 |             31 ms |              124 ms |             181 ms |
+| Clean production build                   |            0.05 s |              0.79 s |             2.27 s |
+| Compression of `/` under load            |              gzip |              brotli |               gzip |
 
-Machine: Apple M5 Max (18 cores, 128 GB), macOS (Darwin 27.0.0), React 19.2.6 in all three apps. Load: [autocannon](https://github.com/mcollina/autocannon) 8.0.0, 50 connections, 5 s warmup, then 3 rounds of 10 s; every round had zero errors and zero non-2xx responses. Across rounds each framework's throughput varied by less than 3%.
+Machine: Apple M5 Max (18 cores, 128 GB), macOS (Darwin 27.0.0), React 19.2.6 in all three apps. Load: [autocannon](https://github.com/mcollina/autocannon) 8.0.0, 50 connections, sending a browser's `Accept-Encoding: gzip, deflate, br, zstd`, 5 s warmup, then 3 rounds of 10 s. Every round had zero errors and zero non-2xx responses. Rounds varied by up to ~11% (one BractJS round at 4,120 req/s; Next.js 987–1,095), so treat differences under ~10% as noise.
 
-> ⚠️ **BractJS does not compress responses.** The gzipped column compares bundle _sizes_; it is not what a visitor downloads. Without a compressing reverse proxy or CDN in front, a first visit transfers BractJS's **196.6 KB of uncompressed JavaScript**, nearly twice what React Router sends (its bundle is 101 KB gzipped and it serves brotli, which is smaller still). Put BractJS behind something that compresses (nginx, Caddy, Cloudflare, most CDNs) until the framework does it itself.
+"Over the wire" is what Chrome actually transferred: the encoded bytes of every script, as each server chose to send them. "Gzipped" re-compresses each file the same way for every framework, so it compares bundle sizes independently of server settings. BractJS serves its hashed client bundle brotli-compressed at maximum quality (cached in memory after the first request) and streamed HTML gzip-compressed.
+
+> **Earlier run, before BractJS compressed responses** ([`2026-09-27.json`](../bench/results/2026-09-27.json), no `Accept-Encoding` sent, so no server compressed): BractJS 6,127 req/s, React Router 2,998, Next.js 1,152. Back then BractJS sent all 196.6 KB of its JavaScript uncompressed. Sending the browser header costs every server throughput, React Router proportionally the most.
 
 ## What was measured
 
@@ -34,19 +37,20 @@ Per app, `bench/run.ts`:
 
 1. Deletes previous output and times a **clean production build**.
 2. Starts the server and times **spawn → first `200` on `/`**.
-3. Loads `/` in headless Chrome ([`bench/page-weight.mjs`](../bench/page-weight.mjs)) and records **every script the browser downloads** — including chunks loaded by dynamic import after boot, which scraping `<script>` tags would miss. It **clicks the counter and fails the run unless the page hydrates**. Each file is then re-fetched uncompressed and gzipped by the harness, so sizes compare bundles rather than server settings. The encoding the server actually sent is recorded separately.
-4. Runs autocannon against `/`: one warmup, then N measured rounds. The table reports the median round.
+3. Loads `/` in headless Chrome ([`bench/page-weight.mjs`](../bench/page-weight.mjs)) and records **every script the browser downloads** — including chunks loaded by dynamic import after boot, which scraping `<script>` tags would miss. It **clicks the counter and fails the run unless the page hydrates**. It records the encoded bytes Chrome transferred for each script ("over the wire"), then re-fetches each file uncompressed and gzips it itself, so the gzipped column compares bundles rather than server settings.
+4. Runs autocannon against `/` with a browser's `Accept-Encoding` header, so each server does the compression it would do for real visitors: one warmup, then N measured rounds. The table reports the median round.
 5. Records the **resident memory of the server's whole process tree** (Next.js can fork) right after the load.
 
-It also measures a **load-generator ceiling** — autocannon against a Bun server that does no work — to show the numbers measure the frameworks, not autocannon. On this machine the ceiling was **134,682 req/s**, 22× the fastest framework.
+It also measures a **load-generator ceiling** — autocannon against a Bun server that does no work — to show the numbers measure the frameworks, not autocannon. On this machine the ceiling was **137,385 req/s**, 30× the fastest framework.
 
 ## Caveats
 
 - **Runtime and framework are measured together.** BractJS only runs on Bun, and the other two are measured on Node, the runtime their production servers target. Part of BractJS's throughput and memory advantage is Bun's, not the framework's. That is the real choice you'd be making, but it is not a framework-only comparison.
 - **One page, one machine, loopback.** A 100-row table with no I/O mostly measures SSR and serialization overhead. With a real database or external API, data latency dominates and the gaps shrink. Loopback latency doesn't include network time.
 - **Single process.** Nobody was clustered. All three can scale across cores (multiple processes behind a load balancer); that multiplies throughput and memory for each alike.
-- **React Router runs its own `dist/development` build on Node.** Its package export map points every Node condition at `dist/development`, so `react-router-serve` loads that build even with `NODE_ENV=production`. That is what the official server does, so it is measured as shipped. `react-router-serve` also logs every request; the same build behind express with compression and no logging did about **3,070 req/s** (3 rounds: 3,141 / 2,981 / 3,084), so logging accounts for roughly 3%.
+- **React Router runs its own `dist/development` build on Node.** Its package export map points every Node condition at `dist/development`, so `react-router-serve` loads that build even with `NODE_ENV=production`. That is what the official server does, so it is measured as shipped. `react-router-serve` also logs every request. In the earlier uncompressed run, the same build behind express with no request logging did about **3,070 req/s** against 2,998 as shipped, so logging accounts for roughly 3%.
 - **Next.js does more per request.** With the App Router, every response also carries the React Server Components payload, and `next build` also typechecks. Its per-request and build numbers include work the other two don't do. If this page could be static, Next.js would prerender it at build time and serve it from cache.
+- **Each server compresses its own way.** BractJS gzips streamed HTML and serves brotli for its cached bundle; React Router's express server uses brotli (and skips small files); Next.js uses gzip. Throughput includes each server's compression cost; wire sizes reflect each server's choices.
 - **Build times aren't feature-equivalent.** BractJS's build is one `Bun.build` pass with no typechecking. React Router uses Vite; Next.js uses Turbopack and runs `tsc`.
 - **React Router 8 was not measured.** RR 8.4.0 is current; 7.18.4 was chosen to match the [migration guide](migrating-from-remix.md). Rerun with `react-router@8` to update.
 
