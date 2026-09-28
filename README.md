@@ -13,7 +13,7 @@
 
 This README is a **step-by-step guide to every function and feature** BractJS exports. Each section is self-contained and ordered from "first app" to "advanced". Every symbol shown here is a real export from `@bractjs/bractjs` (see [packages/core/src/index.ts](packages/core/src/index.ts)).
 
-> **New to BractJS?** Start with the guides in [`docs/`](docs/README.md): a [15-minute tutorial](docs/tutorial.md), the [mental model](docs/concepts.md) (request lifecycle, run modes), [authentication end to end](docs/authentication.md), and [deployment](docs/deployment.md). This README is the reference; those are the learning path.
+> **New to BractJS?** Start with the guides in [`docs/`](docs/README.md): a [15-minute tutorial](docs/tutorial.md), the [mental model](docs/concepts.md) (request lifecycle, run modes), [authentication end to end](docs/authentication.md), [deployment](docs/deployment.md), and [migrating from Remix / React Router 7](docs/migrating-from-remix.md). This README is the reference; those are the learning path.
 
 ---
 
@@ -156,12 +156,13 @@ Drop a file in `app/routes/`; it becomes a route. BractJS scans at startup and b
 | `routes/blog/_index.tsx`       | `/blog`                                  |
 | `routes/blog/[id].tsx`         | `/blog/:id`                              |
 | `routes/users/[[id]].tsx`      | `/users` **and** `/users/:id` (optional) |
+| `routes/[[lang]]/about.tsx`    | `/about` **and** `/:lang/about`          |
 | `routes/docs/[...slug].tsx`    | `/docs/*` (catch-all)                    |
 | `routes/blog/layout.tsx`       | wraps all `/blog/*` routes               |
 | `routes/(marketing)/about.tsx` | `/about` (group adds no URL segment)     |
 
 - `[param]` → a dynamic segment, read via `useParams()` / `params` arg.
-- `[[param]]` → an **optional** dynamic segment: the route matches whether the segment is present or not (when absent, `params.param` is simply unset).
+- `[[param]]` → an **optional** dynamic segment, in any position: the route matches whether the segment is present or not (when absent, `params.param` is simply unset). When a path could fill either, a static segment wins: `/about` goes to `[[lang]]/about.tsx`, not to `[[lang]]/_index.tsx` with `lang="about"`.
 - `[...name]` → a catch-all; the rest of the path lands in `params.name`.
 - `layout.tsx` in any directory wraps every route under it (layouts nest: `root → blog/layout → blog/[id]`).
 - `(group)/` → a **route group**: the folder organizes files and contributes its `layout.tsx`, but adds **no** URL segment. Use it to give a set of routes a shared layout without a shared path prefix.
@@ -375,7 +376,7 @@ Serialize a value as `application/json`.
 return json({ ok: true }, { status: 201 });
 ```
 
-### `redirect(url, status?, headers?, options?)`
+### `redirect(url, status | init?, headers?, options?)`
 
 Throw or return a redirect. **Open-redirect safe by default** — rejects `//evil.com`, `/\evil`, `https://…`, `javascript:` unless you pass `{ allowExternal: true }`.
 
@@ -384,6 +385,10 @@ return redirect("/dashboard"); // 302
 return redirect("/login", 303); // custom status
 return redirect("/x", 302, { "Set-Cookie": cookie }); // with headers
 return redirect("https://other.com", 302, undefined, { allowExternal: true });
+
+// Or the Remix / React Router init-object form:
+return redirect("/x", { status: 303, headers: { "Set-Cookie": cookie } });
+return redirect("https://other.com", { allowExternal: true });
 ```
 
 ### `error(message, status?)`
