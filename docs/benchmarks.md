@@ -9,18 +9,18 @@ Run on 2026-09-28. Raw data: [`bench/results/2026-09-28.json`](../bench/results/
 |                                          |     BractJS 0.4.1 | React Router 7.18.4 |     Next.js 16.3.6 |
 | ---------------------------------------- | ----------------: | ------------------: | -----------------: |
 | Runtime                                  |         Bun 1.4.2 |        Node 24.15.0 |       Node 24.15.0 |
-| **Requests/s** (`/`, median of 3 rounds) |         **4,525** |               1,772 |              1,010 |
-| Latency p50 / p99                        |        12 / 17 ms |          27 / 34 ms |         48 / 66 ms |
-| **First-load JS over the wire**          |       **55.8 KB** |            102.1 KB |           134.2 KB |
-| First-load JS, gzipped                   | 64.2 KB (7 files) |  100.9 KB (4 files) | 134.0 KB (7 files) |
-| First-load JS, uncompressed              |          196.6 KB |            310.4 KB |           451.5 KB |
+| **Requests/s** (`/`, median of 3 rounds) |         **4,494** |               1,730 |              1,006 |
+| Latency p50 / p99                        |        12 / 17 ms |          28 / 34 ms |        46 / 121 ms |
+| **First-load JS over the wire**          |       **57.1 KB** |            102.1 KB |           134.2 KB |
+| First-load JS, gzipped                   | 65.5 KB (7 files) |  100.9 KB (4 files) | 134.0 KB (7 files) |
+| First-load JS, uncompressed              |          199.9 KB |            310.4 KB |           451.5 KB |
 | HTML document, gzipped                   |            3.8 KB |              4.8 KB |             4.9 KB |
-| Server memory (RSS) after load           |            196 MB |              330 MB |             608 MB |
-| Cold start → first `200`                 |             31 ms |              124 ms |             181 ms |
-| Clean production build                   |            0.05 s |              0.79 s |             2.27 s |
+| Server memory (RSS) after load           |            208 MB |              330 MB |             475 MB |
+| Cold start → first `200`                 |             37 ms |              135 ms |             185 ms |
+| Clean production build                   |            0.08 s |              0.82 s |             2.37 s |
 | Compression of `/` under load            |              gzip |              brotli |               gzip |
 
-Machine: Apple M5 Max (18 cores, 128 GB), macOS (Darwin 27.0.0), React 19.2.6 in all three apps. Load: [autocannon](https://github.com/mcollina/autocannon) 8.0.0, 50 connections, sending a browser's `Accept-Encoding: gzip, deflate, br, zstd`, 5 s warmup, then 3 rounds of 10 s. Every round had zero errors and zero non-2xx responses. Rounds varied by up to ~11% (one BractJS round at 4,120 req/s; Next.js 987–1,095), so treat differences under ~10% as noise.
+Machine: Apple M5 Max (18 cores, 128 GB), macOS (Darwin 27.0.0), React 19.2.6 in all three apps. Load: [autocannon](https://github.com/mcollina/autocannon) 8.0.0, 50 connections, sending a browser's `Accept-Encoding: gzip, deflate, br, zstd`, 5 s warmup, then 3 rounds of 10 s. Every round had zero errors and zero non-2xx responses. Rounds varied by up to ~12% (Next.js 971–1,086; its p99 swung between 55 and 133 ms across rounds), so treat differences under ~10% as noise.
 
 "Over the wire" is what Chrome actually transferred: the encoded bytes of every script, as each server chose to send them. "Gzipped" re-compresses each file the same way for every framework, so it compares bundle sizes independently of server settings. BractJS serves its hashed client bundle brotli-compressed at maximum quality (cached in memory after the first request) and streamed HTML gzip-compressed.
 
@@ -41,7 +41,7 @@ Per app, `bench/run.ts`:
 4. Runs autocannon against `/` with a browser's `Accept-Encoding` header, so each server does the compression it would do for real visitors: one warmup, then N measured rounds. The table reports the median round.
 5. Records the **resident memory of the server's whole process tree** (Next.js can fork) right after the load.
 
-It also measures a **load-generator ceiling** — autocannon against a Bun server that does no work — to show the numbers measure the frameworks, not autocannon. On this machine the ceiling was **137,385 req/s**, 30× the fastest framework.
+It also measures a **load-generator ceiling** — autocannon against a Bun server that does no work — to show the numbers measure the frameworks, not autocannon. On this machine the ceiling was **125,523 req/s**, 28× the fastest framework.
 
 ## Caveats
 

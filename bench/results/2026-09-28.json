@@ -1,6 +1,6 @@
 {
   "machine": {
-    "date": "2026-09-28T02:33:13.349Z",
+    "date": "2026-09-28T13:56:24.999Z",
     "cpu": "Apple M5 Max",
     "cores": 18,
     "memoryGb": 128,
@@ -18,21 +18,21 @@
       "durationSeconds": 10,
       "rounds": 3,
       "warmupSeconds": 5,
-      "ceilingRps": 137385
+      "ceilingRps": 125523
     }
   },
   "results": [
     {
       "name": "BractJS",
-      "buildSeconds": 0.05,
-      "coldStartMs": 31,
-      "rps": 4525,
+      "buildSeconds": 0.08,
+      "coldStartMs": 37,
+      "rps": 4494,
       "p50Ms": 12,
       "p99Ms": 17,
-      "rssMbAfterLoad": 196,
-      "jsGzipKb": 64.2,
-      "jsRawKb": 196.6,
-      "jsWireKb": 55.8,
+      "rssMbAfterLoad": 208,
+      "jsGzipKb": 65.5,
+      "jsRawKb": 199.9,
+      "jsWireKb": 57.1,
       "jsFiles": 7,
       "htmlGzipKb": 3.8,
       "compression": "gzip",
@@ -44,25 +44,25 @@
           "errors": 0
         },
         {
-          "rps": 4552,
-          "p50": 11,
+          "rps": 4476.91,
+          "p50": 12,
           "p99": 17,
           "errors": 0
         },
         {
-          "rps": 4119.55,
+          "rps": 4494.37,
           "p50": 12,
-          "p99": 24,
+          "p99": 17,
           "errors": 0
         }
       ]
     },
     {
       "name": "React Router 7",
-      "buildSeconds": 0.79,
-      "coldStartMs": 124,
-      "rps": 1772,
-      "p50Ms": 27,
+      "buildSeconds": 0.82,
+      "coldStartMs": 135,
+      "rps": 1730,
+      "p50Ms": 28,
       "p99Ms": 34,
       "rssMbAfterLoad": 330,
       "jsGzipKb": 100.9,
@@ -73,20 +73,20 @@
       "compression": "br",
       "rounds": [
         {
-          "rps": 1771.9,
-          "p50": 27,
+          "rps": 1688.64,
+          "p50": 29,
+          "p99": 37,
+          "errors": 0
+        },
+        {
+          "rps": 1730.46,
+          "p50": 28,
           "p99": 34,
           "errors": 0
         },
         {
-          "rps": 1772.64,
-          "p50": 27,
-          "p99": 34,
-          "errors": 0
-        },
-        {
-          "rps": 1770.1,
-          "p50": 27,
+          "rps": 1743.46,
+          "p50": 28,
           "p99": 34,
           "errors": 0
         }
@@ -94,12 +94,12 @@
     },
     {
       "name": "Next.js",
-      "buildSeconds": 2.27,
-      "coldStartMs": 181,
-      "rps": 1010,
-      "p50Ms": 48,
-      "p99Ms": 66,
-      "rssMbAfterLoad": 608,
+      "buildSeconds": 2.37,
+      "coldStartMs": 185,
+      "rps": 1006,
+      "p50Ms": 46,
+      "p99Ms": 121,
+      "rssMbAfterLoad": 475,
       "jsGzipKb": 134,
       "jsRawKb": 451.5,
       "jsWireKb": 134.2,
@@ -108,21 +108,21 @@
       "compression": "gzip",
       "rounds": [
         {
-          "rps": 987.28,
-          "p50": 49,
-          "p99": 66,
-          "errors": 0
-        },
-        {
-          "rps": 1009.9,
+          "rps": 970.8,
           "p50": 48,
-          "p99": 67,
+          "p99": 121,
           "errors": 0
         },
         {
-          "rps": 1095,
+          "rps": 1006.4,
+          "p50": 46,
+          "p99": 133,
+          "errors": 0
+        },
+        {
+          "rps": 1086.41,
           "p50": 45,
-          "p99": 58,
+          "p99": 55,
           "errors": 0
         }
       ]
