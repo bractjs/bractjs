@@ -67,6 +67,15 @@ export interface BractJSConfig {
      * dedicated large-upload endpoint. Only applies to the default Bun adapter.
      */
     maxRequestBodySize?: number;
+    /**
+     * Compress responses (brotli, else gzip — whichever the client accepts) for
+     * HTML, JSON, JS, CSS, SVG and other text. Default `true`. Hashed client
+     * assets are compressed once at maximum quality and cached in memory;
+     * streamed SSR stays streamed. Set `false` when a reverse proxy or CDN in
+     * front already compresses. Applies to `createServer()` (dev, start, the
+     * compiled binary), not to a bare `buildFetchHandler()`.
+     */
+    compression?: boolean;
     /** Called once after the server starts listening. Use to open DB connections, warm caches, etc. */
     onStart?: () => Promise<void> | void;
     /** Called before the process exits (any signal or uncaught error). Use to close DB connections, flush queues, etc. */

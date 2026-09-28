@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
+import { brotliDecompressSync } from "node:zlib";
 import { createServer } from "../server/serve.ts";
 
 const PORT = 3999;
@@ -257,4 +258,36 @@ test("/_data payload carries the matched chain (useMatches) with handle", async 
   // Leaf route carries its handle export.
   const leaf = data.matches!.at(-1)!;
   expect(leaf.handle?.breadcrumb).toBe("Features");
+});
+
+// Compression is applied by createServer around the whole handler (outside the
+// global pipeline). Bun's fetch decompresses transparently, so opt out of that
+// to see the wire bytes.
+test("createServer compresses SSR documents when the client accepts it", async () => {
+  const res = await fetch(`${BASE}/`, { headers: { "Accept-Encoding": "br" }, decompress: false });
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-encoding")).toBe("br");
+  expect(res.headers.get("vary")).toContain("Accept-Encoding");
+  const html = brotliDecompressSync(new Uint8Array(await res.arrayBuffer())).toString();
+  expect(html).toContain("<html");
+});
+
+test("createServer({ compression: false }) sends identity responses", async () => {
+  const plain = createServer({
+    port: 3981,
+    appDir: FIXTURE_APP,
+    compression: false,
+    manifest: { clientEntry: "/build/client/client.js", routes: {} },
+  });
+  try {
+    const res = await fetch("http://localhost:3981/", {
+      headers: { "Accept-Encoding": "br" },
+      decompress: false,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-encoding")).toBeNull();
+    expect(await res.text()).toContain("<html");
+  } finally {
+    plain.stop();
+  }
 });

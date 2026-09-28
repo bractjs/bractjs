@@ -1534,6 +1534,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | `buildDir`                           | `string`                  | `"./build"`            | Build output                                                        |
 | `imageCacheDir`                      | `string`                  | `".bract-image-cache"` | Optimized-image disk cache                                          |
 | `maxRequestBodySize`                 | `number`                  | `16777216` (16 MiB)    | Hard ceiling on any request body, enforced by the Bun adapter (§27) |
+| `compression`                        | `boolean`                 | `true`                 | Brotli/gzip responses; `false` if a proxy or CDN already compresses |
 | `sourcemap`                          | `string`                  | `"none"`               | `"none" \| "linked" \| "inline" \| "external"`                      |
 | `minify`                             | `boolean`                 | `true`                 | Minify client bundles                                               |
 | `clientEnv`                          | `string[]`                | `[]`                   | `process.env` keys exposed to the client                            |
