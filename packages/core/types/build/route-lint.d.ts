@@ -2,8 +2,9 @@ export declare const ROUTE_EXPORT_NAMES: readonly ["default", "loader", "action"
 /**
  * Static lint of a route module's SOURCE (no execution). Returns human-readable
  * warning strings. Used by the dev rebuilder and the production build to catch
- * two common, silent mistakes: a route that renders nothing, and an export
- * whose casing doesn't match a framework export (so it's ignored).
+ * common, silent mistakes: a route that renders nothing, an export whose casing
+ * doesn't match a framework export, and a Remix / React Router export BractJS
+ * doesn't read (all three are otherwise ignored without a trace).
  */
 /** A typed API route definition found in source: `route("GET", "/api/x", …)`. */
 export interface ApiRouteDef {
