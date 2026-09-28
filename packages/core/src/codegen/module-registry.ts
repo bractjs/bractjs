@@ -221,7 +221,7 @@ interface DiskManifest {
   rootChunk?: string;
   entryCss?: string[];
   rootCss?: string[];
-  routes: Record<string, { chunk: string; pattern: string; css?: string[] }>;
+  routes: Record<string, { chunk: string; pattern: string; css?: string[]; layouts?: string[] }>;
 }
 
 /**
@@ -233,11 +233,17 @@ interface DiskManifest {
 export function generateManifestModule(disk: DiskManifest): string {
   // Mirror the RouteManifest → ServerManifest projection in serve.ts so the
   // compiled binary sees the same shape `buildFetchHandler` would have built.
-  const projectedRoutes: Record<string, { file: string; chunk: string; css?: string[] }> = {};
+  const projectedRoutes: Record<string, { file: string; chunk: string; css?: string[]; layouts?: string[] }> =
+    {};
   for (const [pat, entry] of Object.entries(disk.routes ?? {})) {
-    projectedRoutes[pat] = entry.css?.length
-      ? { file: entry.chunk, chunk: entry.chunk, css: entry.css }
-      : { file: entry.chunk, chunk: entry.chunk };
+    // Without `layouts` the binary's client couldn't load layout modules, and
+    // hydration would render a different tree than the server did.
+    projectedRoutes[pat] = {
+      file: entry.chunk,
+      chunk: entry.chunk,
+      ...(entry.css?.length ? { css: entry.css } : {}),
+      ...(entry.layouts?.length ? { layouts: entry.layouts } : {}),
+    };
   }
   const projected = {
     clientEntry: disk.clientEntry,

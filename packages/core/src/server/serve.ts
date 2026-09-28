@@ -140,7 +140,7 @@ async function readDevManifest(buildDir: string): Promise<ServerManifest> {
     rootChunk?: string;
     entryCss?: string[];
     rootCss?: string[];
-    routes?: Record<string, { chunk?: string; css?: string[] }>;
+    routes?: Record<string, { chunk?: string; css?: string[]; layouts?: string[] }>;
   };
   return {
     clientEntry: m.clientEntry ?? DEFAULT_MANIFEST.clientEntry,
@@ -150,7 +150,7 @@ async function readDevManifest(buildDir: string): Promise<ServerManifest> {
     routes: Object.fromEntries(
       Object.entries(m.routes ?? {}).map(([pat, e]) => [
         pat,
-        { file: e.chunk ?? "", chunk: e.chunk, css: e.css },
+        { file: e.chunk ?? "", chunk: e.chunk, css: e.css, layouts: e.layouts },
       ]),
     ),
   };
@@ -175,7 +175,10 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
           entryCss: m.entryCss,
           rootCss: m.rootCss,
           routes: Object.fromEntries(
-            Object.entries(m.routes).map(([pat, e]) => [pat, { file: e.chunk, chunk: e.chunk, css: e.css }]),
+            Object.entries(m.routes).map(([pat, e]) => [
+              pat,
+              { file: e.chunk, chunk: e.chunk, css: e.css, layouts: e.layouts },
+            ]),
           ),
         }))
       : Promise.resolve(config.manifest ?? DEFAULT_MANIFEST);

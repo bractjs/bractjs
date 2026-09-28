@@ -1,6 +1,6 @@
 import type { ComponentType, ReactElement } from "react";
 import { hydrateRoot } from "react-dom/client";
-import { ClientRouter } from "./ClientRouter.tsx";
+import { ClientRouter, loadLayoutModules } from "./ClientRouter.tsx";
 import { reviveDeferred } from "./deferred-revive.ts";
 import { Outlet } from "./components/Outlet.tsx";
 import { matchPatternForPath } from "./nav-utils.ts";
@@ -64,12 +64,17 @@ function FallbackApp(): ReactElement {
   const pattern = matchPatternForPath(initialPathname, data.manifest);
   const chunkUrl = pattern !== null ? data.manifest.routes[pattern]?.chunk : undefined;
 
+  // …and its layout.tsx modules, so the client tree matches the server's.
+  const layoutsLoaded = loadLayoutModules(
+    pattern !== null ? data.manifest.routes[pattern]?.layouts : undefined,
+  );
   if (chunkUrl) {
     initialModule = (await import(chunkUrl)) as RouteModuleClient;
   } else if (data.routeFile) {
     const url = `/_hmr/module?file=${encodeURIComponent(data.routeFile)}&t=0`;
     initialModule = (await import(url)) as RouteModuleClient;
   }
+  const initialLayouts = await layoutsLoaded;
 
   // Initial location: pathname comes from the server payload; search is
   // identical to the request's by construction. The hash never reaches the
@@ -97,6 +102,7 @@ function FallbackApp(): ReactElement {
         matches,
       }}
       initialModule={initialModule}
+      initialLayouts={initialLayouts}
       rootErrorBoundary={rootErrorBoundary}
     >
       <RootComponent />

@@ -376,6 +376,7 @@ async function route(
         pathname,
         manifest: manifest as unknown as import("../shared/context.ts").RouteManifest,
         RouteComponent,
+        LayoutModules: chain.layouts,
         location: { pathname, search: url.search, hash: "", state: null, key: "default" },
         search,
         matches,

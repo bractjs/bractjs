@@ -12,6 +12,7 @@ import { collectCssBundles } from "./css-collect.ts";
 import { tailwindPlugins } from "./plugins/tailwind.ts";
 import { routeShakePlugin } from "./plugins/route-shake.ts";
 import { reactDedupePlugin } from "./react-dedupe.ts";
+import { attachLayouts, outputRelPath, routeLayoutFiles } from "./layouts.ts";
 
 /** Subset of config fields relevant to the build pipeline. */
 export interface BuildConfig {
@@ -36,6 +37,8 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   const routes = await scanRoutes(appDir);
   const routeFilePaths = routes.map((r) => join(appDir, r.filePath));
   const rootFilePath = join(appDir, "root.tsx");
+  const layoutFilesByPattern = await routeLayoutFiles(appDir, routes);
+  const layoutSources = [...new Set([...layoutFilesByPattern.values()].flat())];
 
   // Static route-module lint: surface empty routes and miscased exports at
   // build time (no execution — just source analysis).
@@ -87,7 +90,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   let clientResult: Awaited<ReturnType<typeof Bun.build>>;
   try {
     clientResult = await Bun.build({
-      entrypoints: [shimPath, rootFilePath, ...routeFilePaths],
+      entrypoints: [shimPath, rootFilePath, ...routeFilePaths, ...layoutSources.map((f) => join(appDir, f))],
       target: "browser",
       splitting: true,
       outdir: "build/client",
@@ -114,6 +117,8 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   // ── 4. Hash + rename output files ──────────────────────────────────────
   const routeChunks = new Map<string, string>();
   const routeCss = new Map<string, string[]>();
+  const layoutChunks = new Map<string, string>();
+  const layoutCss = new Map<string, string[]>();
   let clientEntry = "";
   let rootChunk: string | undefined;
   let entryCss: string[] | undefined;
@@ -194,9 +199,13 @@ export async function runBuild(config: BuildConfig): Promise<void> {
 
     const publicPath = await hashAndRename(artifact.path, hash);
 
+    const layoutSource = layoutSources.find((f) => rel === outputRelPath(appDirClean, f));
     if (outBase === rootBase) {
       rootChunk = publicPath;
       rootCss = css;
+    } else if (layoutSource) {
+      layoutChunks.set(layoutSource, publicPath);
+      if (css) layoutCss.set(layoutSource, css);
     } else {
       const matched = routes.find((r) => {
         const expected = join(appDirClean, r.filePath).replace(/\.[^.]+$/, ".js");
@@ -210,11 +219,13 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   }
 
   // ── 5. Write manifest ──────────────────────────────────────────────────
+  const routeLayouts = attachLayouts(layoutFilesByPattern, layoutChunks, layoutCss, routeCss);
   const manifest = generateManifest({
     clientEntry,
     rootChunk,
     routeChunks,
     routeCss,
+    routeLayouts,
     entryCss,
     rootCss,
     mode: "production",
@@ -237,7 +248,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
       routes: Object.fromEntries(
         Object.entries(manifest.routes).map(([pat, e]) => [
           pat,
-          { file: e.chunk, chunk: e.chunk, css: e.css },
+          { file: e.chunk, chunk: e.chunk, css: e.css, layouts: e.layouts },
         ]),
       ),
     };

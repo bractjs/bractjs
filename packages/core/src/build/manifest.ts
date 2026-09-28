@@ -5,8 +5,10 @@ import { join } from "node:path";
 export interface RouteManifestEntry {
   chunk: string;
   pattern: string;
-  /** Public paths of this route's extracted CSS bundles, linked when it renders. */
+  /** Public paths of this route's extracted CSS bundles (its layouts' first), linked when it renders. */
   css?: string[];
+  /** Chunk URLs of this route's intermediate layout.tsx modules, outermost → innermost. */
+  layouts?: string[];
 }
 
 export interface RouteManifest {
@@ -39,6 +41,8 @@ export function generateManifest(opts: {
   routeChunks: Map<string, string>;
   /** Per-pattern CSS bundles, keyed like `routeChunks`. */
   routeCss?: Map<string, string[]>;
+  /** Per-pattern layout chunk URLs (outermost first), keyed like `routeChunks`. */
+  routeLayouts?: Map<string, string[]>;
   entryCss?: string[];
   rootCss?: string[];
   mode?: "production";
@@ -46,9 +50,15 @@ export function generateManifest(opts: {
   const routes: Record<string, RouteManifestEntry> = {};
   for (const [pattern, chunk] of opts.routeChunks) {
     const css = opts.routeCss?.get(pattern);
-    // Omit the key entirely when there's no CSS, so manifests stay diff-clean
-    // and byte-identical to pre-CSS output for apps that don't use styles.
-    routes[pattern] = css?.length ? { chunk, pattern, css } : { chunk, pattern };
+    const layouts = opts.routeLayouts?.get(pattern);
+    // Omit keys entirely when empty, so manifests stay diff-clean and
+    // byte-identical to earlier output for apps without styles or layouts.
+    routes[pattern] = {
+      chunk,
+      pattern,
+      ...(css?.length ? { css } : {}),
+      ...(layouts?.length ? { layouts } : {}),
+    };
   }
   return {
     version: 1,

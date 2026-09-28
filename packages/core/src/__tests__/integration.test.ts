@@ -394,3 +394,23 @@ test("/_data carries the route-loader HttpError so client navigation can render 
   const data = (await res.json()) as { route: unknown };
   expect(data.route).toEqual({ __error: { message: "No such widget", status: 404 } });
 });
+
+// Intermediate layout.tsx components render around their routes (they used to
+// be skipped entirely — only root → route rendered), each reading its own data.
+test("layout.tsx wraps its routes and reads its own loader data", async () => {
+  const html = await (await fetch(`${BASE}/nested`)).text();
+  expect(html).toMatch(
+    /<section id="nested-layout"><h2>Nested section<\/h2>(<!--\$-->)?<p id="nested-route">Nested index<\/p>(<!--\/\$-->)?<\/section>/,
+  );
+});
+
+test("a guard-only layout.ts stays transparent between rendering levels", async () => {
+  const html = await (await fetch(`${BASE}/nested/guarded/page`)).text();
+  expect(html).toMatch(
+    /<section id="nested-layout"><h2>Nested section<\/h2>(<!--\$-->)?<p id="guarded-route">Guarded page<\/p>(<!--\/\$-->)?<\/section>/,
+  );
+  const data = (await (await fetch(`${BASE}/_data?path=/nested/guarded/page`)).json()) as {
+    layouts: unknown[];
+  };
+  expect(data.layouts).toEqual([{ section: "Nested section" }, { guard: "passed" }]);
+});

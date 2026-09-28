@@ -52,12 +52,14 @@ async function doPrefetch(path: string, manifest: ServerManifest): Promise<void>
   const pattern = matchPatternForPath(pathname, manifest);
   const chunk = pattern !== null ? manifest.routes[pattern]?.chunk : undefined;
 
-  // 1. Warm the route chunk.
-  if (chunk && !preloadedChunks.has(chunk)) {
-    preloadedChunks.add(chunk);
+  // 1. Warm the route chunk and its layout.tsx chunks.
+  const layouts = pattern !== null ? (manifest.routes[pattern]?.layouts ?? []) : [];
+  for (const href of chunk ? [chunk, ...layouts] : layouts) {
+    if (preloadedChunks.has(href)) continue;
+    preloadedChunks.add(href);
     const link = document.createElement("link");
     link.rel = "modulepreload";
-    link.href = chunk;
+    link.href = href;
     document.head.appendChild(link);
   }
 

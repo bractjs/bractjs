@@ -3,6 +3,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { createUseServerProxyPlugin } from "../build/directives.ts";
 import { clientEnvPlugin, serverModuleStubPlugin } from "../build/env-plugin.ts";
 import { collectCssBundles } from "../build/css-collect.ts";
+import { attachLayouts, outputRelPath, routeLayoutFiles } from "../build/layouts.ts";
 import { generateManifest, writeManifest } from "../build/manifest.ts";
 import { tailwindPlugins } from "../build/plugins/tailwind.ts";
 import { routeShakePlugin } from "../build/plugins/route-shake.ts";
@@ -33,6 +34,8 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
   const routes = await scanRoutes(appDir);
   const routePaths = routes.map((r) => resolve(process.cwd(), appDir, r.filePath));
   const rootPath = resolve(process.cwd(), appDir, "root.tsx");
+  const layoutFilesByPattern = await routeLayoutFiles(appDir, routes);
+  const layoutSources = [...new Set([...layoutFilesByPattern.values()].flat())];
   const appDirClean = appDir.replace(/^\.\//, ""); // "./app" → "app"
 
   // Write shim, build, always delete shim.
@@ -42,7 +45,12 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
   let result: Awaited<ReturnType<typeof Bun.build>>;
   try {
     result = await Bun.build({
-      entrypoints: [shimPath, rootPath, ...routePaths],
+      entrypoints: [
+        shimPath,
+        rootPath,
+        ...routePaths,
+        ...layoutSources.map((f) => resolve(process.cwd(), appDir, f)),
+      ],
       target: "browser",
       splitting: true, // shared React chunk prevents dual-React / invalid hook call
       outdir,
@@ -81,6 +89,8 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
 
   const routeChunks = new Map<string, string>();
   const routeCss = new Map<string, string[]>();
+  const layoutChunks = new Map<string, string>();
+  const layoutCss = new Map<string, string[]>();
   const clientEntry = "/build/client/client.js";
   const shimBase = basename(SHIM, extname(SHIM)); // ".bractjs-entry"
   let rootChunk: string | undefined;
@@ -115,6 +125,10 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
       // Root component chunk — the shell that wraps <Outlet />
       rootChunk = "/build/client/" + rel;
       rootCss = css;
+    } else if (layoutSources.some((f) => rel === outputRelPath(appDirClean, f))) {
+      const source = layoutSources.find((f) => rel === outputRelPath(appDirClean, f)) as string;
+      layoutChunks.set(source, "/build/client/" + rel);
+      if (css) layoutCss.set(source, css);
     } else {
       // Match by full relative path to avoid basename collisions (_index appears N times).
       // Input: appDirClean/r.filePath. Output mirrors that structure under outdir.
@@ -129,8 +143,9 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
     }
   }
 
+  const routeLayouts = attachLayouts(layoutFilesByPattern, layoutChunks, layoutCss, routeCss);
   await writeManifest(
-    generateManifest({ clientEntry, rootChunk, routeChunks, routeCss, entryCss, rootCss }),
+    generateManifest({ clientEntry, rootChunk, routeChunks, routeCss, routeLayouts, entryCss, rootCss }),
     buildDir,
   );
   return { duration: Date.now() - start };

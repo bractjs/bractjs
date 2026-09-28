@@ -46,6 +46,8 @@ interface ClientRouterProps {
   children: ReactNode;
   initialData: BractJSInitialData;
   initialModule?: RouteModuleClient | null;
+  /** The initial route's layout.tsx modules, outermost first. */
+  initialLayouts?: Array<RouteModuleClient | null>;
   /** root.tsx's ErrorBoundary export, if any. */
   rootErrorBoundary?: ComponentType<{ error: unknown }>;
 }
@@ -56,12 +58,27 @@ interface LocationInit {
   state?: unknown;
 }
 
+/** Import a route's layout.tsx chunks (outermost first); a chunk that fails to load renders nothing. */
+export async function loadLayoutModules(
+  urls: string[] | undefined,
+): Promise<Array<RouteModuleClient | null>> {
+  return Promise.all(
+    (urls ?? []).map((url) =>
+      (import(/* @vite-ignore */ url) as Promise<RouteModuleClient>).catch((err: unknown) => {
+        console.error(`[bractjs] failed to load layout ${url}:`, err);
+        return null;
+      }),
+    ),
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export function ClientRouter({
   children,
   initialData,
   initialModule = null,
+  initialLayouts = [],
   rootErrorBoundary,
 }: ClientRouterProps): ReactElement {
   const [loaderData, setLoaderData] = useState(initialData.loaderData);
@@ -73,6 +90,7 @@ export function ClientRouter({
   const [navState, setNavState] = useState<NavigationState>("idle");
   const [revalidationState, setRevalidationState] = useState<"idle" | "loading">("idle");
   const [currentModule, setCurrentModule] = useState<RouteModuleClient | null>(initialModule);
+  const [currentLayouts, setCurrentLayouts] = useState<Array<RouteModuleClient | null>>(initialLayouts);
   const [meta, setMeta] = useState<MetaDescriptor[]>(initialData.meta ?? []);
   const [hydrationPending, setHydrationPending] = useState<HydrationPending>(initialData.ssrMode ?? false);
 
@@ -160,10 +178,12 @@ export function ClientRouter({
         const pattern = matchPatternForPath(toPathname, manifest);
         const chunkUrl = pattern !== null ? manifest.routes[pattern]?.chunk : undefined;
 
-        // Load the route module first so we can run client-side beforeLoad.
-        const routeModule = chunkUrl
-          ? ((await import(/* @vite-ignore */ chunkUrl)) as RouteModuleClient)
-          : null;
+        // Load the route module first so we can run client-side beforeLoad —
+        // and its layout.tsx modules alongside, so the new tree renders whole.
+        const [routeModule, layoutModules] = await Promise.all([
+          chunkUrl ? (import(/* @vite-ignore */ chunkUrl) as Promise<RouteModuleClient>) : null,
+          loadLayoutModules(pattern !== null ? manifest.routes[pattern]?.layouts : undefined),
+        ]);
         const view = moduleView(routeModule);
 
         // Run client-side beforeLoad if exported from the route module.
@@ -200,6 +220,7 @@ export function ClientRouter({
             applyPayload(data);
             setLocation(nextLocation);
             setCurrentModule(module);
+            setCurrentLayouts(layoutModules);
           });
         };
 
@@ -590,6 +611,7 @@ export function ClientRouter({
     <RouterContext.Provider
       value={{
         rootErrorBoundary,
+        currentLayouts,
         loaderData,
         actionData,
         params,

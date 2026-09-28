@@ -14,6 +14,14 @@ export interface BractJSContextValue {
     manifest: RouteManifest;
     /** SSR-only: the matched route's default export so <Outlet> can render it without ClientRouter */
     RouteComponent?: ComponentType;
+    /**
+     * SSR-only: the matched route's intermediate layout modules, outermost first
+     * (index i ↔ `loaderData.layouts[i]`). <Outlet> renders each one's default
+     * export around the next level.
+     */
+    LayoutModules?: Array<{
+        default?: ComponentType;
+    }>;
     /** The request's location, so `useLocation()` works during SSR (hash is always ""). */
     location?: RouterLocation;
     /** Validated search params (route `searchSchema` output), so `useSearch()` works during SSR. */
@@ -22,6 +30,17 @@ export interface BractJSContextValue {
     matches?: RouteMatch[];
 }
 export declare const BractJSContext: import("react").Context<BractJSContextValue>;
+/**
+ * How deep in the root → layouts → route tree the nearest <Outlet> sits: the
+ * one in root.tsx is level 0 and renders the first layout (or the route).
+ */
+export declare const OutletLevelContext: import("react").Context<number>;
+/**
+ * Which loader slice `useLoaderData()` returns: a layout's index into
+ * `loaderData.layouts`, or null for the route. root.tsx sits outside every
+ * provider, so it keeps reading the route's data as it always has.
+ */
+export declare const LoaderSliceContext: import("react").Context<number | null>;
 interface BractJSProviderProps {
     value: BractJSContextValue;
     children: ReactNode;

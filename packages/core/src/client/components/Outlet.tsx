@@ -7,9 +7,14 @@ import {
   Suspense,
   useContext,
 } from "react";
-import { BractJSContext } from "../../shared/context.ts";
+import {
+  BractJSContext,
+  type BractJSContextValue,
+  LoaderSliceContext,
+  OutletLevelContext,
+} from "../../shared/context.ts";
 import { pickErrorBoundary, routeLoaderError } from "../../shared/route-error.ts";
-import { RouterContext } from "../router.tsx";
+import { RouterContext, type RouterContextValue } from "../router.tsx";
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
 
@@ -48,7 +53,52 @@ export function Outlet(): ReactElement | null {
   const routerCtx = useContext(RouterContext);
   // Server-side (SSR): fall back to BractJSContext which carries RouteComponent
   const bractCtx = useContext(BractJSContext);
+  const level = useContext(OutletLevelContext);
 
+  // Levels 0…n-1 are the route's layout.tsx components (outermost first); each
+  // renders the next level through its own <Outlet>. Layouts without a
+  // component (a guard-only layout.ts) are skipped. The "spa" shell knows no
+  // route, so nothing renders below root until the client has loaded one.
+  const pending = routerCtx?.hydrationPending;
+  const layoutModules = routerCtx ? routerCtx.currentLayouts : (bractCtx?.LayoutModules ?? []);
+  const layouts = pending === "spa" ? [] : renderableLayouts(layoutModules);
+  if (level < layouts.length) {
+    const { Component, dataIndex } = layouts[level];
+    return (
+      <OutletLevelContext.Provider value={level + 1}>
+        <LoaderSliceContext.Provider value={dataIndex}>
+          <Component />
+        </LoaderSliceContext.Provider>
+      </OutletLevelContext.Provider>
+    );
+  }
+  // The route level: reset the loader slice so the route (and anything it
+  // renders) reads the route's data, not the enclosing layout's.
+  return (
+    <LoaderSliceContext.Provider value={null}>
+      <RouteOutlet routerCtx={routerCtx} bractCtx={bractCtx} />
+    </LoaderSliceContext.Provider>
+  );
+}
+
+/** Layouts that render something, each with its index into `loaderData.layouts`. */
+function renderableLayouts(
+  modules: ReadonlyArray<{ default?: ComponentType } | null | undefined>,
+): Array<{ Component: ComponentType; dataIndex: number }> {
+  const out: Array<{ Component: ComponentType; dataIndex: number }> = [];
+  modules.forEach((mod, dataIndex) => {
+    if (mod?.default) out.push({ Component: mod.default, dataIndex });
+  });
+  return out;
+}
+
+function RouteOutlet({
+  routerCtx,
+  bractCtx,
+}: {
+  routerCtx: RouterContextValue | null;
+  bractCtx: BractJSContextValue | null;
+}): ReactElement | null {
   // While selective-SSR hydration is pending, render exactly what the server
   // sent: the route's Fallback ("client-only"/"data-only" documents) or
   // nothing (the "spa" shell knows no route at build time). Rendering the real

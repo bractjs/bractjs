@@ -41,6 +41,8 @@ export interface RouteState {
 export interface RouterContextValue extends RouteState {
   manifest: ServerManifest;
   currentModule: RouteModuleClient | null;
+  /** The current route's layout.tsx modules, outermost first (index ↔ `loaderData.layouts`). */
+  currentLayouts: Array<RouteModuleClient | null>;
   setRoute(state: Partial<RouteState>): void;
   /** Re-run the active route's loaders (gated by `shouldRevalidate`). */
   revalidate(): Promise<void>;

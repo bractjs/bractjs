@@ -164,7 +164,7 @@ Drop a file in `app/routes/`; it becomes a route. BractJS scans at startup and b
 - `[param]` → a dynamic segment, read via `useParams()` / `params` arg.
 - `[[param]]` → an **optional** dynamic segment, in any position: the route matches whether the segment is present or not (when absent, `params.param` is simply unset). When a path could fill either, a static segment wins: `/about` goes to `[[lang]]/about.tsx`, not to `[[lang]]/_index.tsx` with `lang="about"`.
 - `[...name]` → a catch-all; the rest of the path lands in `params.name`.
-- `layout.tsx` in any directory wraps every route under it (layouts nest: `root → blog/layout → blog/[id]`).
+- `layout.tsx` in any directory wraps every route under it (layouts nest: `root → blog/layout → blog/[id]`). Its component renders around the route through its own `<Outlet />`, stays mounted — keeping its state — while you navigate between routes it wraps, and reads its **own** loader data with `useLoaderData()`. A `layout.ts` with no default export (just `loader`/`middleware`) is a transparent guard. Layout CSS is linked before the route's.
 - `(group)/` → a **route group**: the folder organizes files and contributes its `layout.tsx`, but adds **no** URL segment. Use it to give a set of routes a shared layout without a shared path prefix.
 - Match priority per segment: **static > dynamic > optional > catch-all**.
 
@@ -492,7 +492,7 @@ All hooks are SSR-safe (they return sensible values during SSR) and imported fro
 
 ### `useLoaderData<T>()` → `T`
 
-The current route's loader return value. **Pass the loader function type** to infer it (`Response` branch excluded, `Deferred` fields preserved) — no hand-written type to keep in sync. An explicit object type still works.
+The current route's loader return value — or, inside a `layout.tsx` component, that layout's own loader data (`root.tsx` reads the route's). **Pass the loader function type** to infer it (`Response` branch excluded, `Deferred` fields preserved) — no hand-written type to keep in sync. An explicit object type still works.
 
 ```ts
 const { post } = useLoaderData<typeof loader>(); // inferred from loader()

@@ -22,7 +22,17 @@ export interface ServerManifest {
   entryCss?: string[];
   /** CSS imported by `app/root.tsx` — linked on every document. */
   rootCss?: string[];
-  routes: Record<string, { file: string; chunk?: string; imports?: string[]; css?: string[] }>;
+  routes: Record<
+    string,
+    {
+      file: string;
+      chunk?: string;
+      imports?: string[];
+      css?: string[];
+      /** Layout chunk URLs, outermost → innermost — the client loads them to render the same tree. */
+      layouts?: string[];
+    }
+  >;
 }
 
 export interface RenderOptions {
