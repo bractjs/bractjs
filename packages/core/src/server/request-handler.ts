@@ -109,6 +109,18 @@ function envelopeActionRedirect(res: Response, request: Request): Response {
   return new Response(null, { status: 204, headers });
 }
 
+/** `request` with `formData()` answering from an already-parsed body (callable repeatedly). */
+function withParsedFormData(request: Request, formData: FormData): Request {
+  return new Proxy(request, {
+    get(target, prop) {
+      if (prop === "formData") return () => Promise.resolve(formData);
+      // Receiver = target: Request's native getters (url, headers, …) need the real object.
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 export async function handleRequest(
   request: Request,
   trie: TrieNode,
@@ -254,7 +266,11 @@ async function route(
         const isFormLike =
           ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded");
         const formData = isFormLike ? await request.formData() : new FormData();
-        actionData = await runAction(chain.route, { ...args, formData });
+        // The body is consumed above, so the Remix/React Router habit of
+        // `await request.formData()` inside the action would throw "Body
+        // already used" — hand the action a request that returns the parsed copy.
+        const actionRequest = isFormLike ? withParsedFormData(args.request, formData) : args.request;
+        actionData = await runAction(chain.route, { ...args, request: actionRequest, formData });
       } catch (err) {
         if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
         if (isHttpError(err)) return error(err.message, err.status);

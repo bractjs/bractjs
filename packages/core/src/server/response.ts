@@ -3,6 +3,13 @@ export interface RedirectOptions {
   allowExternal?: boolean;
 }
 
+/** Object form of `redirect`'s second argument — the Remix / React Router shape. */
+export interface RedirectInit extends RedirectOptions {
+  /** Default 302. */
+  status?: number;
+  headers?: HeadersInit;
+}
+
 // Brand stamped onto redirect Responses the app explicitly opted into sending
 // off-origin via `redirect(url, …, { allowExternal: true })`. sanitizeRedirect()
 // (below) lets branded Responses through untouched but neutralizes any *other*
@@ -42,12 +49,24 @@ function isHttpUrl(url: string): boolean {
   }
 }
 
+/**
+ * Build a redirect Response. The second argument is a status code or, as in
+ * Remix / React Router, an init object:
+ *
+ *   redirect("/login")                                     // 302
+ *   redirect("/login", 303, { "Set-Cookie": c })           // positional
+ *   redirect("/login", { status: 303, headers: { "Set-Cookie": c } })
+ */
 export function redirect(
   url: string,
-  status: number = 302,
+  init: number | RedirectInit = 302,
   headers?: HeadersInit,
   options?: RedirectOptions,
 ): Response {
+  const status = typeof init === "number" ? init : (init.status ?? 302);
+  if (typeof init !== "number") {
+    options = { ...options, allowExternal: options?.allowExternal ?? init.allowExternal };
+  }
   if (!options?.allowExternal && !isSafeInternalRedirect(url)) {
     throw new Error(
       `[bractjs] redirect: unsafe Location "${url}". ` +
@@ -62,7 +81,10 @@ export function redirect(
   if (options?.allowExternal && !isSafeInternalRedirect(url) && !isHttpUrl(url)) {
     throw new Error(`[bractjs] redirect: Location "${url}" must be an http(s) URL.`);
   }
-  const h = new Headers(headers);
+  const h = new Headers(typeof init === "number" ? headers : init.headers);
+  if (typeof init !== "number" && headers) {
+    new Headers(headers).forEach((value, key) => h.append(key, value));
+  }
   h.set("Location", url);
   const res = new Response(null, { status, headers: h });
   // Brand opt-in external redirects so the global sanitizer trusts them.

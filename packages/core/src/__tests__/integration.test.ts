@@ -113,6 +113,26 @@ test("defineActions returns 400 for an unknown intent", async () => {
   expect(res.status).toBe(400);
 });
 
+// Remix/React Router actions read the body themselves; the handler has already
+// consumed it, so `request.formData()` must return the parsed copy.
+test("route action can call request.formData() (Remix-style) after the framework parsed the body", async () => {
+  const form = new FormData();
+  form.set("title", "Ported from Remix");
+  const res = await fetch(`${BASE}/request-formdata`, {
+    method: "POST",
+    body: form,
+    headers: { Origin: BASE, "X-BractJS-Action": "1" },
+  });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({
+    title: "Ported from Remix",
+    sameAsArg: true,
+    url: "/request-formdata",
+    method: "POST",
+    isRequest: true,
+  });
+});
+
 // <Form intent="add"> renders the hidden input server-side (no DOM harness:
 // assert on the SSR HTML directly).
 test("<Form intent> renders the hidden intent input in SSR HTML", async () => {
