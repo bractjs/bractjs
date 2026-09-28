@@ -6,7 +6,19 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **[Migrating from Remix / React Router 7](docs/migrating-from-remix.md)** — a porting guide: platform differences, route file-name mapping (flat routes → folders), import/type renames, route-export and hook differences, sessions, the middleware scoping rules, resource routes, env vars, styling, known gaps, and a checklist.
+- **`redirect()` accepts the Remix / React Router init object**: `redirect(url, { status, headers })`, alongside the existing `redirect(url, status, headers)`. The object may also carry `allowExternal`. This also makes the session examples in the README (§15) and the authentication guide correct — both used the object form, which previously crashed with `The status provided (0) must be 101 or in the range of [200, 599]`.
+- **Route actions can call `await request.formData()`.** The framework parses the form body before the action runs, so the Remix habit of reading it again threw `Body already used`. The action's `request` now returns the already-parsed `FormData` (the same object as the `formData` argument).
+- **[Benchmarks](docs/benchmarks.md) against React Router 7 and Next.js**, with a reproducible harness in `bench/`: one identical page per framework, production builds on each framework's standard server, first-load JS measured in a real browser (with a hydration check), autocannon load with a load-generator ceiling check, memory, cold start, and build time. The page states its caveats, including that BractJS does not yet compress responses.
+- **Porting warnings from the route linter.** `bractjs dev` and `bractjs build` now flag Remix / React Router route exports that BractJS silently ignores — `links`, `HydrateFallback`, `unstable_middleware`, `clientMiddleware` — each with its replacement.
+
+### Fixed
+
+- **Optional segments work in any position, not just last.** `routes/[[lang]]/about.tsx` matched `/en/about` but 404'd on `/about`; the server matcher only handled an omitted optional at the end of the path. It now also skips optionals mid-path, including consecutive ones, and prefers the static reading when a path could fill either (`/about` → `[[lang]]/about.tsx`, not `[[lang]]/_index.tsx` with `lang="about"`). The client router's matcher didn't understand `[[optional]]` at all — it treated the segment as required, so soft navigation and hydration of `/users` for `users/[[id]].tsx` loaded no route module. It now matches optional segments the same way as the server, and a new test requires both matchers to pick the same route for a shared set of paths.
+
+- **Client bundles no longer ship `react-dom/server` — 37–47% less JavaScript.** Route modules import client hooks from the package barrel (`import { Link, useLoaderData } from "@bractjs/bractjs"`), and that barrel also re-exports server code (`createServer` → the SSR renderer → `react-dom/server`). With no `sideEffects` declaration the bundler had to assume every framework module might have import-time effects, so it kept the whole server graph: a ~64 KB-gzipped chunk containing the React server renderer was imported by every route and downloaded by every visitor, while never being executed. The package now declares a `sideEffects` allowlist (only the client hydration entry and the dev-only devtools panel run code on import), letting Bun drop the unused server half. Measured on the examples: `examples/todo` client JS 139 KB → 74 KB gzipped, `examples/cms` 162 KB → 102 KB. No app changes needed — rebuild to pick it up. A new test builds a route through the package the way an app resolves it and fails if the server renderer reappears in the client output or if the hydration entry is dropped.
 
 ---
 
