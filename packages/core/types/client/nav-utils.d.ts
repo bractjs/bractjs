@@ -27,6 +27,21 @@ export declare function parseTo(to: string): {
     search: string;
     hash: string;
 };
+/** React Router's `Path` / `To` object form. */
+export interface PathObject {
+    pathname: string;
+    search: string;
+    hash: string;
+}
+/** A `to` that may be React Router's `{ pathname, search, hash }` object → a string. */
+export declare function pathToString(to: string | Partial<PathObject>): string;
+/**
+ * Resolve a relative target ("edit", "../posts", "?page=2", "#top") against the
+ * current URL, the way the browser resolves an `<a href>`. Absolute paths pass
+ * through; off-origin URLs come back unchanged (callers route them through
+ * `toSamePath()`).
+ */
+export declare function resolveHref(to: string): string;
 /** Random short key identifying a history entry (scroll restoration identity). */
 export declare function createLocationKey(): string;
 /** Returns the highest-priority manifest pattern that matches pathname, or null. */

@@ -1,10 +1,30 @@
 import type { SearchFor } from "../registry.ts";
-type SetSearchParams = (updater: Record<string, string> | ((prev: URLSearchParams) => URLSearchParams)) => void;
-export interface SearchParamsResult<T extends Record<string, string>> {
+/** Anything `new URLSearchParams(init)` accepts, plus React Router's array-valued records. */
+export type URLSearchParamsInit = string | URLSearchParams | Array<[string, string]> | Record<string, string | string[]>;
+export interface SetSearchParamsOptions {
+    /** Replace the current history entry instead of pushing (React Router). */
+    replace?: boolean;
+    /** History state for the new entry. */
+    state?: unknown;
+    /** Accepted for React Router compatibility; no effect. */
+    preventScrollReset?: boolean;
+}
+type SetSearchParams = (updater: URLSearchParamsInit | ((prev: URLSearchParams) => URLSearchParamsInit), options?: SetSearchParamsOptions) => void;
+/**
+ * The hook's result. Read it as an object (`{ searchParams, setSearchParams }`)
+ * or destructure it as React Router's tuple (`const [searchParams,
+ * setSearchParams] = useSearchParams()`) — both work.
+ */
+export type SearchParamsResult<T extends Record<string, string>> = readonly [
+    URLSearchParams,
+    SetSearchParams
+] & {
     searchParams: URLSearchParams;
     getParam<K extends keyof T & string>(key: K): T[K] | null;
     setSearchParams: SetSearchParams;
-}
+};
+/** React Router `createSearchParams()`: build URLSearchParams, expanding array values. */
+export declare function createSearchParams(init?: URLSearchParamsInit): URLSearchParams;
 /**
  * Low-level read/write of raw `URLSearchParams` (string values only). Triggers a
  * loader re-run (soft-nav fetch) when params change.

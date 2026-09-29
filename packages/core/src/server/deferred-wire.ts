@@ -5,14 +5,14 @@ import {
   mapLoaderFields,
   type SettledDeferred,
 } from "../shared/deferred.ts";
-import { isHttpError } from "../shared/errors.ts";
+import { HttpError, isHttpError } from "../shared/errors.ts";
 import { isExplicitDev, safeStringify } from "./env.ts";
 
 // Server half of the defer() transport (wire format: shared/deferred.ts).
 
-async function settle(d: Deferred<unknown>): Promise<SettledDeferred> {
+async function settle(d: Deferred<unknown>, timeoutMs?: number): Promise<SettledDeferred> {
   try {
-    return { ok: true, value: await d.promise };
+    return { ok: true, value: await withTimeout(d.promise, timeoutMs) };
   } catch (err) {
     // Same exposure policy as loader errors: an HttpError's message is meant
     // for users; anything else is generic outside development.
@@ -49,14 +49,32 @@ export function encodeDeferred(payload: Record<string, unknown>): {
 }
 
 /** `/_data` path: wait for every Deferred and inline its settled value. */
-export async function settleDeferred(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+/**
+ * Reject with a 504 HttpError if `promise` hasn't settled within `ms` — the
+ * `streamTimeout` guard, so one hung deferred can't hold a response open.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number | undefined): Promise<T> {
+  if (!ms || ms <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new HttpError(504, "Deferred data timed out")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+export async function settleDeferred(
+  payload: Record<string, unknown>,
+  timeoutMs?: number,
+): Promise<Record<string, unknown>> {
   const found = new Set<Deferred<unknown>>();
   mapLoaderFields(payload, (value) => {
     if (isDeferred(value)) found.add(value);
     return value;
   });
   if (found.size === 0) return payload;
-  const settled = new Map(await Promise.all([...found].map(async (d) => [d, await settle(d)] as const)));
+  const settled = new Map(
+    await Promise.all([...found].map(async (d) => [d, await settle(d, timeoutMs)] as const)),
+  );
   return mapLoaderFields(payload, (value) =>
     isDeferred(value) ? { [DEFERRED_WIRE_KEY]: settled.get(value) } : value,
   );
@@ -74,11 +92,12 @@ export function appendDeferredScript(
   stream: ReadableStream<Uint8Array>,
   pending: Array<[string, Deferred<unknown>]>,
   nonce?: string,
+  timeoutMs?: number,
 ): ReadableStream<Uint8Array> {
   if (pending.length === 0) return stream;
   // Start settling now: an unobserved rejection must not surface as unhandled
   // while React is still streaming.
-  const results = Promise.all(pending.map(async ([id, d]) => [id, await settle(d)] as const));
+  const results = Promise.all(pending.map(async ([id, d]) => [id, await settle(d, timeoutMs)] as const));
   const reader = stream.getReader();
   return new ReadableStream<Uint8Array>({
     async pull(controller) {

@@ -16,4 +16,24 @@ export declare function RouteErrorFallback({ error }: {
 }): ReactElement;
 /** Nearest ErrorBoundary: the route's, else root's, else the built-in fallback. */
 export declare function pickErrorBoundary(route: ErrorBoundaryComponent | undefined, root: ErrorBoundaryComponent | undefined): ErrorBoundaryComponent;
+/** The error the nearest rendering ErrorBoundary is showing (null outside one). */
+export declare const RouteErrorContext: import("react").Context<unknown>;
+/**
+ * React Router's `useRouteError()`: the error the enclosing `ErrorBoundary` is
+ * rendering. BractJS also passes it as the `error` prop — use either. Returns
+ * `undefined` outside an ErrorBoundary.
+ */
+export declare function useRouteError(): unknown;
+/**
+ * Render an ErrorBoundary component for `error`: as the `error` prop (BractJS)
+ * AND via context (`useRouteError()`), plus React Router's `params` /
+ * `loaderData` props when known. Every boundary render site goes through here
+ * so server and client produce the same tree.
+ */
+export declare function renderErrorBoundary(Boundary: ComponentType<{
+    error: unknown;
+}>, error: unknown, extra?: {
+    params?: Record<string, string>;
+    loaderData?: unknown;
+}): ReactElement;
 export {};

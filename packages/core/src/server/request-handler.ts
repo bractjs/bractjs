@@ -1,7 +1,12 @@
 import { createElement } from "react";
 import { BractJSProvider } from "../shared/context.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
-import { pickErrorBoundary, routeErrorStatus, routeLoaderError } from "../shared/route-error.ts";
+import {
+  pickErrorBoundary,
+  renderErrorBoundary,
+  routeErrorStatus,
+  routeLoaderError,
+} from "../shared/route-error.ts";
 import { getCspNonce } from "./csp.ts";
 import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
 import { settleDeferred } from "./deferred-wire.ts";
@@ -9,12 +14,24 @@ import { isExplicitDev } from "./env.ts";
 import { resolveHeaders } from "./headers.ts";
 import { type ModuleRegistry, resolveRouteChain } from "./layout.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
-import { buildLoaderArgs, runAction, runBeforeLoad, runLoaders, runRouteContext } from "./loader.ts";
+import {
+  buildLoaderArgs,
+  runAction,
+  runBeforeLoad,
+  runLoaders,
+  runRouteContext,
+  unwrapData,
+} from "./loader.ts";
 import type { TrieNode } from "./matcher.ts";
 import { matchRoute } from "./matcher.ts";
 import { buildMatches } from "./matches.ts";
-import { mergeMeta, resolveMeta } from "./meta.ts";
-import { collectRouteMiddleware, type MiddlewareContext, runRouteMiddleware } from "./middleware.ts";
+import { mergeMeta, resolveLinks, resolveMeta } from "./meta.ts";
+import {
+  collectRouteMiddleware,
+  createMiddlewareContext,
+  type MiddlewareContext,
+  runRouteMiddleware,
+} from "./middleware.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
 import { error, json, sanitizeRedirect } from "./response.ts";
 import { validateSearch } from "./search.ts";
@@ -30,6 +47,8 @@ export interface HandlerConfig {
    * where dynamic `import(absPath)` is unavailable. Falsy in dev mode.
    */
   moduleRegistry?: ModuleRegistry;
+  /** See `BractJSConfig.streamTimeout`. */
+  streamTimeout?: number;
 }
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
@@ -63,7 +82,7 @@ async function runRoutePipeline(
   context: Record<string, unknown>,
   work: (args: PipelineLoaderArgs, mwCtx: MiddlewareContext) => Promise<Response>,
 ): Promise<Response> {
-  const mwCtx: MiddlewareContext = { request, params, context };
+  const mwCtx: MiddlewareContext = createMiddlewareContext(request, params, context);
   const res = await runRouteMiddleware(collectRouteMiddleware(chain), mwCtx, async () => {
     const routeContext = await runRouteContext(
       chain.route as Parameters<typeof runRouteContext>[0],
@@ -156,7 +175,7 @@ async function route(
   config: HandlerConfig,
   context: Record<string, unknown>,
 ): Promise<Response> {
-  const { appDir, manifest, onError, moduleRegistry } = config;
+  const { appDir, manifest, onError, moduleRegistry, streamTimeout } = config;
   const url = new URL(request.url);
   const { pathname, searchParams } = url;
 
@@ -210,20 +229,31 @@ async function route(
         // from this payload on soft navigation, and the initial __BRACTJS_DATA__
         // already carries the merged shape.
         const headChain = withoutFailedRouteHead(chain, results.route);
-        const meta = mergeMeta(resolveMeta(headChain, results, match.params));
+        const meta = mergeMeta(
+          resolveMeta(headChain, results, match.params, {
+            pathname: targetPathname,
+            search: targetUrl.search,
+            error: routeLoaderError(results.route) ?? undefined,
+          }),
+        );
+        const links = resolveLinks(chain);
         const matches = buildMatches(chain, results, match.params, targetPathname);
         // defer() fields are awaited and inlined: JSON can't stream them, and a
         // Deferred would otherwise serialize as an empty object.
         const dataRes = json(
-          await settleDeferred({
-            root: results.root,
-            layouts: results.layouts,
-            route: results.route,
-            params: match.params,
-            meta,
-            search,
-            matches,
-          }),
+          await settleDeferred(
+            {
+              root: results.root,
+              layouts: results.layouts,
+              route: results.route,
+              params: match.params,
+              meta,
+              links,
+              search,
+              matches,
+            },
+            streamTimeout,
+          ),
         );
         // Apply the route `headers()` chain so a soft navigation gets the same
         // Cache-Control/ETag/Vary as the full document load (renderRoute applies
@@ -271,6 +301,8 @@ async function route(
   return runRoutePipeline(request, match.params, chain, search, context, async (args, mwCtx) => {
     // ── Action (mutating methods) ─────────────────────────────────────────
     let actionData: unknown = null;
+    // data(value, init) from the action: status/headers for the response.
+    let actionInit: ResponseInit | null = null;
     if (MUTATING_METHODS.has(request.method)) {
       if (!isAllowedMutation(request)) return csrfForbiddenResponse();
       // Reject up front if the client advertises an oversized body.
@@ -290,7 +322,11 @@ async function route(
         // `await request.formData()` inside the action would throw "Body
         // already used" — hand the action a request that returns the parsed copy.
         const actionRequest = isFormLike ? withParsedFormData(args.request, formData) : args.request;
-        actionData = await runAction(chain.route, { ...args, request: actionRequest, formData });
+        actionData = await runAction(
+          chain.route,
+          { ...args, request: actionRequest, formData },
+          chain.files?.route ?? match.routeFile.filePath,
+        );
       } catch (err) {
         if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
         if (isHttpError(err)) return error(err.message, err.status);
@@ -308,10 +344,15 @@ async function route(
       // neutralizes an off-origin Location that didn't go through redirect()'s
       // allowExternal opt-in (e.g. a raw `new Response(…,{Location:"//evil"})`).
       if (actionData instanceof Response) return sanitizeRedirect(actionData, request.url);
+      ({ value: actionData, init: actionInit } = unwrapData(actionData));
 
       // Client-side Form submits with this header — return JSON, not HTML.
       if (request.headers.get("X-BractJS-Action")) {
-        return json(actionData ?? null);
+        const res = json(actionData ?? null, actionInit?.status ? { status: actionInit.status } : undefined);
+        new Headers(actionInit?.headers).forEach((value, key) => {
+          if (key.toLowerCase() !== "content-type") res.headers.append(key, value);
+        });
+        return res;
       }
     }
 
@@ -320,7 +361,11 @@ async function route(
     // loaders still run — they render the shell). beforeLoad already ran above:
     // it is the auth gate and must hold for every mode. The client completes
     // the render via /_data after hydration, where the loader DOES run.
-    const routeSsr = chain.route.ssr ?? true;
+    // React Router: a HydrateFallback + `clientLoader.hydrate = true` SSRs the
+    // fallback and lets the client loader finish the render — "data-only".
+    const routeSsr =
+      chain.route.ssr ??
+      (chain.route.clientLoaderHydrate && chain.route.HydrateFallback ? ("data-only" as const) : true);
     const loaderChain =
       routeSsr === false ? { ...chain, route: { ...chain.route, loader: undefined } } : chain;
 
@@ -354,10 +399,10 @@ async function route(
     // place; the client swaps in the real component after hydration.
     const RouteComponent =
       Boundary && routeError
-        ? () => createElement(Boundary, { error: routeError })
+        ? () => renderErrorBoundary(Boundary, routeError, { params: match.params })
         : routeSsr === true
           ? chain.route.default
-          : chain.route.Fallback;
+          : (chain.route.Fallback ?? chain.route.HydrateFallback);
     const ssrMode =
       routeSsr === true ? undefined : routeSsr === false ? ("client-only" as const) : ("data-only" as const);
 
@@ -381,10 +426,25 @@ async function route(
         search,
         matches,
       },
-      children: createElement(RootComponent),
+      // Root receives React Router-style component props too (its own slice).
+      children: createElement(RootComponent as React.ComponentType<Record<string, unknown>>, {
+        loaderData: loaderResults.root,
+        actionData: actionData ?? undefined,
+        params: match.params,
+        matches,
+      }),
     });
 
-    const meta = resolveMeta(withoutFailedRouteHead(chain, loaderResults.route), loaderResults, match.params);
+    const meta = resolveMeta(
+      withoutFailedRouteHead(chain, loaderResults.route),
+      loaderResults,
+      match.params,
+      {
+        pathname,
+        search: url.search,
+        error: routeError ?? undefined,
+      },
+    );
     // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
     // baseline document headers in renderRoute. Uses the loaders that actually
     // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
@@ -393,7 +453,14 @@ async function route(
       loaderResults,
       match.params,
       request,
+      actionInit,
     );
+    // Without a headers() export, a data(…, { headers }) from the action still
+    // applies to the re-rendered document (e.g. Set-Cookie on a no-JS post).
+    const documentHeaders = routeHeaders ?? (actionInit?.headers ? new Headers(actionInit.headers) : null);
+    // Status: a route-loader error wins; else a data(…, { status }) from the
+    // leaf loader, then the action (React Router parity).
+    const dataStatus = loaderResults.inits?.route?.status ?? actionInit?.status;
 
     return renderRoute({
       shell,
@@ -404,15 +471,17 @@ async function route(
       search,
       manifest,
       meta,
+      links: resolveLinks(chain),
       matches,
-      headers: routeHeaders,
+      headers: documentHeaders,
       routeFile: match.routeFile.filePath,
       // Manifest key for this route — selects its extracted CSS bundles.
       routePattern: match.routeFile.urlPattern,
       // Set by the opt-in csp() middleware; undefined otherwise.
       nonce: getCspNonce(mwCtx.context),
       ssrMode,
-      status: routeError ? routeErrorStatus(routeError) : undefined,
+      streamTimeout,
+      status: routeError ? routeErrorStatus(routeError) : dataStatus,
     });
   });
 }

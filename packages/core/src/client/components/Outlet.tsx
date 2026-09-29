@@ -1,7 +1,7 @@
 import {
   Component,
   type ComponentType,
-  createElement,
+  createContext,
   type ReactElement,
   type ReactNode,
   Suspense,
@@ -13,7 +13,7 @@ import {
   LoaderSliceContext,
   OutletLevelContext,
 } from "../../shared/context.ts";
-import { pickErrorBoundary, routeLoaderError } from "../../shared/route-error.ts";
+import { pickErrorBoundary, renderErrorBoundary, routeLoaderError } from "../../shared/route-error.ts";
 import { RouterContext, type RouterContextValue } from "../router.tsx";
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
@@ -35,8 +35,7 @@ class RouteErrorBoundary extends Component<EBProps, EBState> {
 
   render(): ReactNode {
     if (this.state.error) {
-      const Fallback = this.props.fallback;
-      return <Fallback error={this.state.error} />;
+      return renderErrorBoundary(this.props.fallback as ComponentType<{ error: unknown }>, this.state.error);
     }
     return this.props.children;
   }
@@ -46,9 +45,53 @@ function DefaultErrorFallback({ error }: { error: Error }): ReactElement {
   return <div style={{ color: "red" }}>Route error: {error.message}</div>;
 }
 
+// ── Outlet context (React Router `<Outlet context>` / `useOutletContext`) ──
+
+const OutletContext = createContext<unknown>(undefined);
+
+/**
+ * React Router's `useOutletContext()`: the `context` prop of the nearest
+ * parent `<Outlet context={…}>` — how a layout shares state with the routes it
+ * renders without prop drilling or a hand-made React context.
+ */
+export function useOutletContext<T = unknown>(): T {
+  return useContext(OutletContext) as T;
+}
+
+/** Props route and layout components receive (React Router `Route.ComponentProps`). */
+function componentProps(
+  routerCtx: RouterContextValue | null,
+  bractCtx: BractJSContextValue | null,
+  slice: number | "route",
+): Record<string, unknown> {
+  const loaderData = (routerCtx?.loaderData ?? bractCtx?.loaderData ?? {}) as Record<string, unknown>;
+  return {
+    loaderData: slice === "route" ? loaderData.route : (loaderData.layouts as unknown[] | undefined)?.[slice],
+    actionData: (routerCtx ? routerCtx.actionData : bractCtx?.actionData) ?? undefined,
+    params: routerCtx?.params ?? bractCtx?.params ?? {},
+    matches: routerCtx?.matches ?? bractCtx?.matches ?? [],
+  };
+}
+
 // ── Outlet ─────────────────────────────────────────────────────────────────
 
-export function Outlet(): ReactElement | null {
+export interface OutletProps {
+  /** Value for `useOutletContext()` in the rendered child route/layout. */
+  context?: unknown;
+}
+
+export function Outlet(props: OutletProps = {}): ReactElement | null {
+  const inner = <OutletInner />;
+  // Only override the outlet context when this <Outlet> sets one, so nested
+  // outlets without a `context` prop pass the parent's value through.
+  return "context" in props ? (
+    <OutletContext.Provider value={props.context}>{inner}</OutletContext.Provider>
+  ) : (
+    inner
+  );
+}
+
+function OutletInner(): ReactElement | null {
   // Client-side: use RouterContext (set by ClientRouter after navigation)
   const routerCtx = useContext(RouterContext);
   // Server-side (SSR): fall back to BractJSContext which carries RouteComponent
@@ -67,7 +110,7 @@ export function Outlet(): ReactElement | null {
     return (
       <OutletLevelContext.Provider value={level + 1}>
         <LoaderSliceContext.Provider value={dataIndex}>
-          <Component />
+          <Component {...componentProps(routerCtx, bractCtx, dataIndex)} />
         </LoaderSliceContext.Provider>
       </OutletLevelContext.Provider>
     );
@@ -84,8 +127,8 @@ export function Outlet(): ReactElement | null {
 /** Layouts that render something, each with its index into `loaderData.layouts`. */
 function renderableLayouts(
   modules: ReadonlyArray<{ default?: ComponentType } | null | undefined>,
-): Array<{ Component: ComponentType; dataIndex: number }> {
-  const out: Array<{ Component: ComponentType; dataIndex: number }> = [];
+): Array<{ Component: ComponentType<Record<string, unknown>>; dataIndex: number }> {
+  const out: Array<{ Component: ComponentType<Record<string, unknown>>; dataIndex: number }> = [];
   modules.forEach((mod, dataIndex) => {
     if (mod?.default) out.push({ Component: mod.default, dataIndex });
   });
@@ -104,11 +147,13 @@ function RouteOutlet({
   // nothing (the "spa" shell knows no route at build time). Rendering the real
   // component here would mismatch the server HTML.
   const pending = routerCtx?.hydrationPending;
-  const RouteComponent: ComponentType | undefined = pending
-    ? pending === "spa"
-      ? undefined
-      : routerCtx?.currentModule?.Fallback
-    : (routerCtx?.currentModule?.default ?? bractCtx?.RouteComponent);
+  const RouteComponent = (
+    pending
+      ? pending === "spa"
+        ? undefined
+        : (routerCtx?.currentModule?.Fallback ?? routerCtx?.currentModule?.HydrateFallback)
+      : (routerCtx?.currentModule?.default ?? bractCtx?.RouteComponent)
+  ) as ComponentType<Record<string, unknown>> | undefined;
   const ErrorFallback: ComponentType<{ error: Error }> =
     routerCtx?.currentModule?.ErrorBoundary ?? DefaultErrorFallback;
 
@@ -119,12 +164,13 @@ function RouteOutlet({
   const loaderError = routerCtx && !pending ? routeLoaderError(routerCtx.loaderData?.route) : null;
   if (loaderError) {
     // Selects an existing component (route's, root's, or the built-in one).
-    const boundary = createElement(
+    const boundary = renderErrorBoundary(
       pickErrorBoundary(
         routerCtx?.currentModule?.ErrorBoundary as ComponentType<{ error: unknown }> | undefined,
         routerCtx?.rootErrorBoundary,
       ),
-      { error: loaderError },
+      loaderError,
+      { params: routerCtx?.params },
     );
     return (
       <RouteErrorBoundary fallback={ErrorFallback}>
@@ -140,7 +186,7 @@ function RouteOutlet({
   return (
     <RouteErrorBoundary fallback={ErrorFallback}>
       <Suspense fallback={null}>
-        <RouteComponent />
+        <RouteComponent {...(pending ? {} : componentProps(routerCtx, bractCtx, "route"))} />
       </Suspense>
     </RouteErrorBoundary>
   );

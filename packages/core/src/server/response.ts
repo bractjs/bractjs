@@ -93,6 +93,29 @@ export function redirect(
 }
 
 /**
+ * React Router's `redirectDocument()`: a redirect the client router must follow
+ * with a full document load instead of a soft navigation (e.g. to a part of the
+ * site served by another app on the same origin). Same arguments and safety
+ * checks as {@link redirect}.
+ */
+export function redirectDocument(url: string, init: number | RedirectInit = 302): Response {
+  const res = redirect(url, init);
+  res.headers.set("X-BractJS-Reload-Document", "1");
+  return res;
+}
+
+/**
+ * React Router's `replace()`: a redirect that replaces the current history
+ * entry instead of pushing a new one when the client router follows it.
+ * Same arguments and safety checks as {@link redirect}.
+ */
+export function replace(url: string, init: number | RedirectInit = 302): Response {
+  const res = redirect(url, init);
+  res.headers.set("X-BractJS-Replace", "1");
+  return res;
+}
+
+/**
  * Last-line guard applied to every redirect Response the request handler is
  * about to emit. Returns the Response untouched unless it is a 3xx whose
  * `Location` escapes `requestUrl`'s origin AND it was not produced by

@@ -1,3 +1,4 @@
+import { RouterContextProvider } from "../shared/router-context.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,7 +66,11 @@ describe("loadServerEntry", () => {
     expect(globalThis.__entryTestEvals).toBe(1);
 
     // pipeline.use() from the entry took effect…
-    const ctx: MiddlewareContext = { request: new Request("http://x/"), params: {}, context: {} };
+    const ctx: MiddlewareContext = {
+      request: new Request("http://x/"),
+      params: {},
+      context: new RouterContextProvider(),
+    };
     const res = await pipeline.run(ctx, () => Promise.resolve(new Response("ok")));
     expect(res.headers.get("X-Entry-Test")).toBe("1");
 

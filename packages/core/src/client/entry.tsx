@@ -1,16 +1,29 @@
-import type { ComponentType, ReactElement } from "react";
+import { type ComponentType, type ReactElement, useContext } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { ClientRouter, loadLayoutModules } from "./ClientRouter.tsx";
 import { reviveDeferred } from "./deferred-revive.ts";
 import { Outlet } from "./components/Outlet.tsx";
 import { matchPatternForPath } from "./nav-utils.ts";
-import type { RouteModuleClient } from "./router.tsx";
+import { type RouteModuleClient, RouterContext } from "./router.tsx";
 import type { BractJSClientData } from "./types.ts";
 
 // ── Fallback App shell (used when rootChunk is missing) ────────────────────
 
 function FallbackApp(): ReactElement {
   return <Outlet />;
+}
+
+/** Renders root.tsx with React Router-style props (root's loader slice), like the server does. */
+function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> }): ReactElement {
+  const r = useContext(RouterContext);
+  return (
+    <Root
+      loaderData={r.loaderData.root}
+      actionData={r.actionData ?? undefined}
+      params={r.params}
+      matches={r.matches}
+    />
+  );
 }
 
 // ── Hydration ──────────────────────────────────────────────────────────────
@@ -105,7 +118,7 @@ function FallbackApp(): ReactElement {
       initialLayouts={initialLayouts}
       rootErrorBoundary={rootErrorBoundary}
     >
-      <RootComponent />
+      <RootWithProps Root={RootComponent as ComponentType<Record<string, unknown>>} />
     </ClientRouter>,
   );
 })();

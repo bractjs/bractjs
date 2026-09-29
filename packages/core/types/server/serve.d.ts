@@ -1,6 +1,7 @@
 import { type BractAdapter } from "./adapter.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { type OnErrorHook } from "./lifecycle.ts";
+import { type Instrumentation } from "./instrumentation.ts";
 import type { ServerManifest } from "./render.ts";
 import { type RouteFile } from "./scanner.ts";
 export interface I18nConfig {
@@ -82,6 +83,19 @@ export interface BractJSConfig {
     onShutdown?: () => Promise<void> | void;
     /** Called for every unexpected error: loader failures, action throws, and uncaught process exceptions. Redirects and HttpErrors are intentional control flow and are NOT reported here. The request is undefined for process-level exceptions. */
     onError?: OnErrorHook;
+    /**
+     * Read-only observability wrappers around requests, loaders, actions and
+     * route middleware (React Router 8 Instrumentation API). Usually listed in
+     * `app/lifecycle.ts`; `instrument(...)` in `app/server.ts` is equivalent.
+     */
+    instrumentations?: Instrumentation[];
+    /**
+     * Milliseconds a streamed document waits for pending `defer()` data (and
+     * Suspense boundaries) before giving up: pending values reject with a 504
+     * `HttpError` that `<Await>`'s error path renders. React Router's
+     * `streamTimeout`. Unset → no limit.
+     */
+    streamTimeout?: number;
     /**
      * Pre-scanned route list (typically exported from `app/_generated/routes.ts`).
      * When provided, skips the startup `Bun.Glob` scan of `appDir`. Required for

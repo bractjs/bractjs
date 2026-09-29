@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { ServerManifest } from "../server/render.ts";
+import { LinkTags } from "../shared/link-tags.tsx";
 import { MetaTags } from "../shared/meta-tags.tsx";
 import {
   baseCssHrefs,
@@ -17,19 +18,22 @@ import {
   routeCssHrefs,
   StyleLinks,
 } from "../shared/style-links.tsx";
-import type { MetaDescriptor, RouteMatch, RouterLocation } from "../shared/route-types.ts";
+import type { LinkDescriptor, MetaDescriptor, RouteMatch, RouterLocation } from "../shared/route-types.ts";
+import { type HistoryAction, findBlocker } from "./blocker-store.ts";
 import { cacheKey, loaderCache } from "./cache.ts";
 import { moduleView, parseDataPayload } from "./data-payload.ts";
 import { reviveDeferred } from "./deferred-revive.ts";
 import { assignExternal, createLocationKey, matchPatternForPath, parseTo, toSamePath } from "./nav-utils.ts";
-import { type RevalidationInfo, registerRevalidator } from "./revalidation.ts";
+import { type RevalidationInfo, registerNavigator, registerRevalidator } from "./revalidation.ts";
 import {
   type HydrationPending,
   type NavigateOptions,
   NavigationContext,
+  type NavigationDetail,
   type NavigationState,
   type RouteModuleClient,
   RouterContext,
+  type RouterSubmitOptions,
   type RouteState,
 } from "./router.tsx";
 
@@ -38,6 +42,8 @@ import {
 export interface BractJSInitialData extends RouteState {
   manifest: ServerManifest;
   meta?: MetaDescriptor[];
+  /** Route `links()` descriptors from the server. */
+  links?: LinkDescriptor[];
   /** Present when the document did not SSR the route component (selective SSR / SPA shell). */
   ssrMode?: "client-only" | "data-only" | "spa";
 }
@@ -56,6 +62,14 @@ interface ClientRouterProps {
 interface LocationInit {
   key?: string;
   state?: unknown;
+  /** From `<Link defaultShouldRevalidate>` / `navigate(to, { defaultShouldRevalidate })`. */
+  defaultShouldRevalidate?: boolean;
+}
+
+/** `to` as a location object, for blocker checks and `useNavigation().location`. */
+function toLocation(to: string, init?: LocationInit): RouterLocation {
+  const { pathname, search, hash } = parseTo(to);
+  return { pathname, search, hash, state: init?.state ?? null, key: init?.key ?? createLocationKey() };
 }
 
 /** Import a route's layout.tsx chunks (outermost first); a chunk that fails to load renders nothing. */
@@ -92,12 +106,15 @@ export function ClientRouter({
   const [currentModule, setCurrentModule] = useState<RouteModuleClient | null>(initialModule);
   const [currentLayouts, setCurrentLayouts] = useState<Array<RouteModuleClient | null>>(initialLayouts);
   const [meta, setMeta] = useState<MetaDescriptor[]>(initialData.meta ?? []);
+  const [links, setLinks] = useState<LinkDescriptor[]>(initialData.links ?? []);
+  const [navDetail, setNavDetail] = useState<NavigationDetail>({});
+  const [navigationType, setNavigationType] = useState<HistoryAction>("POP");
   const [hydrationPending, setHydrationPending] = useState<HydrationPending>(initialData.ssrMode ?? false);
 
   const manifest = initialData.manifest;
 
   // Stable ref to navigate so loadRoute can call it without a circular dep.
-  const navigateRef = useRef<(to: string) => Promise<void>>(null!);
+  const navigateRef = useRef<(to: string, options?: NavigateOptions) => Promise<void>>(null!);
 
   // Refs mirroring state that the stable revalidate/submit callbacks need.
   const locationRef = useRef(location);
@@ -129,6 +146,7 @@ export function ClientRouter({
     // hoists the <title>/<meta> elements rendered by <MetaTags> into <head>,
     // so description/OG tags update on soft navigation.
     setMeta(payload.meta);
+    setLinks(payload.links);
     setMatches(payload.matches);
   }, []);
 
@@ -150,6 +168,7 @@ export function ClientRouter({
   const loadRoute = useCallback(
     async (to: string, locInit?: LocationInit) => {
       setNavState("loading");
+      setNavDetail((prev) => ({ ...prev, location: toLocation(to, locInit) }));
       // Follow a redirect Location from client-side beforeLoad. Same-origin
       // targets stay in the SPA; an off-origin/protocol-relative Location is NOT
       // fed to the router — we do a full-page navigation so the browser's own
@@ -244,15 +263,17 @@ export function ClientRouter({
           // Stale-while-revalidate: render stale data immediately, then refresh.
           commit(cached.data, routeModule);
           setNavState("idle");
-          // The route can veto the background refetch via shouldRevalidate.
+          // The route can veto the background refetch via shouldRevalidate;
+          // without one, the link's defaultShouldRevalidate decides.
           const gate = view?.shouldRevalidate;
+          const byDefault = locInit?.defaultShouldRevalidate ?? true;
           const allowRefetch = gate
             ? gate({
                 currentUrl: new URL(window.location.href),
                 nextUrl: new URL(dataPath, window.location.origin),
-                defaultShouldRevalidate: true,
+                defaultShouldRevalidate: byDefault,
               })
-            : true;
+            : byDefault;
           if (!allowRefetch) return;
           // Revalidate in background.
           void fetch(`/_data?path=${encodeURIComponent(dataPath)}`)
@@ -326,6 +347,7 @@ export function ClientRouter({
         console.error("[bractjs] loadRoute error:", err);
       } finally {
         setNavState("idle");
+        setNavDetail({});
       }
     },
     [manifest, applyPayload],
@@ -334,10 +356,25 @@ export function ClientRouter({
   const navigate = useCallback(
     async (to: string, options?: NavigateOptions) => {
       const key = createLocationKey();
-      await loadRoute(to, { key, state: options?.state ?? null });
+      const historyAction: HistoryAction = options?.replace ? "REPLACE" : "PUSH";
+      // React Router-style blockers (useBlocker returning a blocker object).
+      if (!options?.unblocked) {
+        const nextLocation = toLocation(to, { key, state: options?.state });
+        const blocker = findBlocker({ currentLocation: locationRef.current, nextLocation, historyAction });
+        if (blocker) {
+          blocker.onBlock(nextLocation, () => navigateRef.current(to, { ...options, unblocked: true }));
+          return;
+        }
+      }
+      await loadRoute(to, {
+        key,
+        state: options?.state ?? null,
+        defaultShouldRevalidate: options?.defaultShouldRevalidate,
+      });
       const entry = { __bractKey: key, __bractState: options?.state ?? null };
       if (options?.replace) history.replaceState(entry, "", to);
       else history.pushState(entry, "", to);
+      setNavigationType(historyAction);
     },
     [loadRoute],
   );
@@ -359,15 +396,19 @@ export function ClientRouter({
       const path = loc.pathname + loc.search;
       const gate = moduleView(currentModuleRef.current)?.shouldRevalidate;
       const url = new URL(path, window.location.origin);
+      const byDefault = info?.defaultShouldRevalidate ?? true;
       const allow = gate
         ? gate({
             currentUrl: url,
             nextUrl: url,
             formMethod: info?.formMethod,
             actionStatus: info?.actionStatus,
-            defaultShouldRevalidate: true,
+            formAction: info?.formAction,
+            formData: info?.formData,
+            actionResult: info?.actionResult,
+            defaultShouldRevalidate: byDefault,
           })
-        : true;
+        : byDefault;
       if (!allow) return;
       if (info?.formMethod) loaderCache.clear();
       setRevalidationState("loading");
@@ -393,6 +434,12 @@ export function ClientRouter({
     registerRevalidator(revalidate);
     return () => registerRevalidator(null);
   }, [revalidate]);
+
+  // …and soft-navigate (fetcher redirects, useSubmit GETs).
+  useEffect(() => {
+    registerNavigator((to, opts) => navigate(to, opts));
+    return () => registerNavigator(null);
+  }, [navigate]);
 
   // clientLoader.hydrate: for a fully-SSR'd route whose clientLoader opted into
   // hydration, run it once after mount and replace the route's loader slice.
@@ -435,6 +482,31 @@ export function ClientRouter({
     if (!hydrationPending) return;
     if (hydrationPending === "data-only") {
       // Loaders already ran on the server — the data arrived in the bootstrap.
+      // React Router HydrateFallback: a clientLoader with `hydrate = true`
+      // finishes the render — run it first, then swap the component in.
+      const cl = moduleView(initialModule)?.clientLoader;
+      if (typeof cl === "function" && cl.hydrate === true) {
+        void (async () => {
+          const path = window.location.pathname + window.location.search;
+          const serverSlice = (initialData.loaderData as Record<string, unknown>)?.route;
+          try {
+            const next = await cl({
+              request: new Request(new URL(path, window.location.origin)),
+              params: initialData.params,
+              search: initialData.search ?? {},
+              serverLoader: async () => serverSlice,
+            });
+            startTransition(() => {
+              setLoaderData((prev) => ({ ...prev, route: next }));
+              setHydrationPending(false);
+            });
+          } catch (err) {
+            console.error("[bractjs] clientLoader (hydrate) error:", err);
+            startTransition(() => setHydrationPending(false));
+          }
+        })();
+        return;
+      }
       startTransition(() => setHydrationPending(false));
       return;
     }
@@ -483,14 +555,28 @@ export function ClientRouter({
   useEffect(() => {
     const onPopState = (e: PopStateEvent) => {
       const st = e.state as { __bractKey?: string; __bractState?: unknown } | null;
-      void loadRoute(window.location.pathname + window.location.search + window.location.hash, {
-        key: st?.__bractKey ?? "default",
-        state: st?.__bractState ?? null,
-      });
+      const target = window.location.pathname + window.location.search + window.location.hash;
+      const init = { key: st?.__bractKey ?? "default", state: st?.__bractState ?? null };
+      // React Router-style blockers: the browser already moved, so put the
+      // current entry back, and let `proceed()` re-run the navigation.
+      const current = locationRef.current;
+      const nextLocation = toLocation(target, init);
+      const blocker = findBlocker({ currentLocation: current, nextLocation, historyAction: "POP" });
+      if (blocker) {
+        history.pushState(
+          { __bractKey: current.key, __bractState: current.state },
+          "",
+          current.pathname + current.search + current.hash,
+        );
+        blocker.onBlock(nextLocation, () => navigate(target, { state: init.state, unblocked: true }));
+        return;
+      }
+      setNavigationType("POP");
+      void loadRoute(target, init);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [loadRoute]);
+  }, [loadRoute, navigate]);
 
   // Module-level HMR: swap the current route module without a full reload.
   // The injected HMR client script calls window.__BRACTJS_HMR_ACCEPT__(pattern, mod)
@@ -517,11 +603,36 @@ export function ClientRouter({
    * toSamePath so an attacker-controlled Location can never soft-nav the SPA.
    */
   const submit = useCallback(
-    async (to: string, opts: { method: string; body: FormData | Record<string, string> }) => {
+    async (to: string, opts: RouterSubmitOptions) => {
+      const body =
+        opts.body === null ||
+        typeof opts.body === "string" ||
+        opts.body instanceof FormData ||
+        opts.body instanceof URLSearchParams
+          ? opts.body
+          : new URLSearchParams(opts.body);
+      const formData =
+        body instanceof FormData
+          ? body
+          : body instanceof URLSearchParams
+            ? (() => {
+                const fd = new FormData();
+                body.forEach((v, k) => fd.append(k, v));
+                return fd;
+              })()
+            : undefined;
       setNavState("submitting");
+      setNavDetail({
+        formMethod: opts.method.toUpperCase(),
+        formAction: to,
+        formEncType:
+          opts.contentType ??
+          (body instanceof FormData ? "multipart/form-data" : "application/x-www-form-urlencoded"),
+        formData,
+        json: opts.json,
+        text: opts.text,
+      });
       try {
-        const body = opts.body instanceof FormData ? opts.body : new URLSearchParams(opts.body);
-
         // The server submit — also the `serverAction()` a clientAction can call.
         // A redirected response short-circuits to a real navigation (via
         // toSamePath so an attacker Location can never soft-nav the SPA); it
@@ -529,10 +640,12 @@ export function ClientRouter({
         const REDIRECTED = Symbol("redirected");
         let lastStatus = 0;
         const doServerPost = async (): Promise<unknown> => {
+          const headers: Record<string, string> = { "X-BractJS-Action": "1" };
+          if (opts.contentType) headers["Content-Type"] = opts.contentType;
           const res = await fetch(to, {
             method: opts.method.toUpperCase(),
             body,
-            headers: { "X-BractJS-Action": "1" },
+            headers,
           });
           lastStatus = res.status;
           // Preferred path: the server enveloped the action redirect
@@ -542,8 +655,16 @@ export function ClientRouter({
           const envelope = res.headers.get("X-BractJS-Redirect");
           if (envelope !== null) {
             const safe = toSamePath(envelope);
+            // redirectDocument(): a full document load, even same-origin.
+            if (safe && res.headers.get("X-BractJS-Reload-Document") !== null) {
+              window.location.assign(safe);
+              return REDIRECTED;
+            }
             if (safe) {
-              await navigateRef.current(safe);
+              // replace(): swap the history entry instead of pushing.
+              await navigateRef.current(safe, {
+                replace: res.headers.get("X-BractJS-Replace") !== null,
+              });
               return REDIRECTED;
             }
             assignExternal(envelope);
@@ -584,7 +705,7 @@ export function ClientRouter({
           data = await clientAction({
             request: new Request(new URL(to, window.location.origin), { method: opts.method.toUpperCase() }),
             params: paramsRef.current,
-            formData: body instanceof FormData ? body : new FormData(),
+            formData: formData ?? new FormData(),
             serverAction: () => {
               calledServer = true;
               return doServerPost();
@@ -599,9 +720,17 @@ export function ClientRouter({
 
         setActionData(data);
         setNavState("loading");
-        await revalidate({ formMethod: opts.method, actionStatus: lastStatus });
+        await revalidate({
+          formMethod: opts.method,
+          actionStatus: lastStatus,
+          formAction: to,
+          formData,
+          actionResult: data,
+          defaultShouldRevalidate: opts.defaultShouldRevalidate,
+        });
       } finally {
         setNavState("idle");
+        setNavDetail({});
       }
     },
     [revalidate, manifest],
@@ -619,6 +748,7 @@ export function ClientRouter({
         location,
         search,
         matches,
+        navigationType,
         manifest,
         currentModule,
         setRoute,
@@ -627,8 +757,9 @@ export function ClientRouter({
         hydrationPending,
       }}
     >
-      <NavigationContext.Provider value={{ state: navState, navigate, submit }}>
+      <NavigationContext.Provider value={{ state: navState, detail: navDetail, navigate, submit }}>
         <MetaTags meta={meta} />
+        <LinkTags links={links} />
         {/*
           Mirrors the server tree so hydration matches, and keeps the document's
           stylesheets in sync across soft navigation. React dedupes by href, so

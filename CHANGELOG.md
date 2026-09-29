@@ -6,7 +6,40 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added — React Router 8 features, with React Router 7 compatibility
+
+Ported React Router 7 and 8 route modules, hooks and components now mostly run as-is. Everything below is additive; the BractJS APIs they sit next to keep working. The [porting guide](docs/migrating-from-remix.md) covers what's left.
+
+**React Router 8 features**
+
+- **Typed context: `createContext<T>(default?)`, `context.get(key)` / `context.set(key, value)`, `RouterContextProvider`.** Every `context` (middleware, `beforeLoad`, loaders, actions, `/api` middleware) carries the typed accessors next to its string fields. The accessors are non-enumerable, so spreading or logging `context` looks the same as before, and values set in middleware survive a `defineContext()` merge. `unstable_createContext` / `unstable_RouterContextProvider` are exported as aliases.
+- **Instrumentation API: `instrument(...)`, or `instrumentations: [...]` in `app/lifecycle.ts` / `createServer()`.** Read-only wrappers around every request, loader, action and route middleware, for tracing, timing and logs. A wrapper gets `call()`, which resolves to `{ status: "success" | "error", error }`. It can't change a result, swallow an error, or break a request (if it throws, the error is logged). Takes both the flat `{ request, loader, action, middleware }` shape and React Router's `{ handler(h) { h.instrument(…) }, route(r) { r.instrument(…) } }`. When nothing is registered it costs nothing.
+- **`fetcher.reset()`**: clears a fetcher's `data`, `formData` and `formMethod` and puts it back to idle.
+- **`defaultShouldRevalidate`** on `<Link>`, `<Form>`, `<fetcher.Form>`, `navigate()`, `fetcher.submit()` and `useSubmit()`. It is passed to the route's `shouldRevalidate`, and routes without one use it directly. `<Link unstable_defaultShouldRevalidate>` is accepted too.
+- **`streamTimeout` config** (ms): after this long, the render is aborted and `defer()` data that is still pending rejects with a 504 `HttpError`, so a hung promise can't hold a response open. Unset means no limit, as before.
+- **`url` loader/action argument**: `request.url`, already parsed.
+
+**React Router 7 / 8 API compatibility**
+
+- **Responses:** `data(value, { status, headers })` works in loaders and actions. A leaf loader's status sets the document status, and its headers reach `headers()` as `loaderHeaders`. An action's status and headers apply to its response (`actionHeaders`). Thrown, it behaves like `HttpError`. **`throw new Response("…", { status: 404 })`** now renders the ErrorBoundary with that status instead of a 500. Also new: `redirectDocument()` (full document load) and `replace()` (replaces the history entry).
+- **Errors:** `useRouteError()` and `isRouteErrorResponse()`. `HttpError` now has React Router's `statusText`, `data` and `internal` fields.
+- **Route exports:** `links()` descriptors are rendered into `<head>` on SSR, on soft navigation, and in the `/_data` payload. `HydrateFallback` together with `clientLoader.hydrate = true` server-renders the fallback, then runs the client loader. `unstable_middleware` is read when `middleware` is absent. `meta()` also receives `data`, `location` and `matches` (each match carries its ancestors' `meta`), and descriptors can use `{ "script:ld+json": … }`, `{ tagName: "link", … }` and `{ charSet }`. Route, layout and root components receive `{ loaderData, actionData, params, matches }` props (`RouteComponentProps`). Middleware that returns nothing continues the chain, as in React Router. The route linter no longer flags `links`, `HydrateFallback` or `unstable_middleware`.
+- **Hooks:** `useSubmit()` (form, FormData, object, or JSON via `encType: "application/json"`; `method: "get"` navigates; `navigate: false` submits through a fetcher), `useRouteLoaderData(id)`, `useOutletContext()` with `<Outlet context>`, `useAsyncValue()`, `useAsyncError()`, `useHref()`, `useResolvedPath()`, `useFormAction()`, `useNavigationType()`, `createSearchParams()`.
+- **Hook upgrades:**
+  - `useSearchParams()` can also be destructured as a tuple (`const [params, setParams] = useSearchParams()`), and the setter accepts `{ replace, state }`.
+  - `useNavigation()` also returns `location`, `formData`, `formMethod`, `formAction`, `formEncType`, `json` and `text` while a navigation is pending.
+  - `useBlocker()` returns a blocker object (`state`, `location`, `proceed()`, `reset()`) when given a boolean or a function that takes the navigation argument. A zero-argument function keeps the old `confirm()` behavior.
+  - `useNavigate()` accepts `navigate(-1)`, `{ pathname, search, hash }` objects and relative paths.
+  - `fetcher.submit(target, { method, action, encType })` and `<fetcher.Form method="get">` work alongside `fetcher.submit(url, { method, body })`.
+- **Components:** `<NavLink>` (sets an `active` / `pending` class and `aria-current`; `className`, `style` and `children` can be functions of the link state) and `<Navigate>`. `<Meta />`, `<Links />` and `<PrefetchPageLinks />` render nothing, since BractJS already writes these tags. `<Form>` supports `method="get"`, `navigate={false}`, `fetcherKey`, `reloadDocument` and `encType`, and includes the clicked submit button's name and value. `<Link>` supports `state`, `reloadDocument`, relative and object `to`, and runs a user `onClick` first (which can `preventDefault()`). `<Await>` supports `errorElement` and element children.
+- **Sessions:** `createCookieSessionStorage({ cookie })`, `destroySession()`, `session.flash()` (the next `get()` returns the value once), `session.unset()`, `session.data`, `session.id`.
+- **Utilities and types:** `generatePath()` / `href()`, `createMiddlewareContext()`, and the type aliases `LoaderFunctionArgs`, `ActionFunctionArgs`, `ClientLoaderFunctionArgs`, `ClientActionFunctionArgs`, `ShouldRevalidateFunctionArgs`, `MiddlewareFunction`, `LinksFunction`, `LinkDescriptor`, `RouteComponentProps` and `ErrorBoundaryProps`.
+
+### Changed
+
+- **Type-level:** `LoaderArgs` / `ActionArgs` / `MiddlewareContext` now type `context` as `RouteContext` (string fields plus `get`/`set`), and `LoaderArgs` has a required `url`. Code that builds these by hand, usually tests, should pass `context: new RouterContextProvider()` (which also accepts plain fields: `new RouterContextProvider({ user })`) and `url: new URL(request.url)`. Nothing changes at runtime.
+- `useSearchParams().setSearchParams()` now writes one history entry instead of two.
+- `Session.has()` only reports keys the session actually owns (inherited names like `"toString"` no longer count).
 
 ---
 

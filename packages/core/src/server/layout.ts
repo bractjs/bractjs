@@ -86,6 +86,11 @@ export function resolveLayoutChainFromRegistry(
   return { ...routeFile, layoutFiles };
 }
 
+/** A `clientLoader` with `hydrate = true` (the server never calls it — only reads the flag). */
+function isHydratingClientLoader(cl: unknown): boolean {
+  return typeof cl === "function" && (cl as { hydrate?: unknown }).hydrate === true;
+}
+
 // ── importRouteModule ──────────────────────────────────────────────────────
 
 export async function importRouteModule(filePath: string): Promise<RouteModule> {
@@ -100,6 +105,8 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
     // SECURITY(high): like beforeLoad, route middleware can be an auth gate —
     // project it or every `middleware` export becomes a silent no-op.
     middleware: mod.middleware,
+    // React Router 7.3–7.8 name — equally an auth gate, so equally projected.
+    unstable_middleware: mod.unstable_middleware,
     // SECURITY(high): beforeLoad is the auth/redirect gate and `context` is the
     // per-route context factory. Both MUST be projected here — dropping them
     // turns every beforeLoad() export into a silent no-op, bypassing auth on
@@ -114,6 +121,10 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
     // SSR an empty outlet and guarantee a hydration mismatch.
     ssr: mod.ssr,
     Fallback: mod.Fallback,
+    // React Router HydrateFallback + clientLoader.hydrate → "data-only" SSR.
+    HydrateFallback: mod.HydrateFallback,
+    clientLoaderHydrate: isHydratingClientLoader(mod.clientLoader),
+    links: mod.links,
     handle: mod.handle,
     ErrorBoundary: mod.ErrorBoundary,
     default: mod.default,
@@ -135,6 +146,7 @@ function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined)
     headers: m.headers as RouteModule["headers"],
     // SECURITY(high): keep middleware (auth gate) — see importRouteModule.
     middleware: m.middleware as RouteModule["middleware"],
+    unstable_middleware: m.unstable_middleware as RouteModule["unstable_middleware"],
     // SECURITY(high): keep beforeLoad + context in the projection — see the
     // note in importRouteModule. The compiled-binary path goes through here.
     beforeLoad: m.beforeLoad as RouteModule["beforeLoad"],
@@ -144,6 +156,9 @@ function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined)
     searchSchema: m.searchSchema,
     ssr: m.ssr as RouteModule["ssr"],
     Fallback: m.Fallback as RouteModule["Fallback"],
+    HydrateFallback: m.HydrateFallback as RouteModule["HydrateFallback"],
+    clientLoaderHydrate: isHydratingClientLoader(m.clientLoader),
+    links: m.links as RouteModule["links"],
     handle: m.handle as RouteModule["handle"],
     ErrorBoundary: m.ErrorBoundary as RouteModule["ErrorBoundary"],
     default: m.default as RouteModule["default"],

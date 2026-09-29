@@ -19,3 +19,32 @@ export function buildPath(pattern: string, params: Record<string, string | numbe
     })
     .join("/");
 }
+
+/**
+ * React Router's `generatePath()` / `href()`: fill a route pattern with params.
+ * Supports `:name`, optional `:name?` (the segment is dropped when absent) and
+ * a trailing splat `*` (`params["*"]`, inserted unencoded so it can span
+ * segments). A missing required param throws — as in React Router.
+ */
+export function generatePath(
+  pattern: string,
+  params: Record<string, string | number | null | undefined> = {},
+): string {
+  const segments = pattern.split("/").flatMap((seg): string[] => {
+    if (seg === "*") {
+      const splat = params["*"];
+      return splat === undefined || splat === null ? [] : [String(splat).replace(/^\/+/, "")];
+    }
+    if (!seg.startsWith(":")) return [seg];
+    const optional = seg.endsWith("?");
+    const name = seg.slice(1, optional ? -1 : undefined);
+    const value = params[name];
+    if (value === undefined || value === null) {
+      if (optional) return [];
+      throw new Error(`[bractjs] generatePath: missing ":${name}" param for "${pattern}"`);
+    }
+    return [encodeURIComponent(String(value))];
+  });
+  const path = segments.join("/");
+  return path.startsWith("/") || !pattern.startsWith("/") ? path || "/" : "/" + path;
+}

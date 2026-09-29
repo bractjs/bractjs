@@ -1,6 +1,6 @@
-# Migrating from Remix / React Router 7
+# Migrating from Remix / React Router 7 & 8
 
-If you know Remix v2 or React Router 7 framework mode, most of BractJS will feel familiar: routes are files, data comes from `loader`, mutations go through `action` and `<Form>`, and hooks like `useLoaderData` and `useFetcher` do what you expect. This guide covers what _changes_. It's organized in the order you'll hit things while porting, and ends with a checklist and the gaps that have no equivalent yet.
+If you know Remix v2 or React Router 7/8 framework mode, most of BractJS will feel familiar: routes are files, data comes from `loader`, mutations go through `action` and `<Form>`, and hooks like `useLoaderData` and `useFetcher` do what you expect. Much of React Router's API is available under the same names: typed `createContext` and `context.get`/`set`, `data()`, `useSubmit`, `useRouteError`, `NavLink`, `links`, `HydrateFallback`, and React Router 8's instrumentation, `fetcher.reset()` and `defaultShouldRevalidate`. So a lot of route code ports unchanged. This guide covers what _changes_. It's organized in the order you'll hit things while porting, and ends with a checklist and the gaps that have no equivalent yet.
 
 Read [Concepts](concepts.md) alongside this. The biggest behavioral differences — three run modes and the middleware scoping rules — are explained there.
 
@@ -39,15 +39,16 @@ Delete `vite.config.ts`, `react-router.config.ts`, and (RR7) `app/routes.ts`. Co
 
 ### Files that change role
 
-| Remix / RR7                                  | BractJS                                                                                                                            |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `app/root.tsx` with `Layout` + `App` exports | `app/root.tsx` — one `default` export that returns the whole `<html>` document ([§3](../README.md#3-the-root-layout-approotsx)).   |
-| `<Meta />`, `<Links />` in root              | **Remove both.** `meta()` output is hoisted into `<head>` automatically; imported CSS is linked automatically.                     |
-| `<Scripts />`, `<ScrollRestoration />`       | Same components, imported from `@bractjs/bractjs`. Add `<LiveReload />` (dev HMR; renders nothing in production).                  |
-| `entry.server.tsx`, `server.js` / Express    | `app/server.ts` (global middleware via `pipeline.use(...)`) plus `app/lifecycle.ts` (`onStart` / `onShutdown` / `onError`).        |
-| `entry.client.tsx`                           | No equivalent — hydration is built in.                                                                                             |
-| `app/routes.ts` (RR7 config routes)          | No equivalent — routing is file-based only.                                                                                        |
-| `public/` served at `/`                      | `public/` is served at **`/public/*`**. `public/favicon.ico` is `/public/favicon.ico` — update `<link rel="icon">` and asset URLs. |
+| Remix / RR7                                  | BractJS                                                                                                                                                                                 |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/root.tsx` with `Layout` + `App` exports | `app/root.tsx` — one `default` export that returns the whole `<html>` document ([§3](../README.md#3-the-root-layout-approotsx)).                                                        |
+| `<Meta />`, `<Links />` in root              | Optional. BractJS puts `meta()` / `links()` output and imported CSS into `<head>` itself; both components render nothing.                                                               |
+| `<Scripts />`, `<ScrollRestoration />`       | Same components, imported from `@bractjs/bractjs`. Add `<LiveReload />` (dev HMR; renders nothing in production).                                                                       |
+| `entry.server.tsx`, `server.js` / Express    | `app/server.ts` (global middleware via `pipeline.use(...)`) plus `app/lifecycle.ts` (`onStart` / `onShutdown` / `onError` / `instrumentations`). `streamTimeout` → `bractjs.config.ts`. |
+| `getLoadContext` → `RouterContextProvider`   | A global middleware in `app/server.ts` that calls `ctx.context.set(key, value)`.                                                                                                        |
+| `entry.client.tsx`                           | No equivalent — hydration is built in.                                                                                                                                                  |
+| `app/routes.ts` (RR7 config routes)          | No equivalent — routing is file-based only.                                                                                                                                             |
+| `public/` served at `/`                      | `public/` is served at **`/public/*`**. `public/favicon.ico` is `/public/favicon.ico` — update `<link rel="icon">` and asset URLs.                                                      |
 
 ## Route file names
 
@@ -69,7 +70,7 @@ The last row works because layouts come from the file's _folder_ chain, not the 
 
 ## Imports
 
-Everything comes from one package — `@remix-run/react`, `@remix-run/node`, `react-router`, and `@react-router/node` imports all become `@bractjs/bractjs`:
+Everything comes from one package: `@remix-run/react`, `@remix-run/node`, `react-router`, `react-router/dom`, `react-router-dom` and `@react-router/node` imports all become `@bractjs/bractjs`:
 
 ```ts
 // before
@@ -80,45 +81,46 @@ import { json, redirect, type LoaderArgs } from "@bractjs/bractjs";
 import { Form, Link, useLoaderData } from "@bractjs/bractjs";
 ```
 
-Type names: `LoaderFunctionArgs` / `Route.LoaderArgs` → `LoaderArgs`, `ActionFunctionArgs` / `Route.ActionArgs` → `ActionArgs`, `MetaFunction` / `Route.MetaArgs` → `MetaArgs<typeof loader data>`. RR7's generated `./+types/...` imports go away; for typed params, search and links, run codegen instead ([§18](../README.md#18-typed-routes)).
+Type names: `LoaderFunctionArgs`, `ActionFunctionArgs`, `ClientLoaderFunctionArgs`, `ClientActionFunctionArgs`, `ShouldRevalidateFunctionArgs`, `MiddlewareFunction`, `LinksFunction` and `LinkDescriptor` are exported under those names. React Router's generated `Route.*` types map to `LoaderArgs`, `ActionArgs`, `MetaArgs`, `RouteComponentProps<typeof loader>` and `ErrorBoundaryProps`. The `./+types/...` imports go away; for typed params, search and links, run codegen instead ([§18](../README.md#18-typed-routes)).
 
 ## Route module exports
 
-| Remix / RR7                                       | BractJS                                                                                                                                                                                                                                    |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `loader({ request, params, context })`            | Same, plus `search` (validated query params when the route has a `searchSchema`).                                                                                                                                                          |
-| `action({ request, params, context })`            | Same, plus a pre-parsed **`formData`** argument. `await request.formData()` also still works — it returns the same parsed copy.                                                                                                            |
-| `meta({ data, params, matches })`                 | `meta({ loaderData, params })` — rename `data` → `loaderData`. No `matches`/`location`. Same descriptor array format.                                                                                                                      |
-| `links()`                                         | **Not supported.** Import the stylesheet (`import "./route.css"`); other `<link>` tags go in `root.tsx`. The dev server and build warn when a route still exports `links`.                                                                 |
-| `headers()`, `handle`, `shouldRevalidate`         | Same names and roles.                                                                                                                                                                                                                      |
-| `clientLoader`, `clientAction`, `.hydrate = true` | Same, including `serverLoader()` / `serverAction()`.                                                                                                                                                                                       |
-| `HydrateFallback`                                 | `export const ssr = false` (or `"data-only"`) plus `export function Fallback()`.                                                                                                                                                           |
-| `middleware` / `unstable_middleware` (RR7)        | `middleware` — an array of `(ctx, next) => Response`, running root → layouts → route. **Scope differs; read [Middleware](#middleware-and-auth).**                                                                                          |
-| `ErrorBoundary` + `useRouteError()`               | `ErrorBoundary` receives the error as a prop: `function ErrorBoundary({ error })`. There is no `useRouteError` / `isRouteErrorResponse` — check `isHttpError(error)` and `error.status` instead. A route without one falls back to root's. |
-| `Route.ComponentProps` (`loaderData` prop)        | Components receive no props — use `useLoaderData<typeof loader>()`.                                                                                                                                                                        |
-| —                                                 | New: `beforeLoad` (auth/redirect gate that also guards `/_data`), `searchSchema`, `context` via `defineContext` ([§5](../README.md#5-route-module-api)).                                                                                   |
+| Remix / RR7                                             | BractJS                                                                                                                                                                                                                                |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `loader({ request, params, context, url })`             | Same, plus `search` (validated query params when the route has a `searchSchema`). `context.get(key)` / `context.set(key, v)` work.                                                                                                     |
+| `action({ request, params, context })`                  | Same, plus a pre-parsed **`formData`** argument. `await request.formData()` also still works — it returns the same parsed copy.                                                                                                        |
+| `meta({ loaderData, data, params, matches, location })` | Same arguments and descriptors (including `script:ld+json`, `tagName: "link"` and `charSet`). **Difference:** BractJS _merges_ meta root → route (the last `title` / `name` / `property` wins); React Router replaces the whole array. |
+| `links()`                                               | Same. Rendered into `<head>` on SSR and soft navigation. Importing a stylesheet (`import "./route.css"`) still works and is split per route.                                                                                           |
+| `headers()`, `handle`, `shouldRevalidate`               | Same names and roles.                                                                                                                                                                                                                  |
+| `clientLoader`, `clientAction`, `.hydrate = true`       | Same, including `serverLoader()` / `serverAction()`.                                                                                                                                                                                   |
+| `HydrateFallback` + `clientLoader.hydrate = true`       | Same: the fallback is server-rendered, then the client loader runs. (BractJS's own form is `export const ssr = "data-only"` with `Fallback`.)                                                                                          |
+| `middleware` / `unstable_middleware`                    | Same signature (`({ request, params, context }, next)`); returning nothing continues the chain. Runs root → layouts → route. **Scope differs; read [Middleware](#middleware-and-auth).** `clientMiddleware` is not supported.          |
+| `ErrorBoundary` + `useRouteError()`                     | Same. `isRouteErrorResponse(error)` works for thrown `data(…, { status })`, `new Response(…, { status })` and `HttpError`. The error is also passed as the `error` prop. A route without a boundary falls back to root's.              |
+| `Route.ComponentProps` (`loaderData` prop)              | Same props: `{ loaderData, actionData, params, matches }`. `useLoaderData<typeof loader>()` works too.                                                                                                                                 |
+| —                                                       | New: `beforeLoad` (auth/redirect gate that also guards `/_data`), `searchSchema`, `context` via `defineContext` ([§5](../README.md#5-route-module-api)).                                                                               |
 
 ## Responses and data
 
-- **Returning plain objects** from loaders and actions works as in RR7. `json(data, init)` exists for when you need a status or headers; it replaces RR7's `data(value, init)`.
+- **Returning plain objects** from loaders and actions works as in React Router. **`data(value, { status, headers })`** works too: a leaf loader's status sets the document status, its headers reach `headers()` as `loaderHeaders`, and an action's status and headers apply to its response. `json(data, init)` returns a real `Response`.
 - **`redirect()`** accepts both the Remix/RR7 form `redirect(url, { status, headers })` and the positional form `redirect(url, 303, headers)`. It refuses off-origin URLs unless you pass `allowExternal: true` — a Remix `redirect("https://…")` needs that added.
 - **Streaming: wrap promises in `defer()`.** RR7 streams any promise you return; BractJS only streams fields wrapped with `defer({ … })`. `<Await resolve={…}>` works the same, with the render function as its child ([§8](../README.md#8-streaming-data)).
-- **Throwing `redirect()` / `new HttpError(404)`** works as control flow: a route loader's `HttpError` renders its `ErrorBoundary` with that status, like a thrown `Response` in Remix.
+- **Throwing `redirect()`, `new Response("…", { status: 404 })`, `data("…", { status: 404 })` or `new HttpError(404)`** all work as control flow: a route loader's error renders its `ErrorBoundary` with that status. `redirectDocument()` and `replace()` exist too.
 
 ## Hooks and components
 
-| Remix / RR7                                                                                  | BractJS                                                                                                                                   |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `useLoaderData`, `useActionData`, `useParams`, `useLocation`, `useMatches`, `useRevalidator` | Same.                                                                                                                                     |
-| `useNavigation()` → `{ state, formData, location }`                                          | `useNavigation()` → `{ state }` only. For optimistic UI read `formData` from `useFetcher()` / `useFetchers()`.                            |
-| `useSubmit()`                                                                                | No hook. Use `<Form>`, `useFetcher().submit(url, { method, body })`, or `useNavigate()`.                                                  |
-| `fetcher.submit(data, { method, action })`                                                   | `fetcher.submit(action, { method, body })` — the **URL comes first**.                                                                     |
-| `useSearchParams()` → `[params, setParams]`                                                  | `useSearchParams()` → `{ searchParams, getParam, setSearchParams }` — an object, not a tuple. Prefer `useSearch()` with a `searchSchema`. |
-| `useNavigate()`                                                                              | Same call shape; returns a `Promise`.                                                                                                     |
-| `useBlocker(fn)` → blocker object                                                            | `useBlocker(() => boolean)` — shows the browser's confirm prompt; no `blocker.proceed()` / `reset()`.                                     |
-| `useRouteLoaderData(id)`                                                                     | `useMatches().find((m) => m.id === "routes/blog/layout.tsx")?.data` — ids are app-relative file paths (`root.tsx`, `routes/…`).           |
-| `useOutletContext()` / `<Outlet context>`                                                    | Not supported — share via React context or loader data.                                                                                   |
-| `<Form>`, `<Link prefetch>`, `<Link viewTransition>`, `<ScrollRestoration>`, `<Await>`       | Same. `<Form>` also takes an `intent` prop that pairs with `defineActions` for multi-button forms.                                        |
+| React Router                                                                                                          | BractJS                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useLoaderData`, `useActionData`, `useParams`, `useLocation`, `useMatches`, `useRevalidator`                          | Same.                                                                                                                                                                                                                                                |
+| `useNavigation()` → `{ state, location, formData, … }`                                                                | Same fields.                                                                                                                                                                                                                                         |
+| `useSubmit()`                                                                                                         | Same (forms, FormData, objects, `encType: "application/json"`, `method: "get"`, `navigate: false` + `fetcherKey`).                                                                                                                                   |
+| `fetcher.submit(data, { method, action })`, `fetcher.load`, `fetcher.reset()`                                         | Same. BractJS's own `fetcher.submit(url, { method, body })` (URL first) also works.                                                                                                                                                                  |
+| `useSearchParams()` → `[params, setParams]`                                                                           | Same tuple. The result is also an object: `{ searchParams, getParam, setSearchParams }`. `useSearch()` with a `searchSchema` gives typed values.                                                                                                     |
+| `useNavigate()`                                                                                                       | Same, including `navigate(-1)`, object `to`, relative paths and `{ replace, state, defaultShouldRevalidate }`. Returns a `Promise`.                                                                                                                  |
+| `useBlocker(fn)` → blocker object                                                                                     | Same when `fn` takes the `{ currentLocation, nextLocation, historyAction }` argument (or pass a boolean). A zero-argument `useBlocker(() => dirty)` keeps BractJS's `confirm()` prompt; pass `{ confirm: false }` to get the blocker object instead. |
+| `useRouteLoaderData(id)`                                                                                              | Same. Ids are app-relative file paths, extension optional: `"root"`, `"routes/blog/layout"`.                                                                                                                                                         |
+| `useOutletContext()` / `<Outlet context>`                                                                             | Same.                                                                                                                                                                                                                                                |
+| `useRouteError`, `useAsyncValue`, `useAsyncError`, `useHref`, `useResolvedPath`, `useFormAction`, `useNavigationType` | Same.                                                                                                                                                                                                                                                |
+| `<Form>`, `<Link>`, `<NavLink>`, `<Navigate>`, `<Await>`, `<ScrollRestoration>`                                       | Same. `<Form>` defaults to `method="post"` (React Router defaults to `get`), so give a search form `method="get"` explicitly. `<Form intent>` pairs with `defineActions`.                                                                            |
 
 ## Sessions
 
@@ -143,11 +145,11 @@ export const session = createCookieSession({
 });
 ```
 
-`getSession(cookieHeader)` and `commitSession(session)` keep their names. There's no `destroySession`; commit with `{ maxAge: 0 }` instead. Only cookie-backed sessions ship; for server-side storage, keep a session ID in the cookie and look it up yourself. ([§15](../README.md#15-sessions))
+Or keep the React Router call as-is: `createCookieSessionStorage({ cookie: { name, secrets, sameSite: "lax", maxAge } })` maps onto `createCookieSession`. Secrets are required. `getSession`, `commitSession`, `destroySession`, `session.flash()` and `session.unset()` all work. Only cookie-backed sessions ship; for server-side storage, keep a session ID in the cookie and look it up yourself. ([§15](../README.md#15-sessions))
 
 ## Middleware and auth
 
-This is the difference most likely to hurt you. In RR7, route middleware runs for every request that reaches that route. In BractJS, a `middleware` or `beforeLoad` export on a route or layout guards **only that route's pages and their `/_data` JSON**:
+The middleware _signature_ ports unchanged: `({ request, params, context }, next)`, typed `context.get`/`context.set`, return nothing to continue. The _scope_ is the difference most likely to hurt you. In React Router, route middleware runs for every request that reaches that route. In BractJS, a `middleware` or `beforeLoad` export on a route or layout guards **only that route's pages and their `/_data` JSON**:
 
 - **Typed `/api` endpoints** are not covered. Guard them with `route(..., { middleware: [...] })`.
 - **`"use server"` functions** (`/_action`) are not covered.
@@ -186,21 +188,24 @@ Plain CSS imports (`import "./styles.css"`) work in every run mode and are split
 
 ## Known gaps
 
-As of 0.4.x, these have no clean equivalent. Plan around them:
+As of the current release, these have no clean equivalent. Plan around them:
 
 - **`HttpError` from a root or layout loader** ends the request with a JSON error body rather than rendering a boundary; only route loaders render `ErrorBoundary`.
-- **No `useOutletContext`, `useSubmit`, `useRouteError`, or `links` export.** Replacements are listed in the tables above.
-- **No Vite ecosystem, no Node runtime** — see [platform differences](#before-you-start-platform-differences).
+- **`clientMiddleware`** isn't supported. Use `clientLoader`, or server `middleware`.
+- **`meta` merges** root → route instead of the leaf replacing the whole array.
+- **`<Form>` defaults to `post`**, not `get`.
+- **Route middleware doesn't cover `/api` or `"use server"`**: see [Middleware and auth](#middleware-and-auth).
+- **No Vite ecosystem, no Node runtime**: see [platform differences](#before-you-start-platform-differences).
 
 ## Porting checklist
 
-1. Swap dependencies and scripts; delete the Vite/RR config; copy the scaffold `tsconfig.json`.
-2. Rewrite `root.tsx` as a single `default` export; remove `<Meta />` / `<Links />`; add `<LiveReload />`.
+1. Swap dependencies and scripts; delete the Vite/React Router config; copy the scaffold `tsconfig.json`.
+2. Rewrite `root.tsx` as a single `default` export (`<Meta />` / `<Links />` may stay; they render nothing); add `<LiveReload />`.
 3. Rename route files using the [table above](#route-file-names); move `public/` URLs under `/public/`.
-4. Replace imports with `@bractjs/bractjs`; rename `data` → `loaderData` in `meta`; replace `links()` with CSS imports.
+4. Replace imports with `@bractjs/bractjs`, and `./+types/*` types with `LoaderArgs` / `RouteComponentProps` / codegen.
 5. Wrap streamed promises in `defer()`; check `redirect()` calls to other origins for `allowExternal`.
-6. Replace `useSubmit`, `useOutletContext`, `useRouteError` and tuple-style `useSearchParams`; check `fetcher.submit` argument order.
-7. Port sessions to `createCookieSession`; move `destroySession` to `commitSession(s, { maxAge: 0 })`.
-8. Re-check every auth guard against [Middleware and auth](#middleware-and-auth) — especially `/api` and `"use server"`.
+6. Give every search `<Form>` an explicit `method="get"`.
+7. Move `getLoadContext` values into an `app/server.ts` middleware (`ctx.context.set(key, value)`).
+8. Re-check every auth guard against [Middleware and auth](#middleware-and-auth), especially `/api` and `"use server"`.
 9. Convert resource routes to typed `/api` routes or `app/server.ts` middleware.
-10. Run `bractjs dev` and read the boot output: it warns about unregistered `/api` endpoints, miscased route exports, and leftover Remix exports such as `links`.
+10. Run `bractjs dev` and read the boot output: it warns about unregistered `/api` endpoints, miscased route exports, and React Router exports BractJS ignores (such as `clientMiddleware`).

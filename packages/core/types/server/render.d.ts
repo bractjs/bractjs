@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
+import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 export interface ServerManifest {
     clientEntry: string;
     rootChunk?: string;
@@ -26,6 +26,8 @@ export interface RenderOptions {
     search?: Record<string, unknown>;
     manifest: ServerManifest;
     meta: MetaDescriptor[];
+    /** Route `links()` descriptors (root → layouts → route), rendered into `<head>`. */
+    links?: LinkDescriptor[];
     /** The matched route chain (root → layouts → route) for `useMatches()`. */
     matches?: RouteMatch[];
     status?: number;
@@ -51,5 +53,10 @@ export interface RenderOptions {
      * on top of the baseline document headers, overriding any same-key default.
      */
     headers?: Headers | null;
+    /**
+     * Abort the React render and fail still-pending `defer()` data after this
+     * many ms (React Router's `streamTimeout`). Unset → no limit.
+     */
+    streamTimeout?: number;
 }
 export declare function renderRoute(options: RenderOptions): Promise<Response>;

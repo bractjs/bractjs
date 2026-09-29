@@ -1,7 +1,10 @@
+import { isDataWithResponseInit, toHttpError } from "../shared/data.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
 import type { ActionArgs, LoaderArgs, RouteModule } from "../shared/route-types.ts";
+import { type RouteContext, withContextAccessors } from "../shared/router-context.ts";
 import type { ContextFactory } from "./context.ts";
 import { isExplicitDev } from "./env.ts";
+import { instrumentRoute } from "./instrumentation.ts";
 import type { LayoutChain } from "./layout.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
@@ -13,6 +16,17 @@ export interface LoaderResults {
   root: LoaderResult;
   layouts: LoaderResult[];
   route: LoaderResult;
+  /**
+   * The `ResponseInit` of each slot whose loader returned `data(value, init)`
+   * (the slot itself holds the unwrapped value). Absent when no loader did.
+   */
+  inits?: { root: ResponseInit | null; layouts: Array<ResponseInit | null>; route: ResponseInit | null };
+}
+
+/** Split a loader/action return into its value and the `data()` init, if any. */
+export function unwrapData(value: unknown): { value: unknown; init: ResponseInit | null } {
+  if (isDataWithResponseInit(value)) return { value: value.data, init: value.init };
+  return { value, init: null };
 }
 
 // ── safeRun ────────────────────────────────────────────────────────────────
@@ -26,10 +40,18 @@ export async function safeRun<T>(
   if (!fn) return null;
 
   try {
-    return await fn(args);
+    return await instrumentRoute(
+      "loader",
+      { request: args.request, params: args.params, context: args.context, id: where ?? "route" },
+      async () => fn(args),
+    );
   } catch (err) {
-    // Re-throw redirects and HTTP errors — caller handles them
+    // Re-throw redirects and HTTP errors — caller handles them. React Router's
+    // `throw new Response(…, { status: 404 })` / `throw data(…, { status })`
+    // are HTTP errors too: normalize them so they render the ErrorBoundary.
     if (isRedirect(err) || isHttpError(err)) throw err;
+    const httpErr = await toHttpError(err);
+    if (httpErr) throw httpErr;
     // SECURITY(high): `__error` is serialized into the SSR HTML via
     // safeStringify and reaches the browser. A custom Error subclass with
     // public fields (db query text, file paths, internal IDs, raw user data)
@@ -62,7 +84,7 @@ export async function runBeforeLoad(routeModule: RouteModule, args: LoaderArgs):
   const fn = routeModule.beforeLoad as
     | ((a: {
         params: Record<string, string>;
-        context: Record<string, unknown>;
+        context: RouteContext;
         location: { pathname: string; search: string };
         search?: Record<string, unknown>;
       }) => unknown)
@@ -123,20 +145,34 @@ export async function runLoaders(
     ...layoutLoaders,
   ]);
 
-  return { root, layouts: layoutResults, route };
+  // data(value, init): the slot gets the value; the init rides alongside.
+  const r = unwrapData(root);
+  const rt = unwrapData(route);
+  const ls = layoutResults.map(unwrapData);
+  const results: LoaderResults = { root: r.value, layouts: ls.map((l) => l.value), route: rt.value };
+  if (r.init || rt.init || ls.some((l) => l.init)) {
+    results.inits = { root: r.init, layouts: ls.map((l) => l.init), route: rt.init };
+  }
+  return results;
 }
 
 // ── runAction ──────────────────────────────────────────────────────────────
 
-export async function runAction(routeModule: RouteModule, args: ActionArgs): Promise<unknown> {
+export async function runAction(routeModule: RouteModule, args: ActionArgs, id = "route"): Promise<unknown> {
   if (!routeModule.action) return null;
+  const action = routeModule.action as (a: ActionArgs) => Promise<unknown>;
 
   try {
-    return await (routeModule.action as (a: ActionArgs) => Promise<unknown>)(args);
+    return await instrumentRoute(
+      "action",
+      { request: args.request, params: args.params, context: args.context, id },
+      async () => action(args),
+    );
   } catch (err) {
-    // Re-throw redirects so the server can issue the 3xx response
+    // Re-throw redirects so the server can issue the 3xx response. A thrown
+    // error Response / data(…, { status }) becomes an HttpError (RR parity).
     if (isRedirect(err) || isHttpError(err)) throw err;
-    throw err;
+    throw (await toHttpError(err)) ?? err;
   }
 }
 
@@ -148,7 +184,7 @@ export function buildLoaderArgs(
   context: Record<string, unknown>,
   search: Record<string, unknown> = {},
 ): LoaderArgs {
-  return { request, params, context, search };
+  return { request, url: new URL(request.url), params, context: withContextAccessors(context), search };
 }
 
 // ── runRouteContext ────────────────────────────────────────────────────────
@@ -163,9 +199,11 @@ export async function runRouteContext(
   request: Request,
   params: Record<string, string>,
   baseContext: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
+): Promise<RouteContext> {
   const factory = routeModule.context;
-  if (!factory || typeof factory._factory !== "function") return baseContext;
+  if (!factory || typeof factory._factory !== "function") return withContextAccessors(baseContext);
   const extra = await factory._factory({ request, params });
-  return { ...baseContext, ...(extra as Record<string, unknown>) };
+  // A new object, but it shares the typed-key store: values middleware set()
+  // on the base stay readable via context.get() in loaders.
+  return withContextAccessors({ ...baseContext, ...(extra as Record<string, unknown>) }, baseContext);
 }

@@ -1,4 +1,4 @@
-import { type ComponentType, createElement, type ReactElement } from "react";
+import { type ComponentType, createContext, createElement, type ReactElement, useContext } from "react";
 import { HttpError } from "./errors.ts";
 
 // A route loader that fails leaves `{ __error: { message, status? } }` in its
@@ -47,4 +47,36 @@ export function pickErrorBoundary(
   root: ErrorBoundaryComponent | undefined,
 ): ErrorBoundaryComponent {
   return route ?? root ?? RouteErrorFallback;
+}
+
+// ── useRouteError ──────────────────────────────────────────────────────────
+
+/** The error the nearest rendering ErrorBoundary is showing (null outside one). */
+export const RouteErrorContext = createContext<unknown>(null);
+
+/**
+ * React Router's `useRouteError()`: the error the enclosing `ErrorBoundary` is
+ * rendering. BractJS also passes it as the `error` prop — use either. Returns
+ * `undefined` outside an ErrorBoundary.
+ */
+export function useRouteError(): unknown {
+  return useContext(RouteErrorContext) ?? undefined;
+}
+
+/**
+ * Render an ErrorBoundary component for `error`: as the `error` prop (BractJS)
+ * AND via context (`useRouteError()`), plus React Router's `params` /
+ * `loaderData` props when known. Every boundary render site goes through here
+ * so server and client produce the same tree.
+ */
+export function renderErrorBoundary(
+  Boundary: ComponentType<{ error: unknown }>,
+  error: unknown,
+  extra?: { params?: Record<string, string>; loaderData?: unknown },
+): ReactElement {
+  return createElement(
+    RouteErrorContext.Provider,
+    { value: error },
+    createElement(Boundary as ComponentType<Record<string, unknown>>, { error, ...extra }),
+  );
 }

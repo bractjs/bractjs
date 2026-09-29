@@ -41,6 +41,17 @@ class FetcherStore {
     if (this.entries.delete(key)) this.emit();
   }
 
+  /**
+   * Back to a pristine idle entry: clears `data`, `formData` and `formMethod`
+   * (React Router 8 `fetcher.reset()`). An in-flight request still completes
+   * but no longer shows as pending until it writes its result.
+   */
+  reset(key: string): void {
+    if (!this.entries.has(key)) return;
+    this.entries.set(key, { key, ...IDLE_ENTRY });
+    this.emit();
+  }
+
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

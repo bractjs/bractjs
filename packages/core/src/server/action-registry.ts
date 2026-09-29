@@ -32,6 +32,10 @@ const RESERVED_ROUTE_EXPORTS = new Set([
   "meta",
   "headers",
   "middleware",
+  // React Router 7.3–7.8 middleware name — an auth gate, never an RPC.
+  "unstable_middleware",
+  "links",
+  "HydrateFallback",
   "beforeLoad",
   "shouldRevalidate",
   "context",

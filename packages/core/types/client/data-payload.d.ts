@@ -1,4 +1,4 @@
-import type { ClientActionFunction, ClientLoaderFunction, MetaDescriptor, RouteMatch, ShouldRevalidateFunction } from "../shared/route-types.ts";
+import type { ClientActionFunction, ClientLoaderFunction, LinkDescriptor, MetaDescriptor, RouteMatch, ShouldRevalidateFunction } from "../shared/route-types.ts";
 /**
  * The typed slice of a `/_data` JSON payload that the router commits into
  * state. The payload itself is `loaderData` (slices keyed root/layouts/route)
@@ -10,6 +10,8 @@ export interface RouteDataPayload {
     params: Record<string, string>;
     search: Record<string, unknown>;
     meta: MetaDescriptor[];
+    /** Route `links()` descriptors. */
+    links: LinkDescriptor[];
     matches: RouteMatch[];
 }
 /** Extract the routing fields from a raw `/_data` JSON object, with defaults. */

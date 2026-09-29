@@ -14,20 +14,41 @@ import { reviveDeferred } from "../deferred-revive.ts";
 import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
 import { assignExternal, toSamePath } from "../nav-utils.ts";
 import { triggerRevalidation } from "../revalidation.ts";
+import {
+  normalizeSubmission,
+  type SubmitOptions as RRSubmitOptions,
+  type SubmitTarget,
+} from "../submission.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+/** BractJS form: `fetcher.submit(url, { method, body })`. */
 interface SubmitOptions {
   method: string;
-  body: FormData | Record<string, string>;
+  body?: FormData | URLSearchParams | Record<string, string>;
+  /** Passed to routes' `shouldRevalidate` after the action (routes without one follow it). */
+  defaultShouldRevalidate?: boolean;
 }
 
 export interface FetcherFormProps extends Omit<FormHTMLAttributes<HTMLFormElement>, "method" | "onSubmit"> {
-  method?: "post" | "put" | "delete";
+  /** `"get"` loads `action` (with the form's fields as its query) through the fetcher. */
+  method?: "get" | "post" | "put" | "patch" | "delete";
   action?: string;
   /** Renders a hidden `intent` input (pairs with `defineActions()`). */
   intent?: string;
+  /** See `SubmitOptions.defaultShouldRevalidate`. */
+  defaultShouldRevalidate?: boolean;
   children: ReactNode;
+}
+
+/** The request a fetcher submission sends (after normalizing either call form). */
+export interface FetcherRequest {
+  url: string;
+  method: string;
+  body: FormData | URLSearchParams | string | null;
+  contentType?: string;
+  formData?: FormData;
+  defaultShouldRevalidate?: boolean;
 }
 
 export interface FetcherResult {
@@ -39,8 +60,22 @@ export interface FetcherResult {
   formMethod?: string;
   /** This fetcher's identity (explicit `key` option, or component-bound). */
   key: string;
-  load(path: string): Promise<void>;
+  /** Load a route's loader data into `fetcher.data` (the route slice of `/_data`). */
+  load(path: string, opts?: { flushSync?: boolean }): Promise<void>;
+  /**
+   * Submit a mutation. Two call forms:
+   * - BractJS: `submit(url, { method, body })` — the URL comes first.
+   * - React Router: `submit(target, { method, action, encType })` — `target`
+   *   is a FormData, URLSearchParams, plain object, form element, or (with
+   *   `encType: "application/json"`) any JSON value.
+   */
   submit(path: string, opts: SubmitOptions): Promise<void>;
+  submit(target: SubmitTarget, opts?: RRSubmitOptions): Promise<void>;
+  /**
+   * Clear this fetcher back to idle — `data`, `formData` and `formMethod`
+   * become undefined (React Router 8 `fetcher.reset()`).
+   */
+  reset(opts?: { reason?: unknown }): void;
   /** A `<fetcher.Form>` that submits through this fetcher (no navigation, no history). */
   Form: FunctionComponent<FetcherFormProps>;
 }
@@ -129,72 +164,15 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
     return () => fetcherStore.remove(key);
   }, [key, isKeyed]);
 
-  const load = useCallback(
-    async (path: string): Promise<void> => {
-      fetcherStore.update(key, { state: "loading" });
-      try {
-        const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
-        const json = reviveDeferred((await res.json()) as { route?: unknown });
-        fetcherStore.update(key, { data: json.route });
-      } finally {
-        fetcherStore.update(key, { state: "idle" });
-      }
-    },
-    [key],
-  );
+  const load = useCallback((path: string): Promise<void> => fetcherLoad(key, path), [key]);
 
   const submit = useCallback(
-    async (path: string, submitOpts: SubmitOptions): Promise<void> => {
-      const body =
-        submitOpts.body instanceof FormData
-          ? submitOpts.body
-          : new URLSearchParams(submitOpts.body as Record<string, string>);
-      const formMethod = submitOpts.method.toUpperCase();
-      // Expose the submission BEFORE the fetch — this is what optimistic UI
-      // renders while the mutation is in flight.
-      fetcherStore.update(key, {
-        state: "submitting",
-        formData: submitOpts.body instanceof FormData ? submitOpts.body : undefined,
-        formMethod,
-      });
-      try {
-        // Send the custom header so the server's CSRF gate accepts this
-        // same-origin mutation (browsers block it cross-origin without a CORS
-        // preflight). Without it every fetcher submit 403s.
-        const res = await fetch(path, {
-          method: formMethod,
-          body,
-          headers: { "X-BractJS-Action": "1" },
-        });
-        // Enveloped redirect (204 + X-BractJS-Redirect): the server converted
-        // the action's 3xx so no throwaway document GET consumed one-shot
-        // cookies (flash toasts). Navigate to the target directly.
-        const envelope = res.headers.get("X-BractJS-Redirect");
-        if (envelope !== null) {
-          const to = toSamePath(envelope);
-          if (to) window.location.assign(to);
-          else assignExternal(envelope);
-          return;
-        }
-        // If the action redirected, do a real navigation rather than parsing the
-        // redirect target as JSON. Off-origin targets get a full-page nav so we
-        // never follow an attacker-controlled Location inside the SPA.
-        if (res.redirected) {
-          const to = toSamePath(res.url);
-          window.location.assign(to ?? res.url);
-          return;
-        }
-        fetcherStore.update(key, { data: await res.json() });
-        // Mutations invalidate loader data — re-run the active route's loaders
-        // (gated by its shouldRevalidate) so the page reflects the change.
-        fetcherStore.update(key, { state: "loading" });
-        await triggerRevalidation({ formMethod, actionStatus: res.status });
-      } finally {
-        fetcherStore.update(key, { state: "idle", formData: undefined });
-      }
-    },
+    (target: SubmitTarget | string, submitOpts?: SubmitOptions | RRSubmitOptions): Promise<void> =>
+      fetcherSubmit(key, toFetcherRequest(target, submitOpts)),
     [key],
-  );
+  ) as FetcherResult["submit"];
+
+  const reset = useCallback(() => fetcherStore.reset(key), [key]);
 
   // Stable component identity across renders (remounting a form on every
   // render would drop focus/IME state).
@@ -203,6 +181,7 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
       method = "post",
       action,
       intent,
+      defaultShouldRevalidate,
       children,
       ...rest
     }: FetcherFormProps) {
@@ -210,7 +189,12 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
         e.preventDefault();
         const target = e.currentTarget;
         const url = action ?? window.location.pathname + window.location.search;
-        void submit(url, { method, body: new FormData(target) });
+        if (method === "get") {
+          // React Router: a GET fetcher form loads `action?<fields>`.
+          void load(normalizeSubmission(new FormData(target), { action: url, method: "get" }).url);
+          return;
+        }
+        void submit(url, { method, body: new FormData(target), defaultShouldRevalidate });
       }
       const intentInput =
         intent !== undefined
@@ -218,7 +202,7 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
           : null;
       return createElement("form", { method, onSubmit: handleSubmit, ...rest }, intentInput, children);
     };
-  }, [submit]);
+  }, [submit, load]);
 
   if (opts?.stream) {
     return {
@@ -237,6 +221,109 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
     key,
     load,
     submit,
+    reset,
     Form: FetcherForm,
   };
+}
+
+// ── Fetcher operations (shared with useSubmit({ navigate: false })) ────────
+
+/** Normalize either submit call form into one request. */
+function toFetcherRequest(
+  target: SubmitTarget | string,
+  opts?: SubmitOptions | RRSubmitOptions,
+): FetcherRequest {
+  const rr = opts as RRSubmitOptions | undefined;
+  const isTextual = rr?.encType === "application/json" || rr?.encType === "text/plain";
+  if (typeof target === "string" && !isTextual) {
+    // BractJS form: submit(url, { method, body }).
+    const o = (opts ?? { method: "post" }) as SubmitOptions;
+    const body =
+      o.body === undefined
+        ? new URLSearchParams()
+        : o.body instanceof FormData || o.body instanceof URLSearchParams
+          ? o.body
+          : new URLSearchParams(o.body);
+    return {
+      url: target,
+      method: (o.method ?? "post").toUpperCase(),
+      body,
+      formData: body instanceof FormData ? body : undefined,
+      defaultShouldRevalidate: o.defaultShouldRevalidate,
+    };
+  }
+  // React Router form: submit(target, { method, action, encType }).
+  const n = normalizeSubmission(target, { method: "post", ...rr });
+  return {
+    url: n.url,
+    method: n.method,
+    body: n.body,
+    contentType: n.contentType,
+    formData: n.formData,
+    defaultShouldRevalidate: rr?.defaultShouldRevalidate,
+  };
+}
+
+/** Load a route's loader data into the fetcher `key`. */
+export async function fetcherLoad(key: string, path: string): Promise<void> {
+  fetcherStore.update(key, { state: "loading" });
+  try {
+    const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+    const json = reviveDeferred((await res.json()) as { route?: unknown });
+    fetcherStore.update(key, { data: json.route });
+  } finally {
+    fetcherStore.update(key, { state: "idle" });
+  }
+}
+
+/** Run a submission through the fetcher `key` (a GET becomes a load). */
+export async function fetcherSubmit(key: string, req: FetcherRequest): Promise<void> {
+  if (req.method === "GET") return fetcherLoad(key, req.url);
+  const formMethod = req.method;
+  // Expose the submission BEFORE the fetch — this is what optimistic UI
+  // renders while the mutation is in flight.
+  fetcherStore.update(key, { state: "submitting", formData: req.formData, formMethod });
+  try {
+    // Send the custom header so the server's CSRF gate accepts this
+    // same-origin mutation (browsers block it cross-origin without a CORS
+    // preflight). Without it every fetcher submit 403s.
+    const headers: Record<string, string> = { "X-BractJS-Action": "1" };
+    if (req.contentType) headers["Content-Type"] = req.contentType;
+    const res = await fetch(req.url, { method: formMethod, body: req.body, headers });
+    // Enveloped redirect (204 + X-BractJS-Redirect): the server converted
+    // the action's 3xx so no throwaway document GET consumed one-shot
+    // cookies (flash toasts). Navigate to the target directly.
+    const envelope = res.headers.get("X-BractJS-Redirect");
+    if (envelope !== null) {
+      const to = toSamePath(envelope);
+      if (to) {
+        if (res.headers.get("X-BractJS-Replace") !== null) window.location.replace(to);
+        else window.location.assign(to);
+      } else assignExternal(envelope);
+      return;
+    }
+    // If the action redirected, do a real navigation rather than parsing the
+    // redirect target as JSON. Off-origin targets get a full-page nav so we
+    // never follow an attacker-controlled Location inside the SPA.
+    if (res.redirected) {
+      const to = toSamePath(res.url);
+      window.location.assign(to ?? res.url);
+      return;
+    }
+    const data = await res.json();
+    fetcherStore.update(key, { data });
+    // Mutations invalidate loader data — re-run the active route's loaders
+    // (gated by its shouldRevalidate) so the page reflects the change.
+    fetcherStore.update(key, { state: "loading" });
+    await triggerRevalidation({
+      formMethod,
+      actionStatus: res.status,
+      formAction: req.url,
+      formData: req.formData,
+      actionResult: data,
+      defaultShouldRevalidate: req.defaultShouldRevalidate,
+    });
+  } finally {
+    fetcherStore.update(key, { state: "idle", formData: undefined });
+  }
 }

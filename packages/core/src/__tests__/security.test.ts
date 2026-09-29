@@ -1,3 +1,4 @@
+import { RouterContextProvider } from "../shared/router-context.ts";
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -490,7 +491,7 @@ describe("session — secret validation", () => {
 
 describe("cors middleware", () => {
   async function runOnce(mw: ReturnType<typeof cors>, req: Request): Promise<Response> {
-    const ctx: MiddlewareContext = { request: req, params: {}, context: {} };
+    const ctx: MiddlewareContext = { request: req, params: {}, context: new RouterContextProvider() };
     const pipeline = new MiddlewarePipeline();
     pipeline.use(mw);
     return pipeline.run(ctx, () => Promise.resolve(new Response("ok")));
@@ -595,7 +596,11 @@ describe("middleware — double next()", () => {
       await next();
       return next(); // illegal
     });
-    const ctx: MiddlewareContext = { request: new Request("http://x/"), params: {}, context: {} };
+    const ctx: MiddlewareContext = {
+      request: new Request("http://x/"),
+      params: {},
+      context: new RouterContextProvider(),
+    };
     await expect(pipeline.run(ctx, () => Promise.resolve(new Response("ok")))).rejects.toThrow(
       /more than once/,
     );

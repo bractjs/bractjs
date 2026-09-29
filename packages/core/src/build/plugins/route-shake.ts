@@ -10,7 +10,16 @@ import { hasServerDirective } from "../../shared/directives.ts";
  * shrink to their component + client hooks. `beforeLoad`, `clientLoader`,
  * `clientAction`, and `searchSchema` are NOT stripped: they run client-side.
  */
-export const SERVER_ONLY_ROUTE_EXPORTS = ["loader", "action", "headers", "middleware"] as const;
+export const SERVER_ONLY_ROUTE_EXPORTS = [
+  "loader",
+  "action",
+  "headers",
+  "middleware",
+  // React Router 7.3–7.8 middleware name.
+  "unstable_middleware",
+  // Evaluated on the server; the payload carries the resulting descriptors.
+  "links",
+] as const;
 
 /**
  * Client-bundle plugin: dead-code-eliminate the server-only exports from

@@ -1,4 +1,4 @@
-export declare const ROUTE_EXPORT_NAMES: readonly ["default", "loader", "action", "clientLoader", "clientAction", "meta", "headers", "middleware", "beforeLoad", "shouldRevalidate", "searchSchema", "ssr", "Fallback", "handle", "ErrorBoundary", "config", "loaderDeps", "context"];
+export declare const ROUTE_EXPORT_NAMES: readonly ["default", "loader", "action", "clientLoader", "clientAction", "meta", "headers", "middleware", "beforeLoad", "shouldRevalidate", "searchSchema", "ssr", "Fallback", "handle", "ErrorBoundary", "config", "loaderDeps", "context", "links", "HydrateFallback", "unstable_middleware"];
 /**
  * Static lint of a route module's SOURCE (no execution). Returns human-readable
  * warning strings. Used by the dev rebuilder and the production build to catch

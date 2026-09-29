@@ -1,4 +1,4 @@
-import type { MetaDescriptor } from "../shared/route-types.ts";
+import type { LinkDescriptor, MetaDescriptor, MetaMatch } from "../shared/route-types.ts";
 import type { LayoutChain } from "./layout.ts";
 import type { LoaderResults } from "./loader.ts";
 
@@ -6,28 +6,97 @@ type Params = Record<string, string>;
 
 // ── resolveMeta ────────────────────────────────────────────────────────────
 
+/** Request-level inputs for `meta()` beyond the loader data. */
+export interface MetaContext {
+  pathname: string;
+  /** Raw query string including `?`, or `""`. */
+  search?: string;
+  /** The route loader's error, when it failed (passed to root/layout meta). */
+  error?: unknown;
+}
+
 /**
  * Calls each route module's meta() in layout chain order (root → layouts → route),
- * passing the appropriate loaderData slice + params to each.
+ * passing the appropriate loaderData slice + params to each — plus the React
+ * Router 7 arguments (`data`, `location`, `matches` with each ancestor's
+ * resolved `meta`), so ported `meta` functions work unchanged.
  */
-export function resolveMeta(chain: LayoutChain, loaderData: LoaderResults, params: Params): MetaDescriptor[] {
+export function resolveMeta(
+  chain: LayoutChain,
+  loaderData: LoaderResults,
+  params: Params,
+  ctx: MetaContext = { pathname: "/" },
+): MetaDescriptor[] {
   const all: MetaDescriptor[] = [];
+  const location = { pathname: ctx.pathname, search: ctx.search ?? "", hash: "" };
+  const files = chain.files;
+  const entries: Array<{ mod: LayoutChain["root"]; data: unknown; id: string }> = [
+    { mod: chain.root, data: loaderData.root, id: files?.root ?? "root" },
+    ...chain.layouts.map((mod, i) => ({
+      mod,
+      data: loaderData.layouts[i] ?? null,
+      id: files?.layouts?.[i] ?? `layout:${i}`,
+    })),
+    { mod: chain.route, data: loaderData.route, id: files?.route ?? "route" },
+  ];
+  const matches: MetaMatch[] = [];
 
-  if (chain.root.meta) {
-    all.push(...chain.root.meta({ loaderData: loaderData.root, params }));
-  }
-
-  chain.layouts.forEach((mod, i) => {
-    if (mod.meta) {
-      all.push(...mod.meta({ loaderData: loaderData.layouts[i] ?? null, params }));
-    }
+  entries.forEach(({ mod, data, id }, i) => {
+    const match: MetaMatch = {
+      id,
+      pathname: ctx.pathname,
+      params,
+      data,
+      loaderData: data,
+      handle: mod.handle,
+      meta: [],
+    };
+    matches.push(match);
+    if (!mod.meta) return;
+    const isRoute = i === entries.length - 1;
+    const produced = mod.meta({
+      loaderData: data,
+      data,
+      params,
+      location,
+      matches: matches.slice(),
+      error: isRoute ? undefined : ctx.error,
+    });
+    match.meta = produced ?? [];
+    all.push(...match.meta);
   });
 
-  if (chain.route.meta) {
-    all.push(...chain.route.meta({ loaderData: loaderData.route, params }));
-  }
-
   return all;
+}
+
+// ── resolveLinks ───────────────────────────────────────────────────────────
+
+/**
+ * Collect every module's `links()` export (root → layouts → route), deduped by
+ * `rel` + `href` (first wins). A throwing `links()` is logged and skipped — a
+ * broken preload hint must not take the page down.
+ */
+export function resolveLinks(chain: LayoutChain): LinkDescriptor[] {
+  const out: LinkDescriptor[] = [];
+  const seen = new Set<string>();
+  for (const mod of [chain.root, ...chain.layouts, chain.route]) {
+    if (typeof mod.links !== "function") continue;
+    let produced: LinkDescriptor[];
+    try {
+      produced = mod.links() ?? [];
+    } catch (err) {
+      console.error("[bractjs] links() threw:", err);
+      continue;
+    }
+    for (const l of produced) {
+      if (!l || typeof l !== "object" || typeof l.rel !== "string") continue;
+      const key = `${l.rel}|${l.href ?? JSON.stringify(l)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(l);
+    }
+  }
+  return out;
 }
 
 // ── mergeMeta ──────────────────────────────────────────────────────────────

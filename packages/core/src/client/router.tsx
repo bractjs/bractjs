@@ -13,6 +13,8 @@ export interface RouteModuleClient {
   clientLoader?: import("../shared/route-types.ts").ClientLoaderFunction;
   /** Browser-side action (RR7-style). Runs on submit instead of POSTing directly. */
   clientAction?: import("../shared/route-types.ts").ClientActionFunction;
+  /** React Router name for `Fallback` (shown while a hydrating clientLoader runs). */
+  HydrateFallback?: ComponentType;
 }
 
 /**
@@ -36,6 +38,8 @@ export interface RouteState {
   search: Record<string, unknown>;
   /** The matched route chain (root → layouts → route) for `useMatches()`. */
   matches: RouteMatch[];
+  /** How the current location was reached (React Router `useNavigationType()`). */
+  navigationType?: "POP" | "PUSH" | "REPLACE";
 }
 
 export interface RouterContextValue extends RouteState {
@@ -72,12 +76,49 @@ export interface NavigateOptions {
   replace?: boolean;
   /** Arbitrary history state, readable via `useLocation().state` after the navigation. */
   state?: unknown;
+  /**
+   * Passed to the target route's `shouldRevalidate` when cached loader data
+   * would be refreshed in the background (routes without one follow it).
+   */
+  defaultShouldRevalidate?: boolean;
+  /** @internal Skip `useBlocker` checks (a blocker's own `proceed()`). */
+  unblocked?: boolean;
+}
+
+export interface RouterSubmitOptions {
+  method: string;
+  body: FormData | URLSearchParams | Record<string, string> | string | null;
+  /** Content-Type for string bodies (JSON / text submissions). */
+  contentType?: string;
+  /** Passed to routes' `shouldRevalidate` after the action (routes without one follow it). */
+  defaultShouldRevalidate?: boolean;
+  /** Parsed JSON payload, surfaced as `useNavigation().json`. */
+  json?: unknown;
+  /** Raw text payload, surfaced as `useNavigation().text`. */
+  text?: string;
+}
+
+/**
+ * The in-flight navigation, React Router's `useNavigation()` shape: while
+ * loading, `location` is where we're going; while submitting, the `form*`
+ * fields describe the submission (optimistic UI reads `formData`).
+ */
+export interface NavigationDetail {
+  location?: RouterLocation;
+  formMethod?: string;
+  formAction?: string;
+  formEncType?: string;
+  formData?: FormData;
+  json?: unknown;
+  text?: string;
 }
 
 export interface NavigationContextValue {
   state: NavigationState;
+  /** Details of the pending navigation/submission (empty while idle). */
+  detail?: NavigationDetail;
   navigate(to: string, options?: NavigateOptions): Promise<void>;
-  submit(to: string, options: { method: string; body: FormData | Record<string, string> }): Promise<void>;
+  submit(to: string, options: RouterSubmitOptions): Promise<void>;
 }
 
 export const NavigationContext = createContext<NavigationContextValue>(null!);

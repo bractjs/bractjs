@@ -1,4 +1,5 @@
 import { Component, type ComponentType, type ReactElement, type ReactNode } from "react";
+import { RouteErrorContext } from "./route-error.ts";
 
 // ── DefaultErrorBoundary ───────────────────────────────────────────────────
 
@@ -55,7 +56,11 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, Route
   render(): ReactNode {
     if (this.state.error) {
       const ErrorComponent = this.props.errorBoundary ?? DefaultErrorBoundary;
-      return <ErrorComponent error={this.state.error} />;
+      return (
+        <RouteErrorContext.Provider value={this.state.error}>
+          <ErrorComponent error={this.state.error} />
+        </RouteErrorContext.Provider>
+      );
     }
     return this.props.children;
   }

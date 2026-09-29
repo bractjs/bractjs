@@ -13,6 +13,17 @@ export interface Session {
   delete(key: string): void;
   /** Whether the key exists. */
   has(key: string): boolean;
+  /** React Router name for {@link Session.delete}. */
+  unset(key: string): void;
+  /**
+   * Set a value that the next `get(key)` returns once and then removes
+   * (React Router `session.flash`) — commit the session after reading it.
+   */
+  flash(key: string, val: unknown): void;
+  /** A snapshot of the stored values (flash values included under their internal keys). */
+  readonly data: Readonly<SessionData>;
+  /** Always `""` — cookie sessions carry their data, not an id (React Router parity). */
+  readonly id: string;
 }
 
 /** Reads sessions from a `Cookie` header and serializes them back to `Set-Cookie`. */
@@ -21,6 +32,15 @@ export interface SessionStorage {
   getSession(cookie?: string | null): Promise<Session>;
   /** Serialize + HMAC-sign the session into a `Set-Cookie` header value. */
   commitSession(session: Session, opts?: CommitOptions): Promise<string>;
+}
+
+/** What {@link createCookieSession} returns: {@link SessionStorage} plus `destroySession`. */
+export interface CookieSessionStorage extends SessionStorage {
+  /**
+   * A `Set-Cookie` value that deletes the session cookie (React Router
+   * `destroySession`). Same as `commitSession` of an empty session with `maxAge: 0`.
+   */
+  destroySession(session?: Session): Promise<string>;
 }
 
 /** Options for {@link createCookieSession}. */
@@ -103,17 +123,39 @@ async function verify(data: string, sig: string, secrets: string[]): Promise<boo
   return ok;
 }
 
+const flashKey = (key: string) => `__flash_${key}__`;
+
 function makeSession(data: SessionData): InternalSession {
+  const own = (key: string) => Object.prototype.hasOwnProperty.call(data, key);
   return {
     [DATA]: data,
-    get: (key) => data[key],
+    get: (key) => {
+      // A flash value is read once: returning it removes it.
+      const fk = flashKey(key);
+      if (own(fk)) {
+        const v = data[fk];
+        delete data[fk];
+        return v;
+      }
+      return own(key) ? data[key] : undefined;
+    },
     set: (key, val) => {
       data[key] = val;
     },
     delete: (key) => {
       delete data[key];
     },
-    has: (key) => key in data,
+    unset: (key) => {
+      delete data[key];
+    },
+    flash: (key, val) => {
+      data[flashKey(key)] = val;
+    },
+    has: (key) => own(key) || own(flashKey(key)),
+    get data() {
+      return { ...data };
+    },
+    id: "",
   };
 }
 
@@ -134,7 +176,7 @@ function makeSession(data: SessionData): InternalSession {
  * headers.set("Set-Cookie", await storage.commitSession(session));
  */
 // SECURITY(medium): caller can opt out of the Secure flag by passing secure:false; this is safe only on HTTP-only local dev — never use in production without HTTPS.
-export function createCookieSession(options: CookieSessionOptions): SessionStorage {
+export function createCookieSession(options: CookieSessionOptions): CookieSessionStorage {
   const { name, secrets, maxAge, secure = true, sameSite = "Lax" } = options;
   if (!Array.isArray(secrets) || secrets.length === 0) {
     throw new Error("createCookieSession: secrets must be a non-empty array");
@@ -178,5 +220,51 @@ export function createCookieSession(options: CookieSessionOptions): SessionStora
       if (secure) parts.push("Secure");
       return parts.join("; ");
     },
+
+    async destroySession(): Promise<string> {
+      const parts = [`${name}=`, "HttpOnly", `SameSite=${sameSite}`, "Path=/", "Max-Age=0"];
+      if (secure) parts.push("Secure");
+      return parts.join("; ");
+    },
   };
+}
+
+/** React Router's `createCookieSessionStorage` options (the cookie subset BractJS supports). */
+export interface CookieSessionStorageOptions {
+  cookie: {
+    name?: string;
+    secrets?: string[];
+    maxAge?: number;
+    secure?: boolean;
+    sameSite?: "lax" | "strict" | "none" | "Lax" | "Strict" | "None" | boolean;
+    /** Accepted for compatibility; BractJS session cookies are always HttpOnly. */
+    httpOnly?: boolean;
+    /** Accepted for compatibility; BractJS session cookies are always `Path=/`. */
+    path?: string;
+  };
+}
+
+/**
+ * React Router's `createCookieSessionStorage({ cookie })`, mapped onto
+ * {@link createCookieSession}. `secrets` is required (each ≥ 16 chars) — an
+ * unsigned session cookie is refused rather than silently trusted.
+ */
+export function createCookieSessionStorage(options: CookieSessionStorageOptions): CookieSessionStorage {
+  const c = options.cookie ?? {};
+  const s = c.sameSite;
+  const sameSite =
+    s === undefined || s === true
+      ? s === true
+        ? "Strict"
+        : undefined
+      : s === false
+        ? "Lax"
+        : ((s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) as "Lax" | "Strict" | "None");
+  return createCookieSession({
+    name: c.name ?? "__session",
+    secrets: c.secrets ?? [],
+    maxAge: c.maxAge,
+    secure: c.secure,
+    sameSite,
+  });
 }

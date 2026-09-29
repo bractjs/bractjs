@@ -1,3 +1,4 @@
+import { RouterContextProvider } from "../shared/router-context.ts";
 import { describe, expect, test } from "bun:test";
 import { authGuard } from "../middleware/authGuard.ts";
 import { cors } from "../middleware/cors.ts";
@@ -11,7 +12,7 @@ function makeCtx(override: Partial<MiddlewareContext> = {}): MiddlewareContext {
   return {
     request: new Request("http://localhost/"),
     params: {},
-    context: {},
+    context: new RouterContextProvider(),
     ...override,
   };
 }

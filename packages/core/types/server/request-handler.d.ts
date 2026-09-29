@@ -13,5 +13,7 @@ export interface HandlerConfig {
      * where dynamic `import(absPath)` is unavailable. Falsy in dev mode.
      */
     moduleRegistry?: ModuleRegistry;
+    /** See `BractJSConfig.streamTimeout`. */
+    streamTimeout?: number;
 }
 export declare function handleRequest(request: Request, trie: TrieNode, config: HandlerConfig, context?: Record<string, unknown>): Promise<Response>;

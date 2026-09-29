@@ -16,6 +16,12 @@ declare class FetcherStore {
     get(key: string): FetcherEntry | undefined;
     update(key: string, partial: Partial<Omit<FetcherEntry, "key">>): void;
     remove(key: string): void;
+    /**
+     * Back to a pristine idle entry: clears `data`, `formData` and `formMethod`
+     * (React Router 8 `fetcher.reset()`). An in-flight request still completes
+     * but no longer shows as pending until it writes its result.
+     */
+    reset(key: string): void;
     subscribe: (listener: Listener) => (() => void);
     /** All current entries (stable reference between updates). */
     getSnapshot: () => FetcherEntry[];

@@ -10,7 +10,7 @@ type Params = Record<string, string>;
  * Returns `null` when no module in the chain exports `headers` — callers keep
  * their existing default headers untouched in that case.
  */
-export declare function resolveHeaders(chain: LayoutChain, loaderData: LoaderResults, params: Params, request: Request): Headers | null;
+export declare function resolveHeaders(chain: LayoutChain, loaderData: LoaderResults, params: Params, request: Request, actionInit?: ResponseInit | null): Headers | null;
 /**
  * Copy resolved route headers onto a base headers object, overriding any
  * same-key defaults. Mutates and returns `base`. No-op when `resolved` is null.

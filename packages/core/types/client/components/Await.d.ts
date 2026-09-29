@@ -7,8 +7,20 @@ interface AwaitProps<T> {
      * so they can be passed straight through.
      */
     resolve: Promise<T> | Deferred<T>;
-    fallback: ReactNode;
-    children: (data: T) => ReactNode;
+    /** Shown while pending. Optional (React Router lets an outer `<Suspense>` provide it). */
+    fallback?: ReactNode;
+    /**
+     * Shown when the promise rejects (React Router). Read the error with
+     * `useAsyncError()`. Without it, the rejection propagates to the route's
+     * ErrorBoundary.
+     */
+    errorElement?: ReactNode;
+    /** A render function of the value, or elements that read it via `useAsyncValue()`. */
+    children: ((data: T) => ReactNode) | ReactNode;
 }
-export declare function Await<T>({ resolve, fallback, children }: AwaitProps<T>): import("react").JSX.Element;
+/** React Router's `useAsyncValue()`: the resolved value of the nearest `<Await>`. */
+export declare function useAsyncValue<T = unknown>(): T;
+/** React Router's `useAsyncError()`: the rejection of the nearest `<Await>` (inside its `errorElement`). */
+export declare function useAsyncError(): unknown;
+export declare function Await<T>({ resolve, fallback, errorElement, children }: AwaitProps<T>): import("react").JSX.Element;
 export {};
