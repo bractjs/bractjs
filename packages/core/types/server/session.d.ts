@@ -10,6 +10,17 @@ export interface Session {
     delete(key: string): void;
     /** Whether the key exists. */
     has(key: string): boolean;
+    /** React Router name for {@link Session.delete}. */
+    unset(key: string): void;
+    /**
+     * Set a value that the next `get(key)` returns once and then removes
+     * (React Router `session.flash`) — commit the session after reading it.
+     */
+    flash(key: string, val: unknown): void;
+    /** A snapshot of the stored values (flash values included under their internal keys). */
+    readonly data: Readonly<SessionData>;
+    /** Always `""` — cookie sessions carry their data, not an id (React Router parity). */
+    readonly id: string;
 }
 /** Reads sessions from a `Cookie` header and serializes them back to `Set-Cookie`. */
 export interface SessionStorage {
@@ -17,6 +28,14 @@ export interface SessionStorage {
     getSession(cookie?: string | null): Promise<Session>;
     /** Serialize + HMAC-sign the session into a `Set-Cookie` header value. */
     commitSession(session: Session, opts?: CommitOptions): Promise<string>;
+}
+/** What {@link createCookieSession} returns: {@link SessionStorage} plus `destroySession`. */
+export interface CookieSessionStorage extends SessionStorage {
+    /**
+     * A `Set-Cookie` value that deletes the session cookie (React Router
+     * `destroySession`). Same as `commitSession` of an empty session with `maxAge: 0`.
+     */
+    destroySession(session?: Session): Promise<string>;
 }
 /** Options for {@link createCookieSession}. */
 export interface CookieSessionOptions {
@@ -53,4 +72,24 @@ export interface CommitOptions {
  * session.set("userId", user.id);
  * headers.set("Set-Cookie", await storage.commitSession(session));
  */
-export declare function createCookieSession(options: CookieSessionOptions): SessionStorage;
+export declare function createCookieSession(options: CookieSessionOptions): CookieSessionStorage;
+/** React Router's `createCookieSessionStorage` options (the cookie subset BractJS supports). */
+export interface CookieSessionStorageOptions {
+    cookie: {
+        name?: string;
+        secrets?: string[];
+        maxAge?: number;
+        secure?: boolean;
+        sameSite?: "lax" | "strict" | "none" | "Lax" | "Strict" | "None" | boolean;
+        /** Accepted for compatibility; BractJS session cookies are always HttpOnly. */
+        httpOnly?: boolean;
+        /** Accepted for compatibility; BractJS session cookies are always `Path=/`. */
+        path?: string;
+    };
+}
+/**
+ * React Router's `createCookieSessionStorage({ cookie })`, mapped onto
+ * {@link createCookieSession}. `secrets` is required (each ≥ 16 chars) — an
+ * unsigned session cookie is refused rather than silently trusted.
+ */
+export declare function createCookieSessionStorage(options: CookieSessionStorageOptions): CookieSessionStorage;

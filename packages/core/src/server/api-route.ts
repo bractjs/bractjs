@@ -1,6 +1,11 @@
 import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
 import { isExplicitDev } from "./env.ts";
-import { type MiddlewareContext, type MiddlewareFn, runRouteMiddleware } from "./middleware.ts";
+import {
+  createMiddlewareContext,
+  type MiddlewareContext,
+  type MiddlewareFn,
+  runRouteMiddleware,
+} from "./middleware.ts";
 import { hasForbiddenKey } from "./proto-guard.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -133,7 +138,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
     // Shared across the middleware chain and the handler (third argument):
     // middleware sets fields on ctx.context (e.g. the authenticated user) and
     // the handler reads them.
-    const ctx: MiddlewareContext = { request, params, context: {} };
+    const ctx: MiddlewareContext = createMiddlewareContext(request, params);
 
     const invoke = async (): Promise<Response> => {
       let input: unknown;

@@ -1,9 +1,10 @@
+import { RouterContextProvider } from "../shared/router-context.ts";
 import { describe, expect, test } from "bun:test";
 import type { MiddlewareContext } from "../server/middleware.ts";
 import { collectRouteMiddleware, type RouteMiddleware, runRouteMiddleware } from "../server/middleware.ts";
 
 function makeCtx(): MiddlewareContext {
-  return { request: new Request("http://localhost/"), params: {}, context: {} };
+  return { request: new Request("http://localhost/"), params: {}, context: new RouterContextProvider() };
 }
 
 const ok = async () => new Response("ok", { status: 200 });

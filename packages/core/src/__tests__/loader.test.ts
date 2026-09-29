@@ -1,3 +1,4 @@
+import { RouterContextProvider } from "../shared/router-context.ts";
 import { describe, expect, spyOn, test } from "bun:test";
 import type { LayoutChain } from "../server/layout.ts";
 import { buildLoaderArgs, runLoaders, safeRun } from "../server/loader.ts";
@@ -7,8 +8,9 @@ import type { LoaderArgs, RouteModule } from "../shared/route-types.ts";
 const stubArgs: LoaderArgs = {
   request: new Request("http://localhost/"),
   params: {},
-  context: {},
+  context: new RouterContextProvider(),
   search: {},
+  url: new URL("http://x/"),
 };
 
 const emptyModule: RouteModule = {};
@@ -192,6 +194,6 @@ describe("buildLoaderArgs", () => {
     const args = buildLoaderArgs(req, params, context);
     expect(args.request).toBe(req);
     expect(args.params).toBe(params);
-    expect(args.context).toBe(context);
+    expect(args.context).toBe(context as unknown as typeof args.context);
   });
 });

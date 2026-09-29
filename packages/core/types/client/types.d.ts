@@ -1,5 +1,5 @@
 import type { ServerManifest } from "../server/render.ts";
-import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
+import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 export interface BractJSClientData {
     loaderData: Record<string, unknown>;
     actionData: unknown;
@@ -12,6 +12,8 @@ export interface BractJSClientData {
     routeFile?: string;
     /** Merged meta descriptors for the current route — keeps <head> in sync. */
     meta?: MetaDescriptor[];
+    /** Route `links()` descriptors (root → layouts → route). */
+    links?: LinkDescriptor[];
     /** Matched route chain (root → layouts → route) powering `useMatches()`. */
     matches?: RouteMatch[];
     /** Present when the document did not SSR the route component (selective SSR / SPA shell). */

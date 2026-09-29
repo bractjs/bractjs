@@ -1,3 +1,5 @@
+import type { DataWithResponseInit } from "./data.ts";
+import type { RouteContext } from "./router-context.ts";
 /**
  * A parsed navigation location. `key` is the stable identity of the history
  * entry (used by scroll restoration); `state` is the value passed via
@@ -15,8 +17,15 @@ export interface RouterLocation {
 }
 export interface LoaderArgs<TSearch extends Record<string, unknown> = Record<string, unknown>> {
     request: Request;
+    /** `request.url`, parsed (React Router 8's sibling `url` argument). */
+    url: URL;
     params: Record<string, string>;
-    context: Record<string, unknown>;
+    /**
+     * Shared per-request context: string fields set by middleware /
+     * `defineContext()`, plus typed keys via `context.get(key)` /
+     * `context.set(key, value)` (see `createContext`).
+     */
+    context: RouteContext;
     /**
      * The request's search params, validated/coerced by the route's
      * `searchSchema` export when present; otherwise the raw string record
@@ -39,7 +48,9 @@ export interface ActionArgs<TSearch extends Record<string, unknown> = Record<str
  * `useLoaderData<HomeData>()`. `Deferred<V>` fields are preserved — that is the
  * shape the component receives during streaming SSR (unwrap them with `<Await>`).
  */
-export type LoaderData<T> = T extends (...args: never[]) => unknown ? Exclude<Awaited<ReturnType<T>>, Response> : T;
+export type LoaderData<T> = T extends (...args: never[]) => unknown ? UnwrapData<Exclude<Awaited<ReturnType<T>>, Response>> : T;
+/** `data(value, init)` returns carry `value` to the component. */
+type UnwrapData<T> = T extends DataWithResponseInit<infer D> ? D : T;
 /** The data a route's action resolves to, for typing `useActionData`. See {@link LoaderData}. */
 export type ActionData<T> = LoaderData<T>;
 export type MetaDescriptor = {
@@ -55,10 +66,56 @@ export type MetaDescriptor = {
 };
 export interface MetaArgs<T = unknown> {
     loaderData: T;
+    /** Alias of `loaderData` (Remix / React Router 7 name). */
+    data: T;
     params: Record<string, string>;
+    /** The request location (hash is always `""` on the server). */
+    location: {
+        pathname: string;
+        search: string;
+        hash: string;
+    };
+    /**
+     * The matched chain up to and including this module (root → layouts → this),
+     * each with its loader data and the meta descriptors resolved so far.
+     */
+    matches: MetaMatch[];
+    /** The route's loader error when it failed (only passed to root/layout meta). */
+    error?: unknown;
 }
-export type LoaderFunction<T = unknown> = (args: LoaderArgs) => Promise<T | Response> | T | Response;
-export type ActionFunction<T = unknown> = (args: ActionArgs) => Promise<T | Response> | T | Response;
+/** One entry of {@link MetaArgs.matches}. */
+export interface MetaMatch {
+    id: string;
+    pathname: string;
+    params: Record<string, string>;
+    data: unknown;
+    loaderData: unknown;
+    handle: Record<string, unknown> | undefined;
+    meta: MetaDescriptor[];
+}
+/**
+ * A `<link>` produced by a route's `links()` export (React Router shape). Every
+ * string/boolean field becomes an attribute; stylesheets are ordered after the
+ * framework's own CSS.
+ */
+export type LinkDescriptor = {
+    rel: string;
+    href?: string;
+    as?: string;
+    type?: string;
+    media?: string;
+    sizes?: string;
+    crossOrigin?: "anonymous" | "use-credentials";
+    integrity?: string;
+    hrefLang?: string;
+    imageSrcSet?: string;
+    imageSizes?: string;
+    title?: string;
+    [attr: string]: string | boolean | undefined;
+};
+export type LinksFunction = () => LinkDescriptor[];
+export type LoaderFunction<T = unknown> = (args: LoaderArgs) => Promise<T | Response | DataWithResponseInit<T>> | T | Response | DataWithResponseInit<T>;
+export type ActionFunction<T = unknown> = (args: ActionArgs) => Promise<T | Response | DataWithResponseInit<T>> | T | Response | DataWithResponseInit<T>;
 export type MetaFunction<T = unknown> = (args: MetaArgs<T>) => MetaDescriptor[];
 export interface HeadersArgs<T = unknown> {
     /** This route's loader data (the route slice, already awaited). */
@@ -71,6 +128,12 @@ export interface HeadersArgs<T = unknown> {
      * `headers()` in the chain runs in order and sees what came before it.
      */
     parentHeaders: Headers;
+    /** Headers this module's loader returned via `data(value, { headers })` (React Router). */
+    loaderHeaders: Headers;
+    /** Headers the route's action returned via `data(value, { headers })` — empty on GETs. */
+    actionHeaders: Headers;
+    /** Error headers (always empty — kept for React Router signature parity). */
+    errorHeaders?: Headers;
 }
 /**
  * A route/layout/root module's optional `headers` export, used to set
@@ -89,11 +152,11 @@ export type HeadersFunction<T = unknown> = (args: HeadersArgs<T>) => HeadersInit
 export type RouteMiddlewareFunction = (ctx: {
     request: Request;
     params: Record<string, string>;
-    context: Record<string, unknown>;
-}, next: () => Promise<Response>) => Promise<Response>;
+    context: RouteContext;
+}, next: () => Promise<Response>) => Promise<Response | void> | Response | void;
 export interface BeforeLoadArgs {
     params: Record<string, string>;
-    context: Record<string, unknown>;
+    context: RouteContext;
     location: {
         pathname: string;
         search: string;
@@ -115,6 +178,17 @@ export interface ShouldRevalidateArgs {
     formMethod?: string;
     /** HTTP status the action responded with, when mutation-triggered. */
     actionStatus?: number;
+    /** URL the mutation was submitted to, when mutation-triggered. */
+    formAction?: string;
+    /** The submitted FormData, when mutation-triggered. */
+    formData?: FormData;
+    /** Data the action returned, when mutation-triggered. */
+    actionResult?: unknown;
+    /**
+     * `true` unless the triggering `<Link>` / `<Form>` / `navigate()` /
+     * `fetcher.submit()` passed `defaultShouldRevalidate: false`. Routes without a
+     * `shouldRevalidate` export follow this value directly.
+     */
     defaultShouldRevalidate: boolean;
 }
 export type ShouldRevalidateFunction = (args: ShouldRevalidateArgs) => boolean;
@@ -151,6 +225,24 @@ export type ClientActionFunction<T = unknown> = (args: {
     /** Invoke this route's server action and get its returned data. */
     serverAction: () => Promise<unknown>;
 }) => Promise<T> | T;
+/**
+ * Props every route component receives (React Router 7 `Route.ComponentProps`):
+ * the route's loader data, the last action result, params and the matched chain.
+ * Layout components receive their own loader slice; root receives root's.
+ * `useLoaderData()` keeps working — use whichever reads better.
+ */
+export interface RouteComponentProps<TLoader = unknown, TAction = unknown> {
+    loaderData: LoaderData<TLoader>;
+    actionData: ActionData<TAction> | undefined;
+    params: Record<string, string>;
+    matches: RouteMatch[];
+}
+/** Props of a route's `ErrorBoundary` (React Router 7 `Route.ErrorBoundaryProps`). */
+export interface ErrorBoundaryProps {
+    error: unknown;
+    params?: Record<string, string>;
+    loaderData?: unknown;
+}
 export interface RouteModule<TLoader = unknown, TAction = unknown> {
     loader?: LoaderFunction<TLoader>;
     action?: ActionFunction<TAction>;
@@ -159,6 +251,8 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
     /** Browser-side action; see {@link ClientActionFunction}. */
     clientAction?: ClientActionFunction<TAction>;
     meta?: MetaFunction<TLoader>;
+    /** `<link>` tags for this route (React Router `links`), hoisted into `<head>`. */
+    links?: LinksFunction;
     /**
      * Set response headers (`Cache-Control`, `ETag`, `Vary`, CDN hints, …) for
      * this route's document and `/_data` responses. Runs in chain order
@@ -174,6 +268,8 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
      * global `pipeline` middleware.
      */
     middleware?: RouteMiddlewareFunction | RouteMiddlewareFunction[];
+    /** React Router 7.3–7.8 name for {@link RouteModule.middleware}; read when `middleware` is absent. */
+    unstable_middleware?: RouteMiddlewareFunction | RouteMiddlewareFunction[];
     beforeLoad?: BeforeLoadFunction;
     shouldRevalidate?: ShouldRevalidateFunction;
     /**
@@ -194,10 +290,17 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
     ssr?: boolean | "data-only";
     /** SSR'd in the component's place for `ssr: false` / `"data-only"` routes (HydrateFallback equivalent). */
     Fallback?: React.ComponentType;
+    /**
+     * React Router name for the placeholder rendered while a `clientLoader`
+     * with `hydrate = true` runs (the route SSRs this instead of its component —
+     * like `ssr = "data-only"`). Also accepted in place of `Fallback`.
+     */
+    HydrateFallback?: React.ComponentType;
     handle?: Record<string, unknown>;
     ErrorBoundary?: React.ComponentType<{
         error: unknown;
     }>;
+    /** The route component. Receives {@link RouteComponentProps} (optional to declare). */
     default?: React.ComponentType;
 }
 export interface RouteDefinition {
@@ -225,3 +328,16 @@ export interface RouteMatch<TData = unknown, THandle = Record<string, unknown>> 
     /** This module's static `handle` export, or `undefined` if none. */
     handle: THandle | undefined;
 }
+/** React Router name for {@link LoaderArgs}. */
+export type LoaderFunctionArgs = LoaderArgs;
+/** React Router name for {@link ActionArgs}. */
+export type ActionFunctionArgs = ActionArgs;
+/** React Router name for the `clientLoader` argument. */
+export type ClientLoaderFunctionArgs = Parameters<ClientLoaderFunction>[0];
+/** React Router name for the `clientAction` argument. */
+export type ClientActionFunctionArgs = Parameters<ClientActionFunction>[0];
+/** React Router name for {@link ShouldRevalidateArgs}. */
+export type ShouldRevalidateFunctionArgs = ShouldRevalidateArgs;
+/** React Router name for {@link RouteMiddlewareFunction}. */
+export type MiddlewareFunction = RouteMiddlewareFunction;
+export {};

@@ -10,7 +10,8 @@ import { isDevRuntime, isExplicitDev } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import { buildTrie, matchRoute } from "./matcher.ts";
-import { type MiddlewareContext, pipeline } from "./middleware.ts";
+import { instrument, type Instrumentation, instrumentRequest } from "./instrumentation.ts";
+import { createMiddlewareContext, type MiddlewareContext, pipeline } from "./middleware.ts";
 import type { ServerManifest } from "./render.ts";
 import { runWithRequest } from "./request-context.ts";
 import { type HandlerConfig, handleRequest } from "./request-handler.ts";
@@ -102,6 +103,19 @@ export interface BractJSConfig {
   /** Called for every unexpected error: loader failures, action throws, and uncaught process exceptions. Redirects and HttpErrors are intentional control flow and are NOT reported here. The request is undefined for process-level exceptions. */
   onError?: OnErrorHook;
   /**
+   * Read-only observability wrappers around requests, loaders, actions and
+   * route middleware (React Router 8 Instrumentation API). Usually listed in
+   * `app/lifecycle.ts`; `instrument(...)` in `app/server.ts` is equivalent.
+   */
+  instrumentations?: Instrumentation[];
+  /**
+   * Milliseconds a streamed document waits for pending `defer()` data (and
+   * Suspense boundaries) before giving up: pending values reject with a 504
+   * `HttpError` that `<Await>`'s error path renders. React Router's
+   * `streamTimeout`. Unset → no limit.
+   */
+  streamTimeout?: number;
+  /**
    * Pre-scanned route list (typically exported from `app/_generated/routes.ts`).
    * When provided, skips the startup `Bun.Glob` scan of `appDir`. Required for
    * `bun build --compile` binaries where the embedded filesystem has no
@@ -121,6 +135,8 @@ export interface BractJSConfig {
    */
   actionModules?: Array<{ relPath: string; mod: Record<string, unknown> }>;
 }
+
+let unregisterConfigInstrumentations: (() => void) | null = null;
 
 const DEFAULT_MANIFEST: ServerManifest = {
   clientEntry: "/build/client/client.js",
@@ -204,6 +220,12 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     : loadServerActions(appDir);
   const moduleRegistry = config.moduleRegistry;
   const onError = config.onError;
+  // Config-supplied instrumentations replace the previous handler's (a second
+  // buildFetchHandler — tests, embedders — must not stack duplicates).
+  unregisterConfigInstrumentations?.();
+  unregisterConfigInstrumentations = config.instrumentations?.length
+    ? instrument(...config.instrumentations)
+    : null;
   const ssrEnabled = config.ssr !== false;
   const allowedHosts = config.allowedHosts ?? [];
 
@@ -353,7 +375,14 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     }
 
     const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
-    const handlerConfig: HandlerConfig = { appDir, publicDir, manifest, onError, moduleRegistry };
+    const handlerConfig: HandlerConfig = {
+      appDir,
+      publicDir,
+      manifest,
+      onError,
+      moduleRegistry,
+      streamTimeout: config.streamTimeout,
+    };
     return handleRequest(request, trie, handlerConfig, context);
   }
 
@@ -372,7 +401,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // API routes, server actions, /_stream, /_image and static assets — not
     // only SSR documents. The per-route (nested) middleware chain still runs
     // inside handleRequest for SSR/_data, sharing this same `context` object.
-    const ctx: MiddlewareContext = { request, params: {}, context: {} };
+    const ctx: MiddlewareContext = createMiddlewareContext(request);
     // SECURITY(high): adapter-agnostic catch-all. An uncaught throw from a
     // global middleware or from dispatch itself (e.g. resolveRouteChain at
     // import time) would otherwise reach the adapter's error handler — which on
@@ -381,7 +410,11 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // generic 500 with the message gated to dev — matching every other path.
     try {
       // getRequest() works anywhere below this point (server actions above all).
-      return await runWithRequest(request, () => pipeline.run(ctx, () => dispatch(request, ctx.context)));
+      return await runWithRequest(request, () =>
+        instrumentRequest({ request, context: ctx.context }, () =>
+          pipeline.run(ctx, () => dispatch(request, ctx.context)),
+        ),
+      );
     } catch (err) {
       console.error("[bract] unhandled request error:", err);
       await fireOnError(onError, err, request);

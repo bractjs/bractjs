@@ -35,6 +35,11 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
   );
   check("hostname", typeof c.hostname === "string", "a string");
   check(
+    "streamTimeout",
+    typeof c.streamTimeout === "number" && Number.isFinite(c.streamTimeout) && c.streamTimeout >= 0,
+    "a non-negative number of milliseconds",
+  );
+  check(
     "allowedHosts",
     Array.isArray(c.allowedHosts) && c.allowedHosts.every((h) => typeof h === "string"),
     "an array of strings",

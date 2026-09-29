@@ -1,6 +1,7 @@
 import { createElement, Fragment, type ReactNode } from "react";
 import { renderToReadableStream } from "react-dom/server";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
+import { LinkTags } from "../shared/link-tags.tsx";
 import { MetaTags } from "../shared/meta-tags.tsx";
 import { CspNonceContext } from "../shared/nonce-context.tsx";
 import {
@@ -10,7 +11,7 @@ import {
   routeCssHrefs,
   StyleLinks,
 } from "../shared/style-links.tsx";
-import type { MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
+import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 import { appendDeferredScript, encodeDeferred } from "./deferred-wire.ts";
 import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
 import { mergeMeta } from "./meta.ts";
@@ -45,6 +46,8 @@ export interface RenderOptions {
   search?: Record<string, unknown>;
   manifest: ServerManifest;
   meta: MetaDescriptor[];
+  /** Route `links()` descriptors (root → layouts → route), rendered into `<head>`. */
+  links?: LinkDescriptor[];
   /** The matched route chain (root → layouts → route) for `useMatches()`. */
   matches?: RouteMatch[];
   status?: number;
@@ -70,6 +73,11 @@ export interface RenderOptions {
    * on top of the baseline document headers, overriding any same-key default.
    */
   headers?: Headers | null;
+  /**
+   * Abort the React render and fail still-pending `defer()` data after this
+   * many ms (React Router's `streamTimeout`). Unset → no limit.
+   */
+  streamTimeout?: number;
 }
 
 export async function renderRoute(options: RenderOptions): Promise<Response> {
@@ -92,7 +100,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   const { matches: wireMatches, ...wireLoaderData } = wire;
   const bootstrapScriptContent =
     devOverlay +
-    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, ssrMode: options.ssrMode })};`;
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, links: options.links?.length ? options.links : undefined, ssrMode: options.ssrMode })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers
@@ -112,6 +120,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
       Fragment,
       null,
       createElement(MetaTags, { meta: mergedMeta }),
+      createElement(LinkTags, { links: options.links ?? [] }),
       createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
       createElement(StyleLinks, {
         hrefs: routeCssHrefs(manifest, options.routePattern),
@@ -130,6 +139,9 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     // inline bootstrap script and the client entry <script type=module>, so
     // they satisfy a strict `script-src 'nonce-…'` policy.
     nonce: options.nonce,
+    // streamTimeout: past it, React stops waiting on Suspense boundaries and
+    // leaves them to the client (a hung promise can't hold the socket open).
+    signal: options.streamTimeout ? AbortSignal.timeout(options.streamTimeout + 1_000) : undefined,
     onError(error) {
       renderError = error;
       console.error("[bract] renderToReadableStream error:", error);
@@ -163,7 +175,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     });
   }
 
-  return new Response(appendDeferredScript(stream, deferred, options.nonce), {
+  return new Response(appendDeferredScript(stream, deferred, options.nonce, options.streamTimeout), {
     status: responseStatus,
     headers,
   });

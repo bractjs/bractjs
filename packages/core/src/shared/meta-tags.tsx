@@ -19,9 +19,28 @@ export function MetaTags({ meta }: { meta: MetaDescriptor[] }): ReactElement {
   const children: ReactElement[] = [];
 
   for (const d of meta) {
+    const rec = d as Record<string, unknown>;
     if ("title" in d && typeof (d as { title: unknown }).title === "string") {
       const title = (d as { title: string }).title;
       children.push(createElement("title", { key: "title" }, title));
+    } else if ("script:ld+json" in rec) {
+      // React Router: `{ "script:ld+json": {...} }` → JSON-LD. Escape `<` so a
+      // value can't close the script element.
+      const json = JSON.stringify(rec["script:ld+json"]).replace(/</g, "\\u003c");
+      children.push(
+        createElement("script", {
+          key: `ld:${json}`,
+          type: "application/ld+json",
+          dangerouslySetInnerHTML: { __html: json },
+        }),
+      );
+    } else if (rec.tagName === "link") {
+      // React Router: `{ tagName: "link", rel, href }` → a hoisted <link>.
+      const { tagName: _t, ...attrs } = rec;
+      const props = stringProps(attrs);
+      children.push(createElement("link", { key: `link:${props.rel}|${props.href}`, ...props }));
+    } else if ("charSet" in rec || "charset" in rec) {
+      children.push(createElement("meta", { key: "charset", charSet: String(rec.charSet ?? rec.charset) }));
     } else if ("name" in d && "content" in d) {
       const { name, content } = d as { name: string; content: string };
       children.push(createElement("meta", { key: `name:${name}`, name, content }));
@@ -29,7 +48,8 @@ export function MetaTags({ meta }: { meta: MetaDescriptor[] }): ReactElement {
       const { property, content } = d as { property: string; content: string };
       children.push(createElement("meta", { key: `prop:${property}`, property, content }));
     } else {
-      // Arbitrary descriptor: render each string field as a meta attribute set.
+      // Arbitrary descriptor (httpEquiv, itemProp, …): render each string
+      // field as a meta attribute set.
       const entries = Object.entries(d).filter(([, v]) => typeof v === "string") as Array<[string, string]>;
       if (entries.length > 0) {
         const props: Record<string, string> = {};
@@ -41,4 +61,10 @@ export function MetaTags({ meta }: { meta: MetaDescriptor[] }): ReactElement {
   }
 
   return createElement(Fragment, null, ...children);
+}
+
+function stringProps(rec: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rec)) if (typeof v === "string") out[k] = v;
+  return out;
 }

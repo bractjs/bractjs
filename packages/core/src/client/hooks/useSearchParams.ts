@@ -1,17 +1,52 @@
-import { startTransition, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { SearchFor } from "../registry.ts";
 import { NavigationContext } from "../router.tsx";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+/** Anything `new URLSearchParams(init)` accepts, plus React Router's array-valued records. */
+export type URLSearchParamsInit =
+  string | URLSearchParams | Array<[string, string]> | Record<string, string | string[]>;
+
+export interface SetSearchParamsOptions {
+  /** Replace the current history entry instead of pushing (React Router). */
+  replace?: boolean;
+  /** History state for the new entry. */
+  state?: unknown;
+  /** Accepted for React Router compatibility; no effect. */
+  preventScrollReset?: boolean;
+}
+
 type SetSearchParams = (
-  updater: Record<string, string> | ((prev: URLSearchParams) => URLSearchParams),
+  updater: URLSearchParamsInit | ((prev: URLSearchParams) => URLSearchParamsInit),
+  options?: SetSearchParamsOptions,
 ) => void;
 
-export interface SearchParamsResult<T extends Record<string, string>> {
+/**
+ * The hook's result. Read it as an object (`{ searchParams, setSearchParams }`)
+ * or destructure it as React Router's tuple (`const [searchParams,
+ * setSearchParams] = useSearchParams()`) — both work.
+ */
+export type SearchParamsResult<T extends Record<string, string>> = readonly [
+  URLSearchParams,
+  SetSearchParams,
+] & {
   searchParams: URLSearchParams;
   getParam<K extends keyof T & string>(key: K): T[K] | null;
   setSearchParams: SetSearchParams;
+};
+
+/** React Router `createSearchParams()`: build URLSearchParams, expanding array values. */
+export function createSearchParams(init: URLSearchParamsInit = ""): URLSearchParams {
+  if (typeof init === "string" || init instanceof URLSearchParams || Array.isArray(init)) {
+    return new URLSearchParams(init);
+  }
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(init)) {
+    if (Array.isArray(v)) for (const item of v) params.append(k, item);
+    else params.append(k, v);
+  }
+  return params;
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────
@@ -62,24 +97,29 @@ export function useSearchParams(): SearchParamsResult<Record<string, string>> {
   }, []);
 
   const setSearchParams: SetSearchParams = useCallback(
-    (updater) => {
-      const next =
-        typeof updater === "function"
-          ? updater(new URLSearchParams(window.location.search))
-          : new URLSearchParams(updater);
+    (updater, options) => {
+      const next = createSearchParams(
+        typeof updater === "function" ? updater(new URLSearchParams(window.location.search)) : updater,
+      );
 
       const newSearch = next.toString();
       const newUrl = window.location.pathname + (newSearch ? "?" + newSearch : "") + window.location.hash;
 
-      // Update browser URL without pushing a new history entry if only params changed.
-      history.pushState({}, "", newUrl);
+      // Update the browser URL now so reads during the transition see it.
+      if (options?.replace) history.replaceState({}, "", newUrl);
+      else history.pushState({}, "", newUrl);
       selfTriggerRef.current = true;
       startTransition(() => setSearchParamsState(next));
 
       // Trigger a loader re-run via the NavigationContext navigate so the full
       // soft-nav fetch path is exercised (meta update, module swap, etc.).
+      // Always `replace` here: the entry was already written above.
       if (navCtx) {
-        void navCtx.navigate(window.location.pathname + (newSearch ? "?" + newSearch : ""));
+        void navCtx.navigate(window.location.pathname + (newSearch ? "?" + newSearch : ""), {
+          replace: true,
+          state: options?.state,
+          unblocked: true,
+        });
       }
     },
     [navCtx],
@@ -92,5 +132,18 @@ export function useSearchParams(): SearchParamsResult<Record<string, string>> {
     [searchParams],
   );
 
-  return { searchParams, getParam, setSearchParams };
+  return useMemo(() => {
+    // A real tuple for React Router-style destructuring, carrying the object
+    // fields for BractJS-style access.
+    const tuple: [URLSearchParams, SetSearchParams] = [searchParams, setSearchParams];
+    const result = tuple as unknown as {
+      -readonly [K in keyof SearchParamsResult<Record<string, string>>]: SearchParamsResult<
+        Record<string, string>
+      >[K];
+    };
+    result.searchParams = searchParams;
+    result.getParam = getParam;
+    result.setSearchParams = setSearchParams;
+    return result as unknown as SearchParamsResult<Record<string, string>>;
+  }, [searchParams, getParam, setSearchParams]);
 }

@@ -14,14 +14,22 @@ export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloud
 // `@bractjs/bractjs/build`; codegen (module registries for the compiled
 // binary) at `@bractjs/bractjs/codegen`. See src/build-entry.ts and
 // src/codegen-entry.ts.
-export { buildPath } from "./client/build-path.ts";
-export { Await } from "./client/components/Await.tsx";
+export { buildPath, generatePath, generatePath as href } from "./client/build-path.ts";
+export { Await, useAsyncError, useAsyncValue } from "./client/components/Await.tsx";
 export { Form } from "./client/components/Form.tsx";
+// React Router root-document components (no-ops — BractJS renders meta/links itself).
+export { Links, Meta, PrefetchPageLinks } from "./client/components/Head.tsx";
 export type { ImageFit, ImageFormat, ImageProps } from "./client/components/Image.tsx";
 export { Image } from "./client/components/Image.tsx";
+export type { LinkProps } from "./client/components/Link.tsx";
 export { Link } from "./client/components/Link.tsx";
 export { LiveReload } from "./client/components/LiveReload.tsx";
-export { Outlet } from "./client/components/Outlet.tsx";
+export type { NavigateProps } from "./client/components/Navigate.tsx";
+export { Navigate } from "./client/components/Navigate.tsx";
+export type { NavLinkProps, NavLinkRenderProps } from "./client/components/NavLink.tsx";
+export { NavLink } from "./client/components/NavLink.tsx";
+export type { OutletProps } from "./client/components/Outlet.tsx";
+export { Outlet, useOutletContext } from "./client/components/Outlet.tsx";
 // Client components
 export { Scripts } from "./client/components/Scripts.tsx";
 export type { ScrollRestorationProps } from "./client/components/ScrollRestoration.tsx";
@@ -29,10 +37,18 @@ export { ScrollRestoration } from "./client/components/ScrollRestoration.tsx";
 export type { ToasterProps, ToastPosition } from "./client/components/Toaster.tsx";
 export { Toaster } from "./client/components/Toaster.tsx";
 export type { FetcherEntry, FetcherState } from "./client/fetcher-store.ts";
+export { useFormAction, useHref, useNavigationType, useResolvedPath } from "./client/hooks/compat.ts";
 export { useActionData } from "./client/hooks/useActionData.ts";
+export type {
+  Blocker,
+  BlockerFunction,
+  BlockerFunctionArgs,
+  HistoryAction,
+} from "./client/hooks/useBlocker.ts";
 export { useBlocker } from "./client/hooks/useBlocker.ts";
 export type {
   FetcherFormProps,
+  FetcherRequest,
   FetcherResult,
   StreamFetcherResult,
   UseFetcherOptions,
@@ -47,14 +63,22 @@ export { useLocation } from "./client/hooks/useLocation.ts";
 export { useMatches } from "./client/hooks/useMatches.ts";
 export type { NavigateFn, NavigateOptions } from "./client/hooks/useNavigate.ts";
 export { useNavigate } from "./client/hooks/useNavigate.ts";
+export type { Navigation } from "./client/hooks/useNavigation.ts";
 export { useNavigation } from "./client/hooks/useNavigation.ts";
 export { useParams } from "./client/hooks/useParams.ts";
 export type { Revalidator } from "./client/hooks/useRevalidator.ts";
 export { useRevalidator } from "./client/hooks/useRevalidator.ts";
+export { useRouteLoaderData } from "./client/hooks/useRouteLoaderData.ts";
 export type { SetSearchFn, SetSearchOptions } from "./client/hooks/useSearch.ts";
 export { useSearch, useSetSearch } from "./client/hooks/useSearch.ts";
-export type { SearchParamsResult } from "./client/hooks/useSearchParams.ts";
-export { useSearchParams } from "./client/hooks/useSearchParams.ts";
+export type {
+  SearchParamsResult,
+  SetSearchParamsOptions,
+  URLSearchParamsInit,
+} from "./client/hooks/useSearchParams.ts";
+export { createSearchParams, useSearchParams } from "./client/hooks/useSearchParams.ts";
+export type { SubmitFunction } from "./client/hooks/useSubmit.ts";
+export { useSubmit } from "./client/hooks/useSubmit.ts";
 export { useToast, useToasts } from "./client/hooks/useToast.ts";
 // Typed-routing registration seam. Augment `Register` (done by `bractjs codegen`
 // in app/route-types.gen.ts) to make <Link>, useNavigate, useParams, and
@@ -74,6 +98,7 @@ export type {
 // Client RPC
 export { createClient } from "./client/rpc.ts";
 export { serializeSearch } from "./client/search-serializer.ts";
+export type { SubmitEncType, SubmitOptions, SubmitTarget } from "./client/submission.ts";
 export type { Toast, ToastAction, ToastEntry, ToastOptions, ToastType } from "./client/toast-store.ts";
 export { toast } from "./client/toast-store.ts";
 export { defineConfig, loadUserConfig } from "./config/load.ts";
@@ -95,15 +120,27 @@ export type { CspOptions } from "./server/csp.ts";
 export { CSP_NONCE_KEY, csp, getCspNonce } from "./server/csp.ts";
 // i18n utilities (server-side)
 export { localizedDataPath, stripLocale, wrapRoutesWithLocale } from "./server/i18n.ts";
+// Instrumentation (React Router 8 API) — read-only request/loader/action/middleware wrappers.
+export type {
+  HandlerInstrumentations,
+  InstrumentCall,
+  Instrumentation,
+  InstrumentRequestInfo,
+  InstrumentResult,
+  InstrumentRouteInfo,
+  RouteInstrumentations,
+} from "./server/instrumentation.ts";
+export { clearInstrumentations, instrument } from "./server/instrumentation.ts";
 export type { BractJSConfig, RenderOptions, ServerManifest } from "./server/index.ts";
 // Server
 export { createServer, error, json, redirect, renderRoute } from "./server/index.ts";
+export { redirectDocument, replace } from "./server/response.ts";
 export type { ModuleRegistry } from "./server/layout.ts";
 export type { LifecycleHooks } from "./server/lifecycle.ts";
 export { defineLifecycle } from "./server/lifecycle.ts";
 export type { MiddlewareContext, MiddlewareFn, RouteMiddleware } from "./server/middleware.ts";
 // Middleware
-export { MiddlewarePipeline, pipeline } from "./server/middleware.ts";
+export { createMiddlewareContext, MiddlewarePipeline, pipeline } from "./server/middleware.ts";
 export { getRequest } from "./server/request-context.ts";
 export type { RouteFile, Segment } from "./server/scanner.ts";
 export { searchParamsToObject, validateSearch } from "./server/search.ts";
@@ -112,12 +149,14 @@ export { buildFetchHandler } from "./server/serve.ts";
 export type {
   CommitOptions,
   CookieSessionOptions,
+  CookieSessionStorage,
+  CookieSessionStorageOptions,
   Session,
   SessionData,
   SessionStorage,
 } from "./server/session.ts";
 // Session
-export { createCookieSession } from "./server/session.ts";
+export { createCookieSession, createCookieSessionStorage } from "./server/session.ts";
 export { renderSpaShell } from "./server/spa.ts";
 export type { FieldErrors, SafeValidateResult } from "./server/validate.ts";
 export {
@@ -129,25 +168,52 @@ export {
 } from "./server/validate.ts";
 export type { BractJSContextValue, RouteManifest } from "./shared/context.ts";
 export { BractJSContext, BractJSProvider, useBractJSContext } from "./shared/context.ts";
+export { DataWithResponseInit, data } from "./shared/data.ts";
 export { Deferred, defer, isDeferred } from "./shared/deferred.ts";
 export { defineActions } from "./shared/define-actions.ts";
-export { BractJSError, HttpError, isBractJSError, isHttpError, isRedirect } from "./shared/errors.ts";
+export {
+  BractJSError,
+  HttpError,
+  isBractJSError,
+  isHttpError,
+  isRedirect,
+  isRouteErrorResponse,
+} from "./shared/errors.ts";
+export { useRouteError } from "./shared/route-error.ts";
+// Typed context keys (React Router 7.9+/8) — `context.get(key)` / `context.set(key, v)`.
+export type { ContextAccessors, RouteContext, RouterContext } from "./shared/router-context.ts";
+export {
+  createContext,
+  createContext as unstable_createContext,
+  RouterContextProvider,
+  RouterContextProvider as unstable_RouterContextProvider,
+} from "./shared/router-context.ts";
 export { formText, formValues } from "./shared/form-data.ts";
 // Shared types
 export type {
   ActionArgs,
   ActionData,
   ActionFunction,
+  ActionFunctionArgs,
   ClientActionFunction,
+  ClientActionFunctionArgs,
   ClientLoaderFunction,
+  ClientLoaderFunctionArgs,
+  ErrorBoundaryProps,
   HeadersArgs,
   HeadersFunction,
+  LinkDescriptor,
+  LinksFunction,
   LoaderArgs,
   LoaderData,
   LoaderFunction,
+  LoaderFunctionArgs,
   MetaArgs,
   MetaDescriptor,
   MetaFunction,
+  MetaMatch,
+  MiddlewareFunction,
+  RouteComponentProps,
   RouteDefinition,
   RouteMatch,
   RouteMiddlewareFunction,
@@ -155,4 +221,5 @@ export type {
   RouterLocation,
   ShouldRevalidateArgs,
   ShouldRevalidateFunction,
+  ShouldRevalidateFunctionArgs,
 } from "./shared/route-types.ts";

@@ -47,6 +47,7 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 26. [Full export index](#26-full-export-index)
 27. [Security model](#27-security-model)
 28. [Styling: CSS, Tailwind, CSS Modules](#28-styling)
+29. [React Router 7 / 8 compatibility: typed context, instrumentation, `data()`, `useSubmit`, `NavLink`, …](#29-react-router-7--8-compatibility)
 
 ---
 
@@ -1110,11 +1111,12 @@ export default defineLifecycle({
 });
 ```
 
-| Hook         | When                                                                                                                                                                                                         |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `onStart`    | Once, after the server starts listening.                                                                                                                                                                     |
-| `onShutdown` | Before exit — any signal, programmatic `stop()`, or uncaught exception.                                                                                                                                      |
-| `onError`    | Every unexpected error (loader/action throws, uncaught exceptions). Redirects and `HttpError`s are intentional control flow and are **not** reported. `request` is `undefined` for process-level exceptions. |
+| Hook               | When                                                                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `onStart`          | Once, after the server starts listening.                                                                                                                                                                     |
+| `onShutdown`       | Before exit — any signal, programmatic `stop()`, or uncaught exception.                                                                                                                                      |
+| `onError`          | Every unexpected error (loader/action throws, uncaught exceptions). Redirects and `HttpError`s are intentional control flow and are **not** reported. `request` is `undefined` for process-level exceptions. |
+| `instrumentations` | Not a hook but a list: read-only wrappers around every request, loader, action and route middleware, for tracing and timing ([§29](#29-react-router-7--8-compatibility)).                                    |
 
 - **`bractjs dev` and `bractjs start`** pick up `app/lifecycle.ts` automatically.
 - **Compiled binary / custom entry**: spread into `createServer()` yourself:
@@ -1553,6 +1555,8 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | `ssr`                                | `boolean`                 | `true`                 | `false` → SPA mode: static shell for every document GET (§21)       |
 | `prerender`                          | `string[] \| () => paths` | —                      | Paths to prerender at build time (§21)                              |
 | `onStart` / `onShutdown` / `onError` | hooks                     | —                      | Lifecycle (§16)                                                     |
+| `instrumentations`                   | `Instrumentation[]`       | —                      | Read-only request/loader/action/middleware wrappers (§29)           |
+| `streamTimeout`                      | `number` (ms)             | —                      | Fail still-pending `defer()` data with a 504 after this long (§29)  |
 
 `loadUserConfig()` validates these shapes and throws a clear error on an obvious mistake (e.g. a string `port`).
 
@@ -1564,27 +1568,31 @@ The package has three entries: `@bractjs/bractjs` (everything app code needs), `
 
 Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
-**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `getRequest`, `redirect`, `json`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
+**Server / runtime:** `createServer`, `buildFetchHandler`, `renderRoute`, `getRequest`, `redirect`, `redirectDocument`, `replace`, `json`, `data`, `error`, `defineContext`, `route`, `validate`, `safeValidate`, `isValidationResponse`, `readValidationError`, `validateSearch`, `searchParamsToObject`, `formText`, `formValues`, `defineActions`, `BunAdapter`, `defineLifecycle`, `renderSpaShell`
 
-**Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`
+**Errors:** `BractJSError`, `HttpError`, `isRedirect`, `isHttpError`, `isBractJSError`, `isRouteErrorResponse`, `useRouteError`
 
-**Streaming:** `defer`, `Deferred`, `isDeferred`, `Await`
+**Typed context:** `createContext`, `RouterContextProvider` (+ `unstable_` aliases), `createMiddlewareContext`
+
+**Instrumentation:** `instrument`, `clearInstrumentations`
+
+**Streaming:** `defer`, `Deferred`, `isDeferred`, `Await`, `useAsyncValue`, `useAsyncError`
 
 **Context:** `BractJSContext`, `BractJSProvider`, `useBractJSContext`
 
 **Middleware:** `pipeline`, `MiddlewarePipeline`, `requestLogger`, `cors`, `authGuard`, `csp`, `getCspNonce`, `CSP_NONCE_KEY`
 
-**Sessions:** `createCookieSession`
+**Sessions:** `createCookieSession`, `createCookieSessionStorage`
 
-**Components:** `Outlet`, `Link`, `Form`, `Scripts`, `LiveReload`, `Await`, `Image`, `ScrollRestoration`, `Toaster`
+**Components:** `Outlet`, `Link`, `NavLink`, `Navigate`, `Form`, `Scripts`, `LiveReload`, `Await`, `Image`, `ScrollRestoration`, `Toaster`, `Meta`, `Links`, `PrefetchPageLinks` (the last three are no-ops for ported roots)
 
-**Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useMatches`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useToast`, `useToasts`, `useLocale`, `useLocalizedLink`
+**Hooks:** `useLoaderData`, `useActionData`, `useLocation`, `useParams`, `useMatches`, `useNavigation`, `useNavigate`, `useFetcher`, `useFetchers`, `useRevalidator`, `useSearch`, `useSetSearch`, `useSearchParams`, `useBlocker`, `useToast`, `useToasts`, `useLocale`, `useLocalizedLink`, `useSubmit`, `useRouteLoaderData`, `useOutletContext`, `useHref`, `useResolvedPath`, `useFormAction`, `useNavigationType`
 
 **Toasts:** `toast`
 
 **Search serialization:** `serializeSearch`
 
-**URL building:** `buildPath`
+**URL building:** `buildPath`, `generatePath` / `href`, `createSearchParams`
 
 **i18n:** `wrapRoutesWithLocale`, `stripLocale`, `localizedDataPath`
 
@@ -1671,6 +1679,74 @@ That's the whole setup. Tailwind compiles as part of the bundle and its output f
 `import styles from "./x.module.css"` is scoped by Bun at build time and extracted like any other stylesheet, and `bractjs codegen:seed` generates the ambient types so the import typechecks.
 
 > **Known limitation — CSS Modules do not have server/client class-name parity.** `bractjs dev` and `bractjs start` import route modules from source, and Bun's _runtime_ resolves a `.module.css` import to a file path rather than the bundler's class-name map. The server therefore renders no class where the browser renders the scoped one, producing a hydration mismatch and unstyled SSR output for those elements. Plain `.css` imports are unaffected and work correctly in every run mode — **prefer them for anything server-rendered**, and reserve CSS Modules for client-only components.
+
+---
+
+## 29. React Router 7 / 8 compatibility
+
+Most React Router 7 and 8 route code runs on BractJS without changes, and so do React Router 8's new APIs. The [porting guide](docs/migrating-from-remix.md) lists every mapping and the remaining differences. The highlights:
+
+**Typed context.** `context` in middleware, `beforeLoad`, loaders, actions and `/api` middleware keeps its string fields and adds React Router's typed keys:
+
+```ts
+// app/context.ts
+import { createContext } from "@bractjs/bractjs";
+export const userContext = createContext<User | null>(null); // default → get() never throws
+
+// app/routes/admin/layout.ts
+export const middleware = [
+  async ({ request, context }) => {
+    const user = await getUser(request);
+    if (!user) throw redirect("/login");
+    context.set(userContext, user); // returning nothing continues the chain
+  },
+];
+
+// app/routes/admin/index.tsx
+export function loader({ context }: LoaderArgs) {
+  return { user: context.get(userContext) }; // typed User | null
+}
+```
+
+**Instrumentation.** These are read-only wrappers for tracing and timing. `call()` runs the real work and resolves to `{ status, error }`. A wrapper can't change the result, and if it throws the error is logged and the request carries on.
+
+```ts
+// app/lifecycle.ts  (or instrument(...) in app/server.ts)
+export default defineLifecycle({
+  instrumentations: [
+    {
+      async loader(call, { id }) {
+        const t = performance.now();
+        const { status } = await call();
+        console.log(`${id} ${status} ${(performance.now() - t).toFixed(1)}ms`);
+      },
+      // also: request, action, middleware — or React Router's
+      // { handler(h) { h.instrument({ request }) }, route(r) { r.instrument({ loader }) } }
+    },
+  ],
+});
+```
+
+**Data and errors.** `return data(value, { status, headers })` sets the status and headers without building a Response. `throw new Response("Not found", { status: 404 })` or `throw data(…, { status: 404 })` renders the ErrorBoundary, where `useRouteError()` and `isRouteErrorResponse()` work. `redirectDocument()` forces a full page load; `replace()` swaps the history entry instead of pushing.
+
+**Route exports.** `links()` is rendered into `<head>`. `HydrateFallback` with `clientLoader.hydrate = true` works as in React Router. `unstable_middleware` is read when `middleware` is absent. `meta({ data, matches, location })` gets React Router's arguments. Components receive `{ loaderData, actionData, params, matches }` props.
+
+**Revalidation control (React Router 8).** `fetcher.reset()` clears a fetcher back to idle. `defaultShouldRevalidate={false}` on `<Link>`, `<Form>`, `navigate()`, `fetcher.submit()` or `useSubmit()` is passed to routes' `shouldRevalidate`; routes without one follow it directly.
+
+**Hooks and components.** `useSubmit`, `useRouteLoaderData`, `useOutletContext` (+ `<Outlet context>`), `useAsyncValue`, `useAsyncError`, `useHref`, `useResolvedPath`, `useFormAction`, `useNavigationType`, `<NavLink>` and `<Navigate>` all exist.
+
+- `useSearchParams()` destructures as a tuple.
+- `useNavigation()` includes `formData` and `location`.
+- `useBlocker(({ currentLocation, nextLocation }) => …)` returns a blocker with `proceed()` / `reset()`.
+
+**Streaming timeout.** `streamTimeout: 5_000` in `bractjs.config.ts` fails `defer()` data that is still pending after 5 s with a 504 `HttpError`, which `<Await errorElement>` can render.
+
+Known differences:
+
+- `meta` merges root → route instead of the leaf replacing it.
+- `<Form>` defaults to `method="post"`.
+- There's no `clientMiddleware`.
+- Route middleware covers pages and `/_data`, not `/api` or `"use server"` ([§14](#14-middleware)).
 
 ---
 

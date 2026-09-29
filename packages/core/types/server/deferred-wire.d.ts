@@ -9,8 +9,7 @@ export declare function encodeDeferred(payload: Record<string, unknown>): {
     payload: Record<string, unknown>;
     pending: Array<[string, Deferred<unknown>]>;
 };
-/** `/_data` path: wait for every Deferred and inline its settled value. */
-export declare function settleDeferred(payload: Record<string, unknown>): Promise<Record<string, unknown>>;
+export declare function settleDeferred(payload: Record<string, unknown>, timeoutMs?: number): Promise<Record<string, unknown>>;
 /**
  * Pass React's HTML stream through, then append one inline script carrying
  * every deferred value once they settle. The visible content already streamed
@@ -19,4 +18,4 @@ export declare function settleDeferred(payload: Record<string, unknown>): Promis
  * `async` module, so hydration may start before or after this script runs —
  * the client side (deferred-revive.ts) handles both orders.
  */
-export declare function appendDeferredScript(stream: ReadableStream<Uint8Array>, pending: Array<[string, Deferred<unknown>]>, nonce?: string): ReadableStream<Uint8Array>;
+export declare function appendDeferredScript(stream: ReadableStream<Uint8Array>, pending: Array<[string, Deferred<unknown>]>, nonce?: string, timeoutMs?: number): ReadableStream<Uint8Array>;

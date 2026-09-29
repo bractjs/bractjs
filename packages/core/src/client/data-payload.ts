@@ -1,6 +1,7 @@
 import type {
   ClientActionFunction,
   ClientLoaderFunction,
+  LinkDescriptor,
   MetaDescriptor,
   RouteMatch,
   ShouldRevalidateFunction,
@@ -19,6 +20,8 @@ export interface RouteDataPayload {
   params: Record<string, string>;
   search: Record<string, unknown>;
   meta: MetaDescriptor[];
+  /** Route `links()` descriptors. */
+  links: LinkDescriptor[];
   matches: RouteMatch[];
 }
 
@@ -28,6 +31,7 @@ export function parseDataPayload(data: Record<string, unknown>): RouteDataPayloa
     params: (data.params as Record<string, string> | undefined) ?? {},
     search: (data.search as Record<string, unknown> | undefined) ?? {},
     meta: (data.meta as MetaDescriptor[] | undefined) ?? [],
+    links: (data.links as LinkDescriptor[] | undefined) ?? [],
     matches: (data.matches as RouteMatch[] | undefined) ?? [],
   };
 }

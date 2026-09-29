@@ -1,9 +1,16 @@
+import type { Instrumentation } from "./instrumentation.ts";
 export type OnErrorHook = (err: unknown, request?: Request) => Promise<void> | void;
 export interface LifecycleHooks {
     onStart?: () => Promise<void> | void;
     onShutdown?: () => Promise<void> | void;
     /** Called for every unexpected error: loader failures, action throws, and uncaught process exceptions. Redirects and HttpErrors are intentional control flow and are NOT reported here. Use this to send errors to Sentry, Datadog, etc. The request is undefined for process-level exceptions. */
     onError?: OnErrorHook;
+    /**
+     * Read-only wrappers around every request, loader, action and route
+     * middleware — for tracing, timing and logging (React Router 8
+     * Instrumentation API). See `instrument()`.
+     */
+    instrumentations?: Instrumentation[];
 }
 /** Type-safe helper for declaring server lifecycle hooks in app/lifecycle.ts. */
 export declare function defineLifecycle(hooks: LifecycleHooks): LifecycleHooks;

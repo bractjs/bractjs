@@ -1,3 +1,4 @@
+import { RouterContextProvider } from "../shared/router-context.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { defineActions } from "../shared/define-actions.ts";
 import type { ActionArgs } from "../shared/route-types.ts";
@@ -9,8 +10,9 @@ function argsWith(intent?: string, extra: Record<string, string> = {}): ActionAr
   return {
     request: new Request("http://localhost/"),
     params: {},
-    context: {},
+    context: new RouterContextProvider(),
     search: {},
+    url: new URL("http://x/"),
     formData: fd,
   };
 }

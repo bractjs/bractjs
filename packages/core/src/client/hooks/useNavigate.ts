@@ -1,5 +1,6 @@
 import { useCallback, useContext } from "react";
 import { buildPath } from "../build-path.ts";
+import { type PathObject, pathToString, resolveHref } from "../nav-utils.ts";
 import type { ParamsFor, RegisteredRoutes, SearchOutputFor } from "../registry.ts";
 import { NavigationContext } from "../router.tsx";
 import { withSearch } from "../search-serializer.ts";
@@ -15,12 +16,29 @@ export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes
   replace?: boolean;
   /** Arbitrary history state, readable via `useLocation().state` after navigating. */
   state?: unknown;
+  /**
+   * When the target's cached loader data is stale, whether to refetch it in
+   * the background — passed to its `shouldRevalidate` (React Router 8).
+   */
+  defaultShouldRevalidate?: boolean;
+  /** Accepted for React Router compatibility; no effect. */
+  preventScrollReset?: boolean;
+  /** Accepted for React Router compatibility; no effect. */
+  relative?: "route" | "path";
+  /** Accepted for React Router compatibility; no effect. */
+  flushSync?: boolean;
+  /** Accepted for React Router compatibility; no effect. */
+  viewTransition?: boolean;
 }
 
-export type NavigateFn = <TTo extends RegisteredRoutes>(
-  to: TTo | (string & {}),
-  options?: NavigateOptions<TTo>,
-) => Promise<void>;
+export interface NavigateFn {
+  <TTo extends RegisteredRoutes>(
+    to: TTo | (string & {}) | Partial<PathObject>,
+    options?: NavigateOptions<TTo>,
+  ): Promise<void>;
+  /** React Router: move through history by `delta` entries (`navigate(-1)` = back). */
+  (delta: number): Promise<void>;
+}
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
@@ -35,15 +53,23 @@ export type NavigateFn = <TTo extends RegisteredRoutes>(
  */
 export function useNavigate(): NavigateFn {
   const navCtx = useContext(NavigationContext);
-  return useCallback<NavigateFn>(
-    (to, options) => {
-      const base = options?.params
-        ? buildPath(to as string, options.params as Record<string, string>)
-        : (to as string);
+  return useCallback(
+    (to: string | number | Partial<PathObject>, options?: NavigateOptions) => {
+      if (typeof to === "number") {
+        // history.go() fires popstate, which the router turns into a load.
+        if (typeof window !== "undefined") window.history.go(to);
+        return Promise.resolve();
+      }
+      const path = pathToString(to);
+      const base = options?.params ? buildPath(path, options.params as Record<string, string>) : path;
       const href = withSearch(base, options?.search as Record<string, unknown> | undefined);
       if (!navCtx) return Promise.resolve();
-      return navCtx.navigate(href, { replace: options?.replace, state: options?.state });
+      return navCtx.navigate(resolveHref(href), {
+        replace: options?.replace,
+        state: options?.state,
+        defaultShouldRevalidate: options?.defaultShouldRevalidate,
+      });
     },
     [navCtx],
-  );
+  ) as NavigateFn;
 }

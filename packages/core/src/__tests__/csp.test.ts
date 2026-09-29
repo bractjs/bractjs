@@ -1,3 +1,4 @@
+import { RouterContextProvider } from "../shared/router-context.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { CSP_NONCE_KEY, csp, getCspNonce } from "../server/csp.ts";
 import { setDevHmrPort, setRuntimeMode } from "../server/env.ts";
@@ -8,7 +9,11 @@ async function runCsp(
   mw: ReturnType<typeof csp>,
   handler: (ctx: MiddlewareContext) => Promise<Response>,
 ): Promise<{ res: Response; ctx: MiddlewareContext }> {
-  const ctx: MiddlewareContext = { request: new Request("http://x/"), params: {}, context: {} };
+  const ctx: MiddlewareContext = {
+    request: new Request("http://x/"),
+    params: {},
+    context: new RouterContextProvider(),
+  };
   const pipeline = new MiddlewarePipeline();
   pipeline.use(mw);
   const res = await pipeline.run(ctx, () => handler(ctx));

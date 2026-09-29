@@ -7,14 +7,13 @@ export const ROUTE_EXPORT_NAMES = [
   "default", "loader", "action", "clientLoader", "clientAction", "meta", "headers",
   "middleware", "beforeLoad", "shouldRevalidate", "searchSchema", "ssr", "Fallback",
   "handle", "ErrorBoundary", "config", "loaderDeps", "context",
+  // React Router route exports BractJS reads too.
+  "links", "HydrateFallback", "unstable_middleware",
 ] as const;
 
 // Remix / React Router route exports BractJS does not read — a ported route
 // keeps compiling but the export silently does nothing. Name → what to do instead.
 const PORTED_EXPORT_ADVICE: Record<string, string> = {
-  links: 'BractJS has no `links` export — import stylesheets directly (`import "./x.css"`) and they are linked automatically; put other <link> tags in root.tsx.',
-  HydrateFallback: 'BractJS has no `HydrateFallback` — export `Fallback` together with `ssr = false` (or "data-only").',
-  unstable_middleware: "rename it to `middleware` — BractJS only reads that name.",
   clientMiddleware: "BractJS has no client middleware — use `clientLoader`, or server `middleware`.",
   unstable_clientMiddleware: "BractJS has no client middleware — use `clientLoader`, or server `middleware`.",
 };

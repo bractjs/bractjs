@@ -6,7 +6,7 @@ import type { BunPlugin } from "bun";
  * shrink to their component + client hooks. `beforeLoad`, `clientLoader`,
  * `clientAction`, and `searchSchema` are NOT stripped: they run client-side.
  */
-export declare const SERVER_ONLY_ROUTE_EXPORTS: readonly ["loader", "action", "headers", "middleware"];
+export declare const SERVER_ONLY_ROUTE_EXPORTS: readonly ["loader", "action", "headers", "middleware", "unstable_middleware", "links"];
 /**
  * Client-bundle plugin: dead-code-eliminate the server-only exports from
  * route modules (`<appDir>/routes/**` and `root.tsx`). This makes stripping —

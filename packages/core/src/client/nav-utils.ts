@@ -59,6 +59,38 @@ export function parseTo(to: string): { pathname: string; search: string; hash: s
   return { pathname: pathname || "/", search, hash };
 }
 
+/** React Router's `Path` / `To` object form. */
+export interface PathObject {
+  pathname: string;
+  search: string;
+  hash: string;
+}
+
+/** A `to` that may be React Router's `{ pathname, search, hash }` object → a string. */
+export function pathToString(to: string | Partial<PathObject>): string {
+  if (typeof to === "string") return to;
+  const search = to.search ? (to.search.startsWith("?") ? to.search : "?" + to.search) : "";
+  const hash = to.hash ? (to.hash.startsWith("#") ? to.hash : "#" + to.hash) : "";
+  return (to.pathname ?? (typeof window !== "undefined" ? window.location.pathname : "/")) + search + hash;
+}
+
+/**
+ * Resolve a relative target ("edit", "../posts", "?page=2", "#top") against the
+ * current URL, the way the browser resolves an `<a href>`. Absolute paths pass
+ * through; off-origin URLs come back unchanged (callers route them through
+ * `toSamePath()`).
+ */
+export function resolveHref(to: string): string {
+  if (to.startsWith("/") || typeof window === "undefined") return to;
+  try {
+    const u = new URL(to, window.location.href);
+    if (u.origin !== window.location.origin) return to;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return to;
+  }
+}
+
 /** Random short key identifying a history entry (scroll restoration identity). */
 export function createLocationKey(): string {
   try {

@@ -19,6 +19,19 @@ export declare function isSafeInternalRedirect(url: string): boolean;
  */
 export declare function redirect(url: string, init?: number | RedirectInit, headers?: HeadersInit, options?: RedirectOptions): Response;
 /**
+ * React Router's `redirectDocument()`: a redirect the client router must follow
+ * with a full document load instead of a soft navigation (e.g. to a part of the
+ * site served by another app on the same origin). Same arguments and safety
+ * checks as {@link redirect}.
+ */
+export declare function redirectDocument(url: string, init?: number | RedirectInit): Response;
+/**
+ * React Router's `replace()`: a redirect that replaces the current history
+ * entry instead of pushing a new one when the client router follows it.
+ * Same arguments and safety checks as {@link redirect}.
+ */
+export declare function replace(url: string, init?: number | RedirectInit): Response;
+/**
  * Last-line guard applied to every redirect Response the request handler is
  * about to emit. Returns the Response untouched unless it is a 3xx whose
  * `Location` escapes `requestUrl`'s origin AND it was not produced by

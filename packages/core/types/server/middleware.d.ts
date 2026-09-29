@@ -1,9 +1,18 @@
+import { type RouteContext } from "../shared/router-context.ts";
 export interface MiddlewareContext {
     request: Request;
     params: Record<string, string>;
-    context: Record<string, unknown>;
+    /** Shared mutable context: string fields plus typed `get`/`set` (see `createContext`). */
+    context: RouteContext;
 }
-export type MiddlewareFn = (ctx: MiddlewareContext, next: () => Promise<Response>) => Promise<Response>;
+/**
+ * Call `next()` to continue, or return a `Response` to short-circuit. Returning
+ * nothing (React Router style) is also fine: if `next()` was called its
+ * response is used, otherwise the chain continues as if you had called it.
+ */
+export type MiddlewareFn = (ctx: MiddlewareContext, next: () => Promise<Response>) => Promise<Response | void> | Response | void;
+/** Build a middleware context, giving `context` its typed accessors. */
+export declare function createMiddlewareContext(request: Request, params?: Record<string, string>, context?: Record<string, unknown>): MiddlewareContext;
 export declare class MiddlewarePipeline {
     private fns;
     /** Register a middleware function. Returns `this` for chaining. */
@@ -44,11 +53,19 @@ export declare function runRouteMiddleware(fns: RouteMiddleware[], ctx: Middlewa
 export declare function collectRouteMiddleware(chain: {
     root: {
         middleware?: unknown;
+        unstable_middleware?: unknown;
     };
     layouts: Array<{
         middleware?: unknown;
+        unstable_middleware?: unknown;
     }>;
     route: {
         middleware?: unknown;
+        unstable_middleware?: unknown;
+    };
+    files?: {
+        root?: string;
+        layouts: string[];
+        route?: string;
     };
 }): RouteMiddleware[];

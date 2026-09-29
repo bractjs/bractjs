@@ -1,5 +1,6 @@
 import { type AnchorHTMLAttributes, type ReactNode, useCallback, useContext, useEffect, useRef } from "react";
 import { buildPath } from "../build-path.ts";
+import { type PathObject, pathToString, resolveHref, toSamePath } from "../nav-utils.ts";
 import { observeOnce, prefetchRoute } from "../prefetch.ts";
 import type { ParamsFor, RegisteredRoutes, SearchOutputFor } from "../registry.ts";
 import { NavigationContext, RouterContext } from "../router.tsx";
@@ -29,7 +30,8 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<
   AnchorHTMLAttributes<HTMLAnchorElement>,
   "href"
 > & {
-  to: TTo | (string & {});
+  /** Target: a path string, or React Router's `{ pathname, search, hash }` object. */
+  to: TTo | (string & {}) | Partial<PathObject>;
   /** Path params for a dynamic `to` (e.g. `params={{ id }}` for `/blog/:id`). */
   params?: ParamsFor<TTo>;
   /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
@@ -39,8 +41,28 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<
   viewTransition?: boolean;
   /** Replace the current history entry instead of pushing. */
   replace?: boolean;
+  /** History state for the new entry, readable via `useLocation().state`. */
+  state?: unknown;
+  /**
+   * When the target's cached loader data is stale, whether to refetch it in
+   * the background. Passed to the route's `shouldRevalidate` as
+   * `defaultShouldRevalidate`; routes without one follow it (React Router 8).
+   */
+  defaultShouldRevalidate?: boolean;
+  /** React Router 7 name for {@link defaultShouldRevalidate}. */
+  unstable_defaultShouldRevalidate?: boolean;
+  /** `true` makes the click a full document load (React Router `reloadDocument`). */
+  reloadDocument?: boolean;
+  /** Accepted for React Router compatibility; no effect. */
+  preventScrollReset?: boolean;
+  /** Accepted for React Router compatibility; no effect. */
+  relative?: "route" | "path";
+  /** Accepted for React Router compatibility; no effect. */
+  discover?: "render" | "none";
   children: ReactNode;
 };
+
+export type { LinkProps };
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -59,16 +81,26 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
   prefetch = "none",
   viewTransition = false,
   replace,
+  state,
+  defaultShouldRevalidate,
+  unstable_defaultShouldRevalidate,
+  reloadDocument,
+  preventScrollReset: _preventScrollReset,
+  relative: _relative,
+  discover: _discover,
+  onClick,
   children,
   ...rest
 }: LinkProps<TTo>) {
+  const revalidateByDefault = defaultShouldRevalidate ?? unstable_defaultShouldRevalidate;
   const navCtx = useContext(NavigationContext);
   const routerCtx = useContext(RouterContext);
   const isLoading = navCtx?.state === "loading";
 
   // Resolve the final href once: substitute params into a dynamic pattern, or
   // pass an already-built string straight through; then apply `search`.
-  const base = params ? buildPath(to as string, params as Record<string, string>) : (to as string);
+  const toStr = pathToString(to);
+  const base = params ? buildPath(toStr, params as Record<string, string>) : toStr;
   const href = withSearch(base, search as Record<string, unknown> | undefined);
 
   const anchorRef = useRef<HTMLAnchorElement>(null);
@@ -98,16 +130,30 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
   );
 
   function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    // A user onClick runs first and may cancel the navigation (preventDefault).
+    onClick?.(e);
+    if (e.defaultPrevented) return;
     if (!navCtx) return; // SSR: let browser handle naturally
+    if (reloadDocument) return; // full document load
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    if (e.button !== 0) return;
+    if (rest.target && rest.target !== "_self") return;
     e.preventDefault();
 
+    const opts = { replace, state, defaultShouldRevalidate: revalidateByDefault };
+    // Relative `to` ("edit", "../list") resolves like the anchor's href would.
+    const target = resolveHref(href);
+    const safe = toSamePath(target);
+    if (safe === null) {
+      window.location.assign(href); // off-origin: plain browser navigation
+      return;
+    }
     if (viewTransition && supportsViewTransitions) {
       (document as Document & { startViewTransition(cb: () => void): void }).startViewTransition(() => {
-        void navCtx.navigate(href, { replace });
+        void navCtx.navigate(safe, opts);
       });
     } else {
-      void navCtx.navigate(href, { replace });
+      void navCtx.navigate(safe, opts);
     }
   }
 
