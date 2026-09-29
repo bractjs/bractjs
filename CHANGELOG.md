@@ -6,6 +6,12 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.6.0] — 2026-09-29
+
 ### Added — React Router 8 features, with React Router 7 compatibility
 
 Ported React Router 7 and 8 route modules, hooks and components now mostly run as-is. Everything below is additive; the BractJS APIs they sit next to keep working. The [porting guide](docs/migrating-from-remix.md) covers what's left.

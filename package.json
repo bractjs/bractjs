@@ -1,6 +1,6 @@
 {
   "name": "bractjs-monorepo",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "description": "BractJS monorepo — pnpm workspace for the @bractjs/bractjs framework and example apps.",
