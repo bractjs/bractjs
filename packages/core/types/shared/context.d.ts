@@ -21,6 +21,13 @@ export interface BractJSContextValue {
      */
     LayoutModules?: Array<{
         default?: ComponentType;
+        ErrorBoundary?: ComponentType<{
+            error: unknown;
+        }>;
+    }>;
+    /** SSR-only: root.tsx's ErrorBoundary, the outermost boundary a failed loader can reach. */
+    RootErrorBoundary?: ComponentType<{
+        error: unknown;
     }>;
     /** The request's location, so `useLocation()` works during SSR (hash is always ""). */
     location?: RouterLocation;

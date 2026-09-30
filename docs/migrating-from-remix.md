@@ -95,7 +95,7 @@ Type names: `LoaderFunctionArgs`, `ActionFunctionArgs`, `ClientLoaderFunctionArg
 | `clientLoader`, `clientAction`, `.hydrate = true`       | Same, including `serverLoader()` / `serverAction()`.                                                                                                                                                                                   |
 | `HydrateFallback` + `clientLoader.hydrate = true`       | Same: the fallback is server-rendered, then the client loader runs. (BractJS's own form is `export const ssr = "data-only"` with `Fallback`.)                                                                                          |
 | `middleware` / `unstable_middleware`                    | Same signature (`({ request, params, context }, next)`); returning nothing continues the chain. Runs root → layouts → route. **Scope differs; read [Middleware](#middleware-and-auth).** `clientMiddleware` is not supported.          |
-| `ErrorBoundary` + `useRouteError()`                     | Same. `isRouteErrorResponse(error)` works for thrown `data(…, { status })`, `new Response(…, { status })` and `HttpError`. The error is also passed as the `error` prop. A route without a boundary falls back to root's.              |
+| `ErrorBoundary` + `useRouteError()`                     | Same. `isRouteErrorResponse(error)` works for thrown `data(…, { status })`, `new Response(…, { status })` and `HttpError`. The error is also passed as the `error` prop. Without one, the nearest layout's (then root's) is used.      |
 | `Route.ComponentProps` (`loaderData` prop)              | Same props: `{ loaderData, actionData, params, matches }`. `useLoaderData<typeof loader>()` works too.                                                                                                                                 |
 | —                                                       | New: `beforeLoad` (auth/redirect gate that also guards `/_data`), `searchSchema`, `context` via `defineContext` ([§5](../README.md#5-route-module-api)).                                                                               |
 
@@ -104,7 +104,7 @@ Type names: `LoaderFunctionArgs`, `ActionFunctionArgs`, `ClientLoaderFunctionArg
 - **Returning plain objects** from loaders and actions works as in React Router. **`data(value, { status, headers })`** works too: a leaf loader's status sets the document status, its headers reach `headers()` as `loaderHeaders`, and an action's status and headers apply to its response. `json(data, init)` returns a real `Response`.
 - **`redirect()`** accepts both the Remix/RR7 form `redirect(url, { status, headers })` and the positional form `redirect(url, 303, headers)`. It refuses off-origin URLs unless you pass `allowExternal: true` — a Remix `redirect("https://…")` needs that added.
 - **Streaming: wrap promises in `defer()`.** RR7 streams any promise you return; BractJS only streams fields wrapped with `defer({ … })`. `<Await resolve={…}>` works the same, with the render function as its child ([§8](../README.md#8-streaming-data)).
-- **Throwing `redirect()`, `new Response("…", { status: 404 })`, `data("…", { status: 404 })` or `new HttpError(404)`** all work as control flow: a route loader's error renders its `ErrorBoundary` with that status. `redirectDocument()` and `replace()` exist too.
+- **Throwing `redirect()`, `new Response("…", { status: 404 })`, `data("…", { status: 404 })` or `new HttpError(404)`** all work as control flow: a route or layout loader's error renders the nearest `ErrorBoundary` with that status. `redirectDocument()` and `replace()` exist too.
 
 ## Hooks and components
 
@@ -190,7 +190,7 @@ Plain CSS imports (`import "./styles.css"`) work in every run mode and are split
 
 As of the current release, these have no clean equivalent. Plan around them:
 
-- **`HttpError` from a root or layout loader** ends the request with a JSON error body rather than rendering a boundary; only route loaders render `ErrorBoundary`.
+- **A failed root loader** renders root's `ErrorBoundary` inside a minimal framework document (BractJS has no `Layout` export for root to supply its own), and the page isn't hydrated.
 - **`clientMiddleware`** isn't supported. Use `clientLoader`, or server `middleware`.
 - **`meta` merges** root → route instead of the leaf replacing the whole array.
 - **`<Form>` defaults to `post`**, not `get`.

@@ -2,10 +2,11 @@ import { createElement } from "react";
 import { BractJSProvider } from "../shared/context.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
 import {
-  pickErrorBoundary,
+  firstLoaderFailure,
+  type LoaderFailure,
+  pickBoundaryForFailure,
   renderErrorBoundary,
   routeErrorStatus,
-  routeLoaderError,
 } from "../shared/route-error.ts";
 import { getCspNonce } from "./csp.ts";
 import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
@@ -32,7 +33,7 @@ import {
   type MiddlewareContext,
   runRouteMiddleware,
 } from "./middleware.ts";
-import { renderRoute, type ServerManifest } from "./render.ts";
+import { renderRootErrorDocument, renderRoute, type ServerManifest } from "./render.ts";
 import { error, json, sanitizeRedirect } from "./response.ts";
 import { validateSearch } from "./search.ts";
 
@@ -131,16 +132,26 @@ function envelopeActionRedirect(res: Response, request: Request): Response {
 }
 
 /**
- * The chain minus the route's `meta`/`headers` when its loader failed: they
- * expect the loader's data and would receive the `{ __error }` slot instead.
- * Root and layout meta/headers still apply to the error page.
+ * The chain minus `meta`/`headers` of the module whose loader failed and of
+ * every module below it: they expect loader data and would receive the
+ * `{ __error }` slot (or never render at all). Modules above the failure still
+ * apply to the error page.
  */
-function withoutFailedRouteHead<C extends { route: { meta?: unknown; headers?: unknown } }>(
-  chain: C,
-  routeSlot: unknown,
-): C {
-  if (!routeLoaderError(routeSlot)) return chain;
-  return { ...chain, route: { ...chain.route, meta: undefined, headers: undefined } };
+function withoutFailedHead<
+  C extends {
+    layouts: ReadonlyArray<{ meta?: unknown; headers?: unknown }>;
+    route: { meta?: unknown; headers?: unknown };
+  },
+>(chain: C, failure: LoaderFailure | null): C {
+  if (!failure || failure.scope === "root") return chain;
+  const from = failure.scope === "layout" ? failure.index : chain.layouts.length;
+  return {
+    ...chain,
+    layouts: chain.layouts.map((mod, i) =>
+      i < from ? mod : { ...mod, meta: undefined, headers: undefined },
+    ),
+    route: { ...chain.route, meta: undefined, headers: undefined },
+  };
 }
 
 /** `request` with `formData()` answering from an already-parsed body (callable repeatedly). */
@@ -225,15 +236,23 @@ async function route(
       // 500 instead of being returned as a 302 for the soft-nav client.
       return await runRoutePipeline(loaderRequest, match.params, chain, search, context, async (args) => {
         const results = await runLoaders(chain, args, onError);
+        // A failed root loader leaves nothing to render client-side: answer with
+        // its status, and the router falls back to a document load, which
+        // renders the root error document. Layout and route failures ride along
+        // in their slots — <Outlet> renders the nearest ErrorBoundary.
+        const failure = firstLoaderFailure(results);
+        if (failure?.scope === "root") {
+          return json({ error: failure.error.message }, { status: routeErrorStatus(failure.error) });
+        }
         // Merged meta must ride along: ClientRouter re-renders the document head
         // from this payload on soft navigation, and the initial __BRACTJS_DATA__
         // already carries the merged shape.
-        const headChain = withoutFailedRouteHead(chain, results.route);
+        const headChain = withoutFailedHead(chain, failure);
         const meta = mergeMeta(
           resolveMeta(headChain, results, match.params, {
             pathname: targetPathname,
             search: targetUrl.search,
-            error: routeLoaderError(results.route) ?? undefined,
+            error: failure?.error,
           }),
         );
         const links = resolveLinks(chain);
@@ -374,11 +393,26 @@ async function route(
     try {
       loaderResults = await runLoaders(loaderChain, args, onError);
     } catch (err) {
+      // Loader HttpErrors are captured into their slots (see below); only
+      // redirects and framework failures land here.
       if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
-      if (isHttpError(err)) return error(err.message, err.status);
       await fireOnError(onError, err, request);
       if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
       return error("Internal Server Error", 500);
+    }
+
+    const failure = firstLoaderFailure(loaderResults);
+    // root.tsx owns <html>, so a failed root loader leaves no app shell to put
+    // a boundary in: render root's ErrorBoundary in a minimal document instead.
+    if (failure?.scope === "root") {
+      return renderRootErrorDocument({
+        Boundary: pickBoundaryForFailure(undefined, [], 0, chain.root.ErrorBoundary),
+        error: failure.error,
+        params: match.params,
+        manifest,
+        nonce: getCspNonce(mwCtx.context),
+        status: routeErrorStatus(failure.error),
+      });
     }
 
     const loaderData = {
@@ -390,11 +424,21 @@ async function route(
     // ── SSR render ────────────────────────────────────────────────────────
     const RootComponent = chain.root.default ?? (() => null);
     // A failed route loader renders the nearest ErrorBoundary in the route's
-    // place, with the error's status (404 for HttpError(404), else 500).
-    const routeError = routeSsr === true ? routeLoaderError(loaderResults.route) : null;
+    // place, with the error's status (404 for HttpError(404), else 500). A
+    // failed layout loader is rendered by <Outlet> at that layout's level.
+    const routeError = routeSsr === true && failure?.scope === "route" ? failure.error : null;
     const Boundary = routeError
-      ? pickErrorBoundary(chain.route.ErrorBoundary, chain.root.ErrorBoundary)
+      ? pickBoundaryForFailure(
+          chain.route.ErrorBoundary,
+          chain.layouts,
+          chain.layouts.length,
+          chain.root.ErrorBoundary,
+        )
       : null;
+    const layoutError = failure?.scope === "layout" ? failure.error : null;
+    // The failure that sets the document status: one whose boundary renders
+    // (a selective-SSR route's loader error surfaces after hydration instead).
+    const statusFailure = routeError || layoutError ? failure : null;
     // Non-default SSR modes render the Fallback (or nothing) in the component's
     // place; the client swaps in the real component after hydration.
     const RouteComponent =
@@ -422,6 +466,7 @@ async function route(
         manifest: manifest as unknown as import("../shared/context.ts").RouteManifest,
         RouteComponent,
         LayoutModules: chain.layouts,
+        RootErrorBoundary: chain.root.ErrorBoundary,
         location: { pathname, search: url.search, hash: "", state: null, key: "default" },
         search,
         matches,
@@ -435,21 +480,16 @@ async function route(
       }),
     });
 
-    const meta = resolveMeta(
-      withoutFailedRouteHead(chain, loaderResults.route),
-      loaderResults,
-      match.params,
-      {
-        pathname,
-        search: url.search,
-        error: routeError ?? undefined,
-      },
-    );
+    const meta = resolveMeta(withoutFailedHead(chain, failure), loaderResults, match.params, {
+      pathname,
+      search: url.search,
+      error: failure?.error,
+    });
     // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
     // baseline document headers in renderRoute. Uses the loaders that actually
     // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
     const routeHeaders = resolveHeaders(
-      withoutFailedRouteHead(loaderChain, loaderResults.route),
+      withoutFailedHead(loaderChain, failure),
       loaderResults,
       match.params,
       request,
@@ -458,8 +498,8 @@ async function route(
     // Without a headers() export, a data(…, { headers }) from the action still
     // applies to the re-rendered document (e.g. Set-Cookie on a no-JS post).
     const documentHeaders = routeHeaders ?? (actionInit?.headers ? new Headers(actionInit.headers) : null);
-    // Status: a route-loader error wins; else a data(…, { status }) from the
-    // leaf loader, then the action (React Router parity).
+    // Status: a layout- or route-loader error wins; else a data(…, { status })
+    // from the leaf loader, then the action (React Router parity).
     const dataStatus = loaderResults.inits?.route?.status ?? actionInit?.status;
 
     return renderRoute({
@@ -481,7 +521,7 @@ async function route(
       nonce: getCspNonce(mwCtx.context),
       ssrMode,
       streamTimeout,
-      status: routeError ? routeErrorStatus(routeError) : dataStatus,
+      status: statusFailure ? routeErrorStatus(statusFailure.error) : dataStatus,
     });
   });
 }

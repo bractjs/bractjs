@@ -1,4 +1,4 @@
-import { createElement, Fragment, type ReactNode } from "react";
+import { type ComponentType, createElement, Fragment, type ReactNode } from "react";
 import { renderToReadableStream } from "react-dom/server";
 import { errorOverlayScript } from "../dev/error-overlay.ts";
 import { LinkTags } from "../shared/link-tags.tsx";
@@ -11,6 +11,7 @@ import {
   routeCssHrefs,
   StyleLinks,
 } from "../shared/style-links.tsx";
+import { renderErrorBoundary } from "../shared/route-error.ts";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 import { appendDeferredScript, encodeDeferred } from "./deferred-wire.ts";
 import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
@@ -150,18 +151,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
 
   const responseStatus = renderError ? 500 : status;
 
-  const headers = new Headers({
-    "Content-Type": "text/html; charset=utf-8",
-    "Transfer-Encoding": "chunked",
-    // SECURITY(medium): baseline hardening headers. For a Content-Security-
-    // Policy, opt into the nonce-based `csp()` middleware — it generates a
-    // per-request nonce, applies it to the inline bootstrap script + client
-    // entry module here (via renderToReadableStream's `nonce` option), and
-    // sets the CSP response header.
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "SAMEORIGIN",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  });
+  const headers = baselineDocumentHeaders();
 
   // Route `headers()` output (root → layout → route) overrides the baseline.
   // Content-Type / Transfer-Encoding stay framework-owned: a route shouldn't
@@ -179,4 +169,74 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     status: responseStatus,
     headers,
   });
+}
+
+function baselineDocumentHeaders(): Headers {
+  return new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "Transfer-Encoding": "chunked",
+    // SECURITY(medium): baseline hardening headers. For a Content-Security-
+    // Policy, opt into the nonce-based `csp()` middleware — it generates a
+    // per-request nonce, applies it to the inline bootstrap script + client
+    // entry module here (via renderToReadableStream's `nonce` option), and
+    // sets the CSP response header.
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+  });
+}
+
+export interface RootErrorDocumentOptions {
+  /** root.tsx's ErrorBoundary, else the built-in fallback. */
+  Boundary: ComponentType<{ error: unknown }>;
+  error: Error;
+  params: Record<string, string>;
+  manifest: ServerManifest;
+  nonce?: string;
+  status: number;
+}
+
+/**
+ * The document for a failed root loader. root.tsx renders `<html>` itself and
+ * needs its loader data to do so, so the framework owns this document: the
+ * app-wide stylesheets plus root's ErrorBoundary. No client scripts — there is
+ * no app to hydrate, and links on the page are plain document navigations.
+ */
+export async function renderRootErrorDocument(options: RootErrorDocumentOptions): Promise<Response> {
+  const { Boundary, error, params, manifest, status } = options;
+  const title = `${status} ${error.message}`.trim();
+  const tree = createElement(
+    CspNonceContext.Provider,
+    { value: options.nonce },
+    createElement(
+      "html",
+      { lang: "en" },
+      createElement(
+        "head",
+        null,
+        createElement("meta", { charSet: "utf-8" }),
+        createElement("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }),
+        createElement("title", null, title),
+        createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
+      ),
+      createElement("body", null, renderErrorBoundary(Boundary, error, { params })),
+    ),
+  );
+  let renderError: unknown;
+  let stream: ReadableStream;
+  try {
+    stream = await renderToReadableStream(tree, {
+      onError(err) {
+        renderError = err;
+        console.error("[bract] root error document render error:", err);
+      },
+    });
+  } catch {
+    // The boundary itself threw: fall back to a bare, unstyled error page.
+    return new Response(`<!DOCTYPE html><title>500</title><h1>500</h1>`, {
+      status: 500,
+      headers: baselineDocumentHeaders(),
+    });
+  }
+  return new Response(stream, { status: renderError ? 500 : status, headers: baselineDocumentHeaders() });
 }

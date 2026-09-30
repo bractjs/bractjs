@@ -13,7 +13,12 @@ import {
   LoaderSliceContext,
   OutletLevelContext,
 } from "../../shared/context.ts";
-import { pickErrorBoundary, renderErrorBoundary, routeLoaderError } from "../../shared/route-error.ts";
+import {
+  firstLoaderFailure,
+  pickBoundaryForFailure,
+  renderErrorBoundary,
+  routeLoaderError,
+} from "../../shared/route-error.ts";
 import { RouterContext, type RouterContextValue } from "../router.tsx";
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
@@ -103,8 +108,46 @@ function OutletInner(): ReactElement | null {
   // component (a guard-only layout.ts) are skipped. The "spa" shell knows no
   // route, so nothing renders below root until the client has loaded one.
   const pending = routerCtx?.hydrationPending;
-  const layoutModules = routerCtx ? routerCtx.currentLayouts : (bractCtx?.LayoutModules ?? []);
+  const layoutModules: ReadonlyArray<LayoutModule | null | undefined> = routerCtx
+    ? routerCtx.currentLayouts
+    : (bractCtx?.LayoutModules ?? []);
   const layouts = pending === "spa" ? [] : renderableLayouts(layoutModules);
+
+  // A failed layout loader: the nearest ErrorBoundary renders in place of that
+  // layout — or, for a guard-only layout.ts (no render level), at the next
+  // level down — so the layouts above it keep rendering. Server and client run
+  // this same code over the same loader data, so hydration matches.
+  if (pending !== "spa") {
+    const loaderData = (routerCtx?.loaderData ?? bractCtx?.loaderData) as
+      Parameters<typeof firstLoaderFailure>[0] | undefined;
+    const failure = firstLoaderFailure(loaderData);
+    if (failure?.scope === "layout") {
+      const found = layouts.findIndex((l) => l.dataIndex >= failure.index);
+      const errorLevel = found === -1 ? layouts.length : found;
+      if (level === errorLevel) {
+        const Boundary = pickBoundaryForFailure(
+          layoutModules[failure.index]?.ErrorBoundary as ComponentType<{ error: unknown }> | undefined,
+          layoutModules,
+          failure.index,
+          routerCtx ? routerCtx.rootErrorBoundary : bractCtx?.RootErrorBoundary,
+        );
+        return (
+          <OutletLevelContext.Provider value={level + 1}>
+            <LoaderSliceContext.Provider value={failure.index}>
+              <RouteErrorBoundary fallback={DefaultErrorFallback}>
+                <Suspense fallback={null}>
+                  {renderErrorBoundary(Boundary, failure.error, {
+                    params: routerCtx?.params ?? bractCtx?.params,
+                  })}
+                </Suspense>
+              </RouteErrorBoundary>
+            </LoaderSliceContext.Provider>
+          </OutletLevelContext.Provider>
+        );
+      }
+    }
+  }
+
   if (level < layouts.length) {
     const { Component, dataIndex } = layouts[level];
     return (
@@ -124,9 +167,11 @@ function OutletInner(): ReactElement | null {
   );
 }
 
+type LayoutModule = { default?: ComponentType; ErrorBoundary?: unknown };
+
 /** Layouts that render something, each with its index into `loaderData.layouts`. */
 function renderableLayouts(
-  modules: ReadonlyArray<{ default?: ComponentType } | null | undefined>,
+  modules: ReadonlyArray<LayoutModule | null | undefined>,
 ): Array<{ Component: ComponentType<Record<string, unknown>>; dataIndex: number }> {
   const out: Array<{ Component: ComponentType<Record<string, unknown>>; dataIndex: number }> = [];
   modules.forEach((mod, dataIndex) => {
@@ -164,9 +209,12 @@ function RouteOutlet({
   const loaderError = routerCtx && !pending ? routeLoaderError(routerCtx.loaderData?.route) : null;
   if (loaderError) {
     // Selects an existing component (route's, root's, or the built-in one).
+    const layoutModules = routerCtx?.currentLayouts ?? [];
     const boundary = renderErrorBoundary(
-      pickErrorBoundary(
+      pickBoundaryForFailure(
         routerCtx?.currentModule?.ErrorBoundary as ComponentType<{ error: unknown }> | undefined,
+        layoutModules,
+        layoutModules.length,
         routerCtx?.rootErrorBoundary,
       ),
       loaderError,

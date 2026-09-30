@@ -6,6 +6,16 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Root and layout loader errors render an `ErrorBoundary` instead of a JSON body.** Before, only route loaders did: `throw new HttpError(403, "…")` in a `layout.tsx` loader answered a page load with `{"error":"…"}`, and client navigation to it silently stayed on the old page while the URL changed. Now:
+  - A failed **layout** loader renders the nearest `ErrorBoundary` in that layout's place, so root and the layouts above it still render. The boundary is the layout's own `ErrorBoundary` export (newly supported on layouts), else the next enclosing layout's, else root's, else the built-in fallback. The HTTP status is the error's. This works on document loads and client navigation, and hydrates cleanly.
+  - A failed **root** loader gets a minimal framework-rendered document with root's `ErrorBoundary` (or the fallback), the app-wide stylesheets and the error's status. It isn't hydrated. Client navigation that hits it falls back to a full page load.
+  - A **route** loader error without its own boundary now uses the nearest layout's `ErrorBoundary` before root's.
+  - A redirect from any loader now always wins over an `HttpError` from another, whichever settles first.
+  - Unexpected (non-`HttpError`) errors from root or layout loaders used to hand the component `{ __error }` as its data. They now render the same boundaries with a 500.
+- **Client navigation no longer stalls on a failed `/_data` request.** A non-2xx response (an unmatched path, a failed root loader, a search-validation 400, a 5xx) used to log to the console and push the new URL while leaving the old page on screen. The router now hands off to a full document load so the server's real response renders; revalidation does the same.
+
 ### Removed
 
 - **`StreamFetcherResult.events`.** Deprecated since 0.2 and never emitted anything; `useFetcher({ stream: true })` returns `{ connect(actionId) }`, as the README has always documented. Code that still reads `.events` gets a type error instead of `null`.

@@ -21,7 +21,9 @@ export interface BractJSContextValue {
    * (index i ↔ `loaderData.layouts[i]`). <Outlet> renders each one's default
    * export around the next level.
    */
-  LayoutModules?: Array<{ default?: ComponentType }>;
+  LayoutModules?: Array<{ default?: ComponentType; ErrorBoundary?: ComponentType<{ error: unknown }> }>;
+  /** SSR-only: root.tsx's ErrorBoundary, the outermost boundary a failed loader can reach. */
+  RootErrorBoundary?: ComponentType<{ error: unknown }>;
   /** The request's location, so `useLocation()` works during SSR (hash is always ""). */
   location?: RouterLocation;
   /** Validated search params (route `searchSchema` output), so `useSearch()` works during SSR. */
