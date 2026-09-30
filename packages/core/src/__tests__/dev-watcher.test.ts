@@ -101,4 +101,20 @@ describe("watchApp", () => {
     await Bun.sleep(300);
     expect(seen).toEqual([]);
   });
+
+  test("reports the edited file, not an editor temp file in the same burst", async () => {
+    const dir = makeTempAppDir();
+    const seen: string[] = [];
+    trackedWatch(dir, (file) => {
+      seen.push(file);
+    });
+
+    // sed -i writes a hidden temp file next to the real one, then renames it.
+    writeFileSync(join(dir, "route.tsx"), "export default 1;");
+    writeFileSync(join(dir, ".!1234!route.tsx"), "export default 2;");
+    expect(await waitFor(() => seen.length > 0)).toBe(true);
+    await Bun.sleep(100);
+    // (fs.watch may split the writes into two bursts: route.tsx twice is fine.)
+    expect(new Set(seen)).toEqual(new Set(["route.tsx"]));
+  });
 });
