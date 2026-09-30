@@ -4,12 +4,14 @@ import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codege
 import { loadUserConfig } from "../config/load.ts";
 import { loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts";
 import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
+import { cssModuleClassesChanged, installCssModulesRuntime } from "../server/css-modules-runtime.ts";
 import { listApiRoutes } from "../server/api-route.ts";
 import { bumpDevModuleGeneration, setDevHmrPort, setRuntimeMode } from "../server/env.ts";
 import type { LifecycleHooks } from "../server/lifecycle.ts";
 import { filePathToPattern, scanRoutes } from "../server/scanner.ts";
 import type { BractJSConfig } from "../server/serve.ts";
 import { createServer } from "../server/serve.ts";
+import { installUseClientServerStub } from "../server/use-client-runtime.ts";
 import { createHmrServer } from "./hmr-server.ts";
 import { rebuildClient } from "./rebuilder.ts";
 import { formatRouteTable, type RouteTableRow } from "./route-table.ts";
@@ -167,9 +169,12 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
   const userConfig = options?.skipUserConfig ? {} : await loadUserConfig();
   const merged: Partial<BractJSConfig> = { ...userConfig, ...options?.config };
-  // Note: the `"use client"` SSR stub is installed by buildFetchHandler (it runs
-  // for any source-import path, dev or `bractjs start`), so no separate dev hook
-  // is needed here.
+  // Runtime plugins for source-imported app code ("use client" stubs, CSS
+  // Module class maps) only apply to modules loaded after registration, and
+  // boot imports app modules (route lint, server.ts, lifecycle.ts) before
+  // createServer() runs — so register them first.
+  installUseClientServerStub(merged.appDir ?? "./app");
+  installCssModulesRuntime();
 
   const hmrPort = options?.hmrPort ?? merged.hmrPort ?? 3001;
   const appPort = options?.port ?? merged.port ?? 3000;
@@ -325,6 +330,16 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
     // Route files (not layout): do a fine-grained module swap without full reload.
     // Root, layouts, and other files: fall back to full page reload.
     const isRoute = file.startsWith("routes/") && !file.endsWith("layout.tsx") && !file.endsWith("layout.ts");
+
+    // A CSS Module whose class set changed: the server's imported map (and the
+    // client JS's) are stale, and only a restart re-imports them. Rule edits
+    // keep the names, so they fall through to the stylesheet hot-swap below.
+    if (
+      file.endsWith(".module.css") &&
+      (await cssModuleClassesChanged(resolve(process.cwd(), appDir, file)))
+    ) {
+      requestRestart(file);
+    }
 
     if (file.endsWith(".css")) {
       // Styles are extracted to real files, so a CSS edit needs no JS swap and

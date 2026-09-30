@@ -19,6 +19,7 @@ import { error } from "./response.ts";
 import { type RouteFile, scanRoutes } from "./scanner.ts";
 import { renderSpaShell } from "./spa.ts";
 import { serveStatic } from "./static.ts";
+import { installCssModulesRuntime } from "./css-modules-runtime.ts";
 import { installUseClientServerStub } from "./use-client-runtime.ts";
 
 export interface I18nConfig {
@@ -205,8 +206,12 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   // execute during SSR and crash on browser-only hooks. Install the runtime
   // stub that null-renders such modules on the server — parity with the
   // compiled bundle's useClientStubPlugin. Skipped on the compiled path, which
-  // supplies a pre-built moduleRegistry.
-  if (!config.moduleRegistry) installUseClientServerStub(appDir);
+  // supplies a pre-built moduleRegistry. Same for CSS Modules: the runtime
+  // plugin gives SSR the bundler's class-name map (css-modules-runtime.ts).
+  if (!config.moduleRegistry) {
+    installUseClientServerStub(appDir);
+    installCssModulesRuntime();
+  }
 
   // Codegen / compiled-binary path: when the caller supplies pre-scanned
   // routes, skip the runtime `Bun.Glob` scan that `bun build --compile`

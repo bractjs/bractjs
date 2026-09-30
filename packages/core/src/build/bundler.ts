@@ -237,9 +237,12 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   if (config.ssr === false) {
     const { renderSpaShell } = await import("../server/spa.ts");
     const { installUseClientServerStub } = await import("../server/use-client-runtime.ts");
+    const { installCssModulesRuntime } = await import("../server/css-modules-runtime.ts");
     // root.tsx is imported from source here — "use client" components inside
-    // it must null-render exactly as they do on the running server.
+    // it must null-render, and CSS Modules map to class names, exactly as they
+    // do on the running server.
     installUseClientServerStub(appDir);
+    installCssModulesRuntime();
     const serverManifest = {
       clientEntry,
       rootChunk,

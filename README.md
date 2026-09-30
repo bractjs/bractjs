@@ -1682,7 +1682,7 @@ That's the whole setup. Tailwind compiles as part of the bundle and its output f
 
 `import styles from "./x.module.css"` is scoped by Bun at build time and extracted like any other stylesheet, and `bractjs codegen:seed` generates the ambient types so the import typechecks.
 
-> **Known limitation — CSS Modules do not have server/client class-name parity.** `bractjs dev` and `bractjs start` import route modules from source, and Bun's _runtime_ resolves a `.module.css` import to a file path rather than the bundler's class-name map. The server therefore renders no class where the browser renders the scoped one, producing a hydration mismatch and unstyled SSR output for those elements. Plain `.css` imports are unaffected and work correctly in every run mode — **prefer them for anything server-rendered**, and reserve CSS Modules for client-only components.
+Server rendering uses the same scoped class names as the browser in every run mode, so CSS Modules are safe in server-rendered components. `bractjs dev` and `bractjs start` import route modules from source, and a runtime plugin gives those imports the bundler's own class-name map; the compiled binary bundles the map in. Names are derived from the stylesheet's path relative to the working directory, so run `bractjs build` and `bractjs start` from the same directory (the app root, as usual). In dev, editing rules hot-swaps the stylesheet; adding or removing a class restarts the server so both sides pick up the new map.
 
 ---
 

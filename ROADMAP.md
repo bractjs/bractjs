@@ -9,8 +9,8 @@
 
 Open work, roughly in priority order.
 
-- [ ] **Root/layout loader errors render an `ErrorBoundary`** — today only route loaders do; a root or layout `HttpError` answers with a JSON body.
-- [ ] **CSS Modules server/client class-name parity** — scoped and extracted by Bun already, but SSR under `bractjs dev`/`start` renders no class (README §28).
+- [x] **Root/layout loader errors render an `ErrorBoundary`** (unreleased)
+- [x] **CSS Modules server/client class-name parity** (unreleased)
 - [ ] **Browser end-to-end tests in CI** — hydration, soft navigation, forms and error pages checked in a real browser against `examples/todo`.
 - [ ] **React Router–style root `Layout` export** — lets root's `ErrorBoundary` render inside the app's own document when the root loader fails.
 - [ ] **`clientMiddleware`** — the last React Router 8 route export BractJS ignores (the route linter warns about it).

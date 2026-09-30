@@ -182,9 +182,7 @@ pipeline.use(async (ctx, next) => {
 
 ## Styling
 
-Plain CSS imports (`import "./styles.css"`) work in every run mode and are split per route automatically. Tailwind v4 is one flag (`tailwind: true`) ([§28](../README.md#28-styling)).
-
-**CSS Modules are the exception:** `*.module.css` class names don't match between server and client, so server-rendered elements come out unstyled and hydration mismatches. Port CSS Modules used in server-rendered components to plain CSS (or Tailwind) before switching.
+Plain CSS imports (`import "./styles.css"`) and CSS Modules (`import styles from "./x.module.css"`) work in every run mode and are split per route automatically. Tailwind v4 is one flag (`tailwind: true`) ([§28](../README.md#28-styling)).
 
 ## Known gaps
 

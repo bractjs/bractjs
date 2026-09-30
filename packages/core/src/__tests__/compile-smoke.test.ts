@@ -94,6 +94,7 @@ export default function Root() {
   await writeFile(
     join(APP, "routes", "_index.tsx"),
     `import type { LoaderArgs } from "@bractjs/bractjs";
+import styles from "./index.module.css";
 export function loader(_args: LoaderArgs) {
   return { greeting: "compiled-hello" };
 }
@@ -104,10 +105,11 @@ export function meta() {
   ];
 }
 export default function Index() {
-  return <main>index</main>;
+  return <main className={styles.card}>index</main>;
 }
 `,
   );
+  await writeFile(join(APP, "routes", "index.module.css"), ".card { color: rebeccapurple; }\n");
 
   await writeFile(
     join(APP, "server.ts"),
@@ -239,6 +241,19 @@ afterAll(async () => {
 });
 
 describe.skipIf(!compileAvailable)("bun build --compile single-binary", () => {
+  test("CSS Module class names match the client bundle's", async () => {
+    const html = await (await fetch(`http://localhost:${PORT}/`)).text();
+    const cls = html.match(/<main class="([^"]+)">index<\/main>/)?.[1];
+    expect(cls).toMatch(/^card_/);
+    // The same scoped name appears in the client JS the browser hydrates with.
+    const glob = new Bun.Glob("**/*.js");
+    let inClient = false;
+    for await (const f of glob.scan(join(TMP, "build", "client"))) {
+      if ((await Bun.file(join(TMP, "build", "client", f)).text()).includes(cls!)) inClient = true;
+    }
+    expect(inClient).toBe(true);
+  });
+
   test("compiled binary serves SSR HTML with 200", async () => {
     const res = await fetch(`http://localhost:${PORT}/`);
     expect(res.status).toBe(200);
