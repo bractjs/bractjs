@@ -102,6 +102,8 @@ coverage/
 
 # Playwright MCP scratch output
 .playwright-mcp/
+e2e/test-results/
+e2e/playwright-report/
 
 # Benchmark (bench/, see docs/benchmarks.md): npm-installed comparison apps and
 # their build output. Versions are pinned exactly in each package.json.

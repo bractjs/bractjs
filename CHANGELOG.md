@@ -22,6 +22,11 @@ All notable changes to BractJS are documented here.
 
 - **`examples/todo` has a new look**: flat colors, Tailwind v4 (`tailwind: true`), lucide icons, dark mode, and a CSS Module on the About page. It also uses `<NavLink>`. Every feature it demonstrated before still works the same way.
 
+### Internal
+
+- **Browser end-to-end tests** (`pnpm e2e`, `e2e/`) run a production build of `examples/todo` in Chrome and check hydration, soft navigation, forms, error pages and styles. Every test fails on a browser console error. CI runs them in a new `e2e` job and runs the `examples/cms` suite too.
+- The Tailwind examples no longer run on a second, older Bun: pnpm had auto-installed `bun@1.3.14` as a peer of `bun-plugin-tailwind`, and `pnpm` scripts picked it up. A root `pnpm.overrides` entry removes it.
+
 ### Removed
 
 - **`StreamFetcherResult.events`.** Deprecated since 0.2 and never emitted anything; `useFetcher({ stream: true })` returns `{ connect(actionId) }`, as the README has always documented. Code that still reads `.events` gets a type error instead of `null`.

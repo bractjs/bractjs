@@ -87,3 +87,40 @@ jobs:
       - name: Publish dry-run (tarball contents)
         working-directory: packages/core
         run: bun run scripts/verify-pack.ts
+
+  e2e:
+    # Browser end-to-end tests against a production build of examples/todo.
+    # Pinned Bun only: this checks the framework's browser behavior, not Bun drift.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    name: e2e (chrome)
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # ubuntu-latest ships Google Chrome; the suite drives it via channel: "chrome".
+      - name: Browser tests
+        env:
+          CI: "1"
+        run: pnpm e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7
