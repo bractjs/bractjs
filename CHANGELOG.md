@@ -18,6 +18,10 @@ All notable changes to BractJS are documented here.
 - **Dev: editing a file with `sed -i` (or any tool that writes a hidden temp file first) updates the right module.** The watcher reports the last file of each change burst, which was often the temp file (`.!1234!_index.tsx`). The dev server then broadcast a module swap for a file that doesn't exist and the browser logged a 404. Hidden files are now ignored.
 - **Client navigation no longer stalls on a failed `/_data` request.** A non-2xx response (an unmatched path, a failed root loader, a search-validation 400, a 5xx) used to log to the console and push the new URL while leaving the old page on screen. The router now hands off to a full document load so the server's real response renders; revalidation does the same.
 
+### Changed
+
+- **`examples/todo` has a new look**: flat colors, Tailwind v4 (`tailwind: true`), lucide icons, dark mode, and a CSS Module on the About page. It also uses `<NavLink>`. Every feature it demonstrated before still works the same way.
+
 ### Removed
 
 - **`StreamFetcherResult.events`.** Deprecated since 0.2 and never emitted anything; `useFetcher({ stream: true })` returns `{ connect(actionId) }`, as the README has always documented. Code that still reads `.events` gets a type error instead of `null`.

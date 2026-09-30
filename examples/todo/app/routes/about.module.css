@@ -1,0 +1,27 @@
+/* about.module.css — styles for the /about route only.
+ *
+ * A CSS Module: class names are scoped to this file (`styles.icon` becomes
+ * something like `icon_a1B2c3`), and the server renders the same scoped name
+ * the browser does. Only about.tsx imports it, so the build extracts it into
+ * this route's own CSS bundle — "/" never downloads it. */
+
+.icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.375rem;
+  background: var(--color-teal);
+  color: var(--color-teal-ink);
+}
+
+.feature:nth-child(3n + 2) .icon {
+  background: var(--color-marigold);
+  color: #17262b;
+}
+
+.feature:nth-child(3n) .icon {
+  background: var(--color-ink);
+  color: var(--color-canvas);
+}

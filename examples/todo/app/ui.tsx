@@ -1,11 +1,12 @@
-// app/ui.tsx — a few shared, inline-style building blocks.
+// app/ui.tsx — shared UI building blocks, styled with Tailwind utility classes.
 //
-// This demo keeps styling inline (no CSS pipeline) so each route reads as a
-// single self-contained file. The design tokens live as CSS variables in
-// `root.tsx`; these helpers just reference them.
+// Primitives are exported as className strings (`className={input}`) or tiny
+// components, so each route stays a single readable file. The design tokens
+// (canvas, surface, ink, teal, marigold, …) live in app/styles.css.
 
 import { toast } from "@bractjs/bractjs";
-import { type CSSProperties, useEffect, useRef } from "react";
+import type { LucideIcon } from "lucide-react";
+import { type ButtonHTMLAttributes, type ReactNode, useEffect, useRef } from "react";
 
 export interface ActionResult {
   ok?: string;
@@ -25,99 +26,81 @@ export function useActionToast(actionData: ActionResult | null | undefined) {
   }, [actionData]);
 }
 
-export const card: CSSProperties = {
-  background: "var(--paper)",
-  border: "1px solid var(--line)",
-  borderRadius: "var(--radius)",
-  boxShadow: "0 12px 40px rgba(5, 35, 40, 0.08)",
-  padding: "1.4rem",
-};
+export const panel = "rounded-lg border border-line bg-surface";
 
-export const input: CSSProperties = {
-  border: "1px solid var(--line)",
-  background: "#fff",
-  borderRadius: "10px",
-  padding: ".68rem .75rem",
-  fontSize: "1rem",
-  width: "100%",
-};
+export const input =
+  "h-11 w-full min-w-0 rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus-visible:border-teal";
 
-export const primaryButton: CSSProperties = {
-  border: "none",
-  background: "var(--accent)",
-  color: "#fff",
-  borderRadius: "10px",
-  padding: ".68rem .95rem",
-  fontWeight: 700,
-  cursor: "pointer",
-};
+const buttonBase =
+  "inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors disabled:cursor-wait disabled:opacity-60";
 
-export const ghostButton: CSSProperties = {
-  border: "1px solid var(--line)",
-  background: "#fff",
-  borderRadius: "8px",
-  padding: ".42rem .62rem",
-  cursor: "pointer",
-};
+const buttonTones = {
+  primary: "bg-teal text-teal-ink hover:bg-ink hover:text-canvas",
+  ghost: "border border-line bg-surface text-ink hover:border-ink",
+  danger: "border border-line bg-surface text-danger hover:border-danger hover:bg-danger hover:text-surface",
+} as const;
 
-export const dangerButton: CSSProperties = {
-  border: "1px solid #f4c1c1",
-  background: "#fff5f5",
-  color: "var(--danger)",
-  borderRadius: "8px",
-  padding: ".42rem .62rem",
-  cursor: "pointer",
-};
-
-export function ErrorNote({ children }: { children: React.ReactNode }) {
+export function Button({
+  tone = "ghost",
+  icon: Icon,
+  spin = false,
+  className = "",
+  children,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  tone?: keyof typeof buttonTones;
+  icon?: LucideIcon;
+  /** Spin the icon (a pending state). Still under reduced motion. */
+  spin?: boolean;
+}) {
   return (
-    <p
-      role="alert"
-      style={{
-        margin: 0,
-        color: "var(--danger)",
-        background: "#ffeceb",
-        border: "1px solid #f8c5c5",
-        borderRadius: "10px",
-        padding: ".58rem .65rem",
-      }}
-    >
+    <button type="button" className={`${buttonBase} ${buttonTones[tone]} ${className}`} {...rest}>
+      {Icon ? (
+        <Icon
+          aria-hidden
+          size={16}
+          strokeWidth={2.25}
+          className={spin ? "animate-spin motion-reduce:animate-none" : undefined}
+        />
+      ) : null}
       {children}
-    </p>
+    </button>
   );
 }
 
-export function StatPill({ label, value, tone }: { label: string; value: number; tone: string }) {
+/** A square, icon-only button; `label` is its accessible name. */
+export function IconButton({
+  icon: Icon,
+  label,
+  tone = "ghost",
+  className = "",
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon: LucideIcon;
+  label: string;
+  tone?: "ghost" | "danger";
+}) {
+  const tones = {
+    ghost: "text-muted hover:bg-sunken hover:text-ink",
+    danger: "text-muted hover:bg-danger hover:text-surface",
+  };
   return (
-    <div
-      style={{
-        borderRadius: "999px",
-        border: "1px solid var(--line)",
-        padding: ".4rem .7rem",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: ".42rem",
-        background: "#fff",
-      }}
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={`grid size-9 shrink-0 place-items-center rounded-md transition-colors ${tones[tone]} ${className}`}
+      {...rest}
     >
-      <span style={{ color: "var(--muted)", fontSize: ".86rem" }}>{label}</span>
-      <span
-        style={{
-          minWidth: "1.8rem",
-          height: "1.5rem",
-          padding: "0 .45rem",
-          borderRadius: "999px",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 700,
-          color: "#fff",
-          background: tone,
-          fontSize: ".88rem",
-        }}
-      >
-        {value}
-      </span>
-    </div>
+      <Icon aria-hidden size={18} strokeWidth={2.25} />
+    </button>
+  );
+}
+
+export function ErrorNote({ children }: { children: ReactNode }) {
+  return (
+    <p role="alert" className="m-0 rounded-md bg-danger px-3 py-2 text-sm font-medium text-surface">
+      {children}
+    </p>
   );
 }
