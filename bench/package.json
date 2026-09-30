@@ -2,7 +2,7 @@
   "name": "bractjs-bench",
   "version": "0.0.0",
   "private": true,
-  "description": "BractJS vs React Router 7 vs Next.js \u2014 see docs/benchmarks.md",
+  "description": "BractJS vs React Router 8 vs Next.js \u2014 see docs/benchmarks.md",
   "scripts": {
     "setup": "npm install --no-package-lock && npm install --no-package-lock --prefix apps/react-router && npm install --no-package-lock --prefix apps/next",
     "bench": "bun run run.ts"

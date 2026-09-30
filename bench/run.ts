@@ -1,4 +1,4 @@
-// BractJS vs React Router 7 vs Next.js on one identical page — see
+// BractJS vs React Router 8 vs Next.js on one identical page — see
 // docs/benchmarks.md for the methodology and the latest results.
 //
 //   cd bench && npm run setup && bun run run.ts [--rounds 3] [--duration 10] [--connections 50]
@@ -50,7 +50,7 @@ const APPS: App[] = [
     start: [BUN, CLI, "start"],
   },
   {
-    name: "React Router 7",
+    name: "React Router 8",
     dir: "apps/react-router",
     port: 4102,
     clean: ["build", ".react-router"],
@@ -273,7 +273,12 @@ const machine = {
     bractjs: JSON.parse(readFileSync(join(BENCH, "../packages/core/package.json"), "utf8")).version,
     reactRouter: pkgVersion("apps/react-router", "react-router"),
     next: pkgVersion("apps/next", "next"),
-    react: pkgVersion("apps/next", "react"),
+    // React Router 8 requires React >= 19.2.7; the BractJS workspace pins 19.2.6.
+    react: {
+      bractjs: pkgVersion("apps/bractjs", "react"),
+      reactRouter: pkgVersion("apps/react-router", "react"),
+      next: pkgVersion("apps/next", "react"),
+    },
   },
   load: {
     connections: CONNECTIONS,

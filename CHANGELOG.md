@@ -22,6 +22,10 @@ All notable changes to BractJS are documented here.
 
 - **`examples/todo` has a new look**: flat colors, Tailwind v4 (`tailwind: true`), lucide icons, dark mode, and a CSS Module on the About page. It also uses `<NavLink>`. Every feature it demonstrated before still works the same way.
 
+### Docs
+
+- **[Benchmarks](docs/benchmarks.md) rerun with BractJS 0.6.0 against React Router 8.4.0** (was 7.18.4) and Next.js 16.3.6. The results are unchanged in shape: 4,502 req/s vs 1,747 and 1,083, and 58.7 KB of first-load JavaScript over the wire vs 102.6 KB and 134.2 KB.
+
 ### Internal
 
 - **Browser end-to-end tests** (`pnpm e2e`, `e2e/`) run a production build of `examples/todo` in Chrome and check hydration, soft navigation, forms, error pages and styles. Every test fails on a browser console error. CI runs them in a new `e2e` job and runs the `examples/cms` suite too.
