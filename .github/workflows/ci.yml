@@ -80,6 +80,10 @@ jobs:
           CI_REQUIRE_COMPILE: "1"
         run: pnpm test
 
+      - name: Test (examples/cms)
+        working-directory: examples/cms
+        run: bun test
+
       - name: Publish dry-run (tarball contents)
         working-directory: packages/core
         run: bun run scripts/verify-pack.ts

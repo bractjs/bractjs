@@ -6,7 +6,9 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Removed
+
+- **`StreamFetcherResult.events`.** Deprecated since 0.2 and never emitted anything; `useFetcher({ stream: true })` returns `{ connect(actionId) }`, as the README has always documented. Code that still reads `.events` gets a type error instead of `null`.
 
 ---
 

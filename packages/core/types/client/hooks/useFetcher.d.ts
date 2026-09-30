@@ -60,8 +60,6 @@ export interface FetcherResult {
     Form: FunctionComponent<FetcherFormProps>;
 }
 export interface StreamFetcherResult<T = unknown> {
-    /** @deprecated Never emitted — call `connect(actionId)` instead. Removal planned for 0.3. */
-    events: AsyncGenerator<T>;
     connect(actionId: string): AsyncGenerator<T>;
 }
 export interface UseFetcherOptions {

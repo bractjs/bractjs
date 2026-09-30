@@ -81,8 +81,6 @@ export interface FetcherResult {
 }
 
 export interface StreamFetcherResult<T = unknown> {
-  /** @deprecated Never emitted — call `connect(actionId)` instead. Removal planned for 0.3. */
-  events: AsyncGenerator<T>;
   connect(actionId: string): AsyncGenerator<T>;
 }
 
@@ -206,7 +204,6 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
 
   if (opts?.stream) {
     return {
-      events: null as unknown as AsyncGenerator<T>,
       connect(actionId: string): AsyncGenerator<T> {
         return sseStream<T>(actionId);
       },
