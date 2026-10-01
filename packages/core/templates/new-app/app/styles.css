@@ -1,0 +1,69 @@
+/* app/styles.css — imported by app/root.tsx. BractJS extracts it to a hashed
+ * file and links it during SSR, so pages are styled on first paint. Import more
+ * stylesheets from any route to split CSS per route. */
+
+:root {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --ink: #17262b;
+  --muted: #5a6b70;
+  --line: #d6dfdc;
+  --accent: #0f8b8d;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11191c;
+    --surface: #182428;
+    --ink: #e3ecea;
+    --muted: #93a5a9;
+    --line: #2a3b40;
+    --accent: #2ab1ae;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+}
+
+.page {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+
+.card h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.nav {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  font-weight: 600;
+}

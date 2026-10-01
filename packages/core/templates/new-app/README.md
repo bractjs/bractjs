@@ -9,6 +9,8 @@ bun run dev       # Dev server with HMR (http://localhost:3000)
 bun run build     # Production build (writes build/)
 bun run start     # Serve the production build
 bun run compile   # Single executable via bun build --compile
+bun run test      # Tests (app/__tests__) through the real request pipeline
+bun run typecheck # TypeScript
 ```
 
 ## Project structure
@@ -16,10 +18,13 @@ bun run compile   # Single executable via bun build --compile
 ```
 app/
 ├── root.tsx          # The <html> document shell (required)
+├── styles.css        # App-wide styles (extracted + linked automatically)
 ├── server.ts         # Single-binary entry (bun build --compile)
-└── routes/           # File-based routes
-    ├── _index.tsx    # /
-    └── about.tsx     # /about
+├── routes/           # File-based routes
+│   ├── _index.tsx    # /
+│   └── about.tsx     # /about
+└── __tests__/        # bun test — see the testing guide
+public/               # Static files, served at /public/*
 bractjs.config.ts     # Framework configuration (defineConfig)
 ```
 
@@ -41,4 +46,5 @@ export default function Hello() {
 }
 ```
 
+Testing guide: https://github.com/bractjs/bractjs/blob/main/docs/testing.md
 Full documentation: https://github.com/bractjs/bractjs#readme

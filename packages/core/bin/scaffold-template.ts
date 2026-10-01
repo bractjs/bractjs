@@ -7,10 +7,11 @@
 
 export interface TemplateVars {
   APP_NAME: string;
-  BRACT_PATH: string;
+  /** The CLI's own version — the scaffold depends on `^<version>`. */
+  BRACTJS_VERSION: string;
 }
 
-const PLACEHOLDER = /\{\{\s*(APP_NAME|BRACT_PATH)\s*\}\}/g;
+const PLACEHOLDER = /\{\{\s*(APP_NAME|BRACTJS_VERSION)\s*\}\}/g;
 
 export function fillTemplate(content: string, vars: TemplateVars): string {
   return content.replace(PLACEHOLDER, (_m, key: keyof TemplateVars) => vars[key]);

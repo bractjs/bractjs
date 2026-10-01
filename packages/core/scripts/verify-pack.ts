@@ -49,6 +49,10 @@ const required = [
   "types/server/middleware.d.ts",
   "templates/new-app/package.json",
   "templates/new-app/README.md",
+  "templates/new-app/gitignore",
+  "templates/new-app/app/styles.css",
+  "templates/new-app/app/__tests__/home.test.ts",
+  "templates/new-app-tailwind/app/styles.css",
 ];
 
 const missing = required.filter((f) => !files.has(f));
@@ -57,9 +61,13 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// Nothing generated or secret should ride along.
+// Nothing generated or secret should ride along, and none of the framework's
+// own tests (the scaffold template's sample test is app content, so allowed).
 const forbidden = [...files].filter(
-  (f) => f.includes("_generated/") || f.includes("__tests__/") || f.endsWith(".env"),
+  (f) =>
+    f.includes("_generated/") ||
+    (f.includes("__tests__/") && !f.startsWith("templates/")) ||
+    f.endsWith(".env"),
 );
 if (forbidden.length > 0) {
   console.error(

@@ -64,7 +64,7 @@ cd my-app
 bun run dev
 ```
 
-`bractjs new <name>` copies the scaffold template, runs `bun install`, and seeds `app/_generated/` so the single-binary entry typechecks before your first build.
+`bractjs new <name>` copies the scaffold template, runs `bun install`, and seeds `app/_generated/` so the single-binary entry typechecks before your first build. The app comes with a stylesheet (`app/styles.css`), `bun run test` (a sample test using [`@bractjs/bractjs/testing`](docs/testing.md)) and `bun run typecheck`. Pass `--tailwind` to start with Tailwind v4 instead of plain CSS, or `--no-install` to skip the install.
 
 Add it to an existing project instead:
 
@@ -1360,16 +1360,17 @@ Generates a `srcset` across breakpoints (320→1920px). Optimized images are cac
 
 ### CLI
 
-| Command                                  | Description                                            |
-| ---------------------------------------- | ------------------------------------------------------ |
-| `bractjs new <name>`                     | Scaffold a new app into `<name>/`.                     |
-| `bractjs dev`                            | Dev server with HMR (port 3000, HMR ws 3001).          |
-| `bractjs build`                          | Dual server + client build with content-hashed output. |
-| `bractjs start`                          | Serve the production build.                            |
-| `bractjs codegen [app] [out]`            | Generate `route-types.gen.ts`.                         |
-| `bractjs codegen:registry [app]`         | Generate `app/_generated/{routes,actions}.ts`.         |
-| `bractjs codegen:manifest [app] [build]` | Snapshot manifest → `app/_generated/manifest.ts`.      |
-| `bractjs compile [outfile] [entry]`      | Full single-binary pipeline.                           |
+| Command                                  | Description                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------------- |
+| `bractjs new <name> [--tailwind]`        | Scaffold a new app into `<name>/` (`--no-install` skips `bun install`). |
+| `bractjs dev [--port n] [--host]`        | Dev server with HMR (port 3000, HMR ws 3001).                           |
+| `bractjs build`                          | Dual server + client build with content-hashed output.                  |
+| `bractjs start [--port n] [--host a]`    | Serve the production build (`PORT` respected).                          |
+| `bractjs --version` / `--help`           | Print the version / usage.                                              |
+| `bractjs codegen [app] [out]`            | Generate `route-types.gen.ts`.                                          |
+| `bractjs codegen:registry [app]`         | Generate `app/_generated/{routes,actions}.ts`.                          |
+| `bractjs codegen:manifest [app] [build]` | Snapshot manifest → `app/_generated/manifest.ts`.                       |
+| `bractjs compile [outfile] [entry]`      | Full single-binary pipeline.                                            |
 
 The CLI is a thin wrapper — every command delegates to a public function, so you can script the same thing.
 
