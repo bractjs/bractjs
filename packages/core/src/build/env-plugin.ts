@@ -1,5 +1,6 @@
 import type { BunPlugin } from "bun";
 import { resolve } from "node:path";
+import { hasServerDirective } from "../shared/directives.ts";
 import { extractExports } from "./directives.ts";
 
 // Lazy: this module is re-exported from the package barrel, so it may be
@@ -88,6 +89,10 @@ export const serverModuleStubPlugin: BunPlugin = {
   setup(build) {
     build.onLoad({ filter: SERVER_FILE_RE }, async ({ path }) => {
       const src = await Bun.file(path).text();
+      // A `"use server"` module is callable from the browser by design: leave
+      // it to the use-server proxy plugin, which replaces its exports with
+      // /_action fetch proxies (no server source reaches the client either way).
+      if (hasServerDirective(src)) return undefined;
       const names = extractExports(src);
       const lines = [SERVER_STUB_FACTORY];
       for (const name of names) {

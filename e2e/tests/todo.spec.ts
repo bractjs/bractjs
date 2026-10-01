@@ -144,6 +144,27 @@ test("a task opens, renames and returns to the board", async ({ page }) => {
   await expectSameDocument(page);
 });
 
+test("the rename form (useActionState + server action) shows server-side errors in place", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await hydrated(page);
+  const title = unique("Keep my name");
+  await addTask(page, title);
+  await page.getByRole("link", { name: title }).click();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await markDocument(page);
+
+  // Whitespace passes the input's `required` but not the server's validation.
+  await page.getByLabel("Rename task").fill("   ");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(
+    page.locator("form").getByRole("alert").filter({ hasText: "Please add a task title." }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expectSameDocument(page);
+});
+
 test.describe("missing tasks", () => {
   // The document request for a missing task is a deliberate 404.
   test.use({ allowErrors: ["404"] });

@@ -29,6 +29,7 @@ let currentRevalidator: RevalidateFn | null = null;
 /** Called by ClientRouter on mount/unmount. Not part of the public API. */
 export function registerRevalidator(fn: RevalidateFn | null): void {
   currentRevalidator = fn;
+  exposeRouterBridge();
 }
 
 /** Revalidate the active route's loaders, if a router is mounted. */
@@ -44,6 +45,7 @@ let currentNavigator: NavigateFn | null = null;
 /** Called by ClientRouter on mount/unmount. Not part of the public API. */
 export function registerNavigator(fn: NavigateFn | null): void {
   currentNavigator = fn;
+  exposeRouterBridge();
 }
 
 /** Soft-navigate through the mounted router, or fall back to a full page load. */
@@ -52,4 +54,17 @@ export function softNavigate(to: string, opts?: { replace?: boolean }): Promise<
   if (opts?.replace) window.location.replace(to);
   else window.location.assign(to);
   return Promise.resolve();
+}
+
+/**
+ * `"use server"` client proxies are generated code with no imports, so they
+ * reach the router through this global: after a server action they follow
+ * its redirect or revalidate the page's loaders (build/directives.ts).
+ */
+function exposeRouterBridge(): void {
+  if (typeof window === "undefined") return;
+  (window as unknown as { __BRACTJS_ROUTER__?: unknown }).__BRACTJS_ROUTER__ = {
+    revalidate: triggerRevalidation,
+    navigate: softNavigate,
+  };
 }

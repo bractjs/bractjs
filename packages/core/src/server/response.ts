@@ -145,6 +145,22 @@ export function sanitizeRedirect(res: Response, requestUrl: string): Response {
   return error("Internal Server Error", 500);
 }
 
+/**
+ * A redirect for a client that called with `fetch()`: `204 No Content` +
+ * `X-BractJS-Redirect: <location>` instead of a 3xx, which fetch() would
+ * follow opaquely (burning a full document GET the client then discards).
+ * The client router soft-navigates to the location instead. All other headers
+ * (Set-Cookie!) are kept. Run `sanitizeRedirect` first — this trusts Location.
+ */
+export function redirectEnvelope(res: Response): Response {
+  const location = res.headers.get("Location");
+  if (res.status < 300 || res.status >= 400 || !location) return res;
+  const headers = new Headers(res.headers);
+  headers.delete("Location");
+  headers.set("X-BractJS-Redirect", location);
+  return new Response(null, { status: 204, headers });
+}
+
 export function json<T>(data: T, init?: ResponseInit): Response {
   const body = JSON.stringify(data);
   const headers = new Headers(init?.headers);

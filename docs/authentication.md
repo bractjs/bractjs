@@ -175,6 +175,7 @@ The endpoint chain runs before body parsing, so an unauthorized request is rejec
 Every exported function of a `"use server"` module is a public RPC endpoint at `POST /_action`. The CSRF gate proves the call came from your origin — **it does not prove who is calling**. No middleware surface wraps individual actions, so the function body is the guard. An action receives only the arguments the caller passed; read the session from the current request with `getRequest()`:
 
 ```ts
+// app/posts.server.ts — actions live in *.server.ts files or route modules
 "use server";
 import { getRequest } from "@bractjs/bractjs";
 import { requireUser } from "./auth.server.ts";
