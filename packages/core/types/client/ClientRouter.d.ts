@@ -22,8 +22,10 @@ interface ClientRouterProps {
     rootErrorBoundary?: ComponentType<{
         error: unknown;
     }>;
+    /** root.tsx's client module (its clientLoader / clientMiddleware run on every navigation). */
+    rootModule?: RouteModuleClient | null;
 }
 /** Import a route's layout.tsx chunks (outermost first); a chunk that fails to load renders nothing. */
 export declare function loadLayoutModules(urls: string[] | undefined): Promise<Array<RouteModuleClient | null>>;
-export declare function ClientRouter({ children, initialData, initialModule, initialLayouts, rootErrorBoundary, }: ClientRouterProps): ReactElement;
+export declare function ClientRouter({ children, initialData, initialModule, initialLayouts, rootErrorBoundary, rootModule, }: ClientRouterProps): ReactElement;
 export {};

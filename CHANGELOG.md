@@ -8,6 +8,9 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **`clientMiddleware` (React Router 8).** A route, layout or root module can export `clientMiddleware: [({ request, params, context }, next) => …]`. It runs root → layouts → route around the client data work of a navigation, revalidation, `<Form>` submission or fetcher call. `context` is a per-navigation `RouterContextProvider` shared with `clientLoader` / `clientAction` (and client `beforeLoad`), so middleware can `context.set(key, value)` for them. `throw redirect(...)` navigates. `unstable_clientMiddleware` is read too, and the route linter no longer flags either name.
+- **`clientLoader` runs everywhere it should.** It now also runs on `revalidate()` (and after mutations), in `fetcher.load`, and for root and layout modules (each replaces its own loader slice). `clientAction` now runs for `fetcher.submit`. Before, only the leaf route's `clientLoader` ran, and only on navigation.
+
 - **Root `Layout` export (React Router's).** `export function Layout({ children })` in `root.tsx` owns `<html>`/`<head>`/`<body>` and wraps the root component, the SPA shell, and root's `ErrorBoundary` when the root loader fails. That error page now keeps the app's document and chrome instead of a bare framework page.
 - **404s render in the app.** A browser request for a URL that matches no route used to get a plain-text `{"error":"Not Found"}`. It now gets the app's own page, status 404, with root's middleware and loader run and root's `ErrorBoundary` (or the built-in fallback) in the `<Outlet>`. It hydrates, so links on it soft-navigate. Non-HTML requests (assets, `fetch`) still get a plain 404. `examples/todo` shows one.
 

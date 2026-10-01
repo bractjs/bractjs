@@ -67,8 +67,10 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
   let rootErrorBoundary: ComponentType<{ error: unknown }> | undefined;
   // root.tsx's `Layout` (the document shell), wrapping the root component.
   let RootLayout: ComponentType<{ children?: ReactNode }> | undefined;
+  let rootModule: RouteModuleClient | null = null;
   if (data.manifest.rootChunk) {
     const rootMod = await import(data.manifest.rootChunk);
+    rootModule = rootMod as RouteModuleClient;
     if (rootMod.default) RootComponent = rootMod.default;
     rootErrorBoundary = rootMod.ErrorBoundary;
     RootLayout = rootMod.Layout;
@@ -123,6 +125,7 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
       initialModule={initialModule}
       initialLayouts={initialLayouts}
       rootErrorBoundary={rootErrorBoundary}
+      rootModule={rootModule}
     >
       {RootLayout ? (
         <RootLayout>

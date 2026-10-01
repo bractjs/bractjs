@@ -13,6 +13,8 @@ export interface RouteModuleClient {
   clientLoader?: import("../shared/route-types.ts").ClientLoaderFunction;
   /** Browser-side action (RR7-style). Runs on submit instead of POSTing directly. */
   clientAction?: import("../shared/route-types.ts").ClientActionFunction;
+  /** Browser-side middleware (React Router 8) around client data work. */
+  clientMiddleware?: import("../shared/route-types.ts").ClientMiddlewareFunction[];
   /** React Router name for `Fallback` (shown while a hydrating clientLoader runs). */
   HydrateFallback?: ComponentType;
 }

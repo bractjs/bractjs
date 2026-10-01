@@ -12,8 +12,8 @@ Open work, roughly in priority order.
 - [x] **Root/layout loader errors render an `ErrorBoundary`** (unreleased)
 - [x] **CSS Modules server/client class-name parity** (unreleased)
 - [x] **Browser end-to-end tests in CI** (unreleased)
-- [ ] **React Router–style root `Layout` export** — lets root's `ErrorBoundary` render inside the app's own document when the root loader fails.
-- [ ] **`clientMiddleware`** — the last React Router 8 route export BractJS ignores (the route linter warns about it).
+- [x] **React Router–style root `Layout` export, in-app 404s** (unreleased)
+- [x] **`clientMiddleware`, client `context`, `clientLoader` on revalidation, fetchers, root and layouts** (unreleased)
 - [ ] **Built-in i18n as a one-line opt-in** — locale-prefix helpers exist (`wrapRoutesWithLocale`, `stripLocale`, `useLocale`, `useLocalizedLink`) but aren't wired into core routing end-to-end.
 - [ ] **Prerender output embedded in the compiled binary** — today `build/client/` ships alongside it, or via `--asset`.
 - [ ] **Deno / Node.js adapters** — validate the `BractAdapter` contract beyond Bun and Cloudflare Workers. Lowest priority: the build pipeline is `Bun.build`, so this is runtime portability only.

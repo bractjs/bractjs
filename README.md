@@ -306,9 +306,11 @@ export const middleware = [
 ];
 
 // 11) clientLoader / clientAction — RR7-style browser-side data. clientLoader
-//     runs on navigation and its result becomes useLoaderData(); call
-//     serverLoader() for this route's server data. Set clientLoader.hydrate =
-//     true to also run on the first hydration of an SSR'd document.
+//     runs on navigation and revalidation (and for fetcher.load) and its
+//     result becomes useLoaderData(); call serverLoader() for this route's
+//     server data. Root and layout modules can export one too (each replaces
+//     its own slice). Set clientLoader.hydrate = true to also run on the first
+//     hydration of an SSR'd document.
 export async function clientLoader({ serverLoader }) {
   const server = await serverLoader(); // the normal /_data route slice
   return { ...server, fetchedAt: Date.now() };
@@ -318,6 +320,17 @@ export async function clientAction({ formData, serverAction }) {
   // optimistic local work, then defer to the server action:
   return serverAction();
 }
+// clientMiddleware (React Router 8) — runs root → layouts → route around the
+// client data work of a navigation, revalidation, submission or fetcher call.
+// Put values on the per-navigation `context` for clientLoader/clientAction to
+// read with context.get(key); `throw redirect("/login")` navigates instead.
+const startedAt = createContext<number>(0); // typed context key
+export const clientMiddleware = [
+  async ({ context }, next) => {
+    context.set(startedAt, performance.now());
+    await next();
+  },
+];
 
 // 12) default — the page component (required for a renderable route).
 export default function BlogPost() {
@@ -1859,7 +1872,6 @@ Known differences:
 
 - `meta` merges root → route instead of the leaf replacing it.
 - `<Form>` defaults to `method="post"`.
-- There's no `clientMiddleware`.
 - Route middleware covers pages and `/_data`, not `/api` or `"use server"` ([§14](#14-middleware)).
 
 ---

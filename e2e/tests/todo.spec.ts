@@ -231,3 +231,11 @@ test.describe("unmatched URLs", () => {
     await expectSameDocument(page);
   });
 });
+
+test("clientMiddleware + clientLoader run on client navigation", async ({ page }) => {
+  await page.goto("/");
+  await hydrated(page);
+  await page.getByRole("link", { name: "About" }).first().click();
+  await expect(page.getByRole("heading", { name: "About this demo" })).toBeVisible();
+  await expect(page.getByTestId("client-loaded")).toContainText("Loaded in the browser in");
+});
