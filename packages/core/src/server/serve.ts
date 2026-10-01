@@ -6,7 +6,7 @@ import { loadServerActions, loadServerActionsFromRegistry } from "./action-regis
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
 import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
-import { isDevRuntime, isExplicitDev } from "./env.ts";
+import { envPort, isDevRuntime, isExplicitDev, parsePort } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import { buildTrie, matchRoute } from "./matcher.ts";
@@ -514,7 +514,8 @@ export function createServer(config?: Partial<BractJSConfig>): {
 } {
   if (createServerSuppressed) return { stop() {} };
 
-  const port = config?.port ?? 3000;
+  // An explicit `port` wins; otherwise the platform's PORT, then 3000.
+  const port = parsePort(config?.port, "the `port` option") ?? envPort() ?? 3000;
 
   if (!isDevRuntime()) {
     void warnIfStaleBuild(resolve(config?.buildDir ?? "./build"));

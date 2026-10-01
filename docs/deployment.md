@@ -9,7 +9,7 @@ bractjs build     # server + client bundles, content-hashed assets, manifest →
 bractjs start     # serve it
 ```
 
-Deploy the project directory (with `build/` and `node_modules`) to any machine with Bun, run `bractjs start` under your process manager, set `PORT` as needed. This is the path to start with — it's the least magic, and everything in the next section is an optimization on top of it.
+Deploy the project directory (with `build/` and `node_modules`) to any machine with Bun, run `bractjs start` under your process manager, and set `PORT` (or pass `--port`) as needed — the compiled binary reads `PORT` the same way. This is the path to start with — it's the least magic, and everything in the next section is an optimization on top of it.
 
 ## The single binary: `bractjs compile`
 

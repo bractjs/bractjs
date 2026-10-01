@@ -1332,7 +1332,7 @@ Change handling in dev: route-module edits (including **loaders, actions, and `b
 import { createDevServer } from "@bractjs/bractjs";
 
 const dev = await createDevServer({
-  port: 3000, // default: config.port ?? 3000
+  port: 3000, // default: PORT env ?? config.port ?? 3000
   hmrPort: 3001, // HMR websocket
   config: { appDir: "./app", clientEnv: ["PUBLIC_API_URL"] },
   skipUserConfig: false, // true → don't read bractjs.config.ts
@@ -1539,9 +1539,9 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 
 | Field                                | Type                      | Default                | Description                                                         |
 | ------------------------------------ | ------------------------- | ---------------------- | ------------------------------------------------------------------- |
-| `port`                               | `number`                  | `3000`                 | TCP port                                                            |
+| `port`                               | `number`                  | `3000`                 | TCP port. `--port` and the `PORT` env var override it (see below)   |
 | `hmrPort`                            | `number`                  | `3001`                 | Dev HMR WebSocket port (`bractjs dev` only)                         |
-| `hostname`                           | `string`                  | all; dev `127.0.0.1`   | Listen address; `bractjs dev --host` exposes dev on the network     |
+| `hostname`                           | `string`                  | all; dev `127.0.0.1`   | Listen address; `--host` (and `HOST` for `start`) override it       |
 | `allowedHosts`                       | `string[]`                | `[]`                   | Extra dev `Host` names (anti DNS-rebinding; `.x.test` = subdomains) |
 | `appDir`                             | `string`                  | `"./app"`              | Contains `routes/` and `root.tsx`                                   |
 | `publicDir`                          | `string`                  | `"./public"`           | Static assets (served no-cache)                                     |
@@ -1561,6 +1561,8 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 | `onStart` / `onShutdown` / `onError` | hooks                     | —                      | Lifecycle (§16)                                                     |
 | `instrumentations`                   | `Instrumentation[]`       | —                      | Read-only request/loader/action/middleware wrappers (§29)           |
 | `streamTimeout`                      | `number` (ms)             | —                      | Fail still-pending `defer()` data with a 504 after this long (§29)  |
+
+**Ports.** `bractjs dev` and `bractjs start` take the first of: `--port`, the `PORT` environment variable (what Fly, Render, Railway and Heroku set), `port` in `bractjs.config.ts`, then `3000`. `createServer()` uses an explicit `port` option, else `PORT`, else `3000`, so `bractjs start` and a compiled binary listen on the same port. An invalid value (`PORT=abc`, `--port 0`) fails at startup with a message. `bractjs start --host <addr>` (or `HOST`) sets the listen address.
 
 `loadUserConfig()` validates these shapes and throws a clear error on an obvious mistake (e.g. a string `port`).
 

@@ -67,6 +67,25 @@ export function isExplicitDev(): boolean {
   return v === "development" || v === "dev";
 }
 
+/**
+ * Parse a TCP port from a flag, env var or config value. Returns undefined for
+ * an absent/empty value; throws a readable error for anything that isn't an
+ * integer in 1–65535 (a typo'd PORT should fail loudly, not bind port NaN).
+ */
+export function parsePort(value: string | number | undefined, source: string): number | undefined {
+  if (value === undefined || value === "") return undefined;
+  const port = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`[bractjs] Invalid port from ${source}: ${JSON.stringify(value)} (expected 1–65535)`);
+  }
+  return port;
+}
+
+/** The `PORT` environment variable, validated — what hosting platforms (Fly, Render, Railway, Heroku) set. */
+export function envPort(): number | undefined {
+  return parsePort(process.env.PORT, "the PORT environment variable");
+}
+
 export function requireEnv(key: string): string {
   const value = Bun.env[key];
   if (!value) {

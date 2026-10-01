@@ -8,6 +8,10 @@ All notable changes to BractJS are documented here.
 
 ### Fixed
 
+- **`bractjs start` now listens on `PORT`.** It always used `port` from `bractjs.config.ts` or 3000, while the scaffold's `app/server.ts` (the compiled binary) read `PORT`, so the same app listened on different ports depending on how it ran, and deploys to platforms that assign `PORT` (Fly, Render, Railway, Heroku) failed health checks. `bractjs dev` and `bractjs start` now take `--port`, then `PORT`, then the config, then 3000; `createServer()` uses its `port` option, then `PORT`, then 3000. Invalid values fail at startup with a clear message. `bractjs start --host <addr>` (or `HOST`) sets the listen address.
+- **`createDevServer({ port })` is honored when `bractjs.config.ts` also sets `port`.** The config value silently overrode the option.
+- **CLI:** `bractjs --version` prints the version; `--help` (and no command) prints usage and exits 0 instead of 1; an unknown command says so and suggests the closest one. `bractjs compile` honors `appDir` / `buildDir` from the config instead of assuming `./app` and `./build`.
+
 - **Root and layout loader errors render an `ErrorBoundary` instead of a JSON body.** Before, only route loaders did: `throw new HttpError(403, "…")` in a `layout.tsx` loader answered a page load with `{"error":"…"}`, and client navigation to it silently stayed on the old page while the URL changed. Now:
   - A failed **layout** loader renders the nearest `ErrorBoundary` in that layout's place, so root and the layouts above it still render. The boundary is the layout's own `ErrorBoundary` export (newly supported on layouts), else the next enclosing layout's, else root's, else the built-in fallback. The HTTP status is the error's. This works on document loads and client navigation, and hydrates cleanly.
   - A failed **root** loader gets a minimal framework-rendered document with root's `ErrorBoundary` (or the fallback), the app-wide stylesheets and the error's status. It isn't hydrated. Client navigation that hits it falls back to a full page load.
