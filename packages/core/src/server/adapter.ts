@@ -1,3 +1,4 @@
+import { setClientAddress } from "./client-address.ts";
 import { isExplicitDev } from "./env.ts";
 
 // ── BractAdapter ──────────────────────────────────────────────────────────
@@ -62,7 +63,12 @@ export class BunAdapter implements BractAdapter {
       port,
       ...(this.hostname ? { hostname: this.hostname } : {}),
       maxRequestBodySize: this.maxRequestBodySize,
-      fetch: handler,
+      fetch(request, server) {
+        // Record the socket address for getClientAddress() (rate limiting, logs).
+        const address = server.requestIP(request)?.address;
+        if (address) setClientAddress(request, address);
+        return handler(request);
+      },
       error(err: Error) {
         console.error("[bractjs] unhandled server error:", err);
         // SECURITY(high): never leak internal error details in production. This

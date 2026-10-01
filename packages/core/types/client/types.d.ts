@@ -18,6 +18,8 @@ export interface BractJSClientData {
     matches?: RouteMatch[];
     /** Present when the document did not SSR the route component (selective SSR / SPA shell). */
     ssrMode?: "client-only" | "data-only" | "spa";
+    /** The request id from the requestId() middleware, when registered. */
+    requestId?: string;
 }
 declare global {
     interface Window {

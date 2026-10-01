@@ -34,6 +34,7 @@ import {
   runRouteMiddleware,
 } from "./middleware.ts";
 import { renderRootErrorDocument, renderRoute, type ServerManifest } from "./render.ts";
+import { getRequestId } from "./request-context.ts";
 import { error, json, redirectEnvelope, sanitizeRedirect } from "./response.ts";
 import { validateSearch } from "./search.ts";
 
@@ -264,6 +265,7 @@ async function route(
               links,
               search,
               matches,
+              requestId: getRequestId(),
             },
             streamTimeout,
           ),

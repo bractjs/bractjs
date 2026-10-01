@@ -3,7 +3,7 @@ interface DefaultErrorBoundaryProps {
     error: Error;
     requestId?: string;
 }
-export declare function DefaultErrorBoundary({ error, requestId }: DefaultErrorBoundaryProps): ReactElement;
+export declare function DefaultErrorBoundary({ error, requestId: requestIdProp, }: DefaultErrorBoundaryProps): ReactElement;
 interface RouteErrorBoundaryProps {
     errorBoundary?: ComponentType<{
         error: Error;

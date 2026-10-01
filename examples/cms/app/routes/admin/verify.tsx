@@ -46,7 +46,7 @@ export async function action({ request, formData }: ActionArgs): Promise<ActionD
   } catch {
     return { error: "Enter the 6-digit code." };
   }
-  const result = verifyLoginCode(pendingId, parsed.code, clientIp(request));
+  const result = await verifyLoginCode(pendingId, parsed.code, clientIp(request));
   if (!result.ok) return { error: result.reason };
 
   const user = getUserById(pendingId);

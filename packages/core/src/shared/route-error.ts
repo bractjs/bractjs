@@ -1,5 +1,6 @@
 import { type ComponentType, createContext, createElement, type ReactElement, useContext } from "react";
 import { HttpError } from "./errors.ts";
+import { useRequestId } from "./request-id.ts";
 
 // A loader that fails leaves `{ __error: { message, status? } }` in its loader
 // slot (server/loader.ts) instead of aborting the page. The outermost failed
@@ -64,11 +65,14 @@ export function routeErrorStatus(error: Error): number {
 export function RouteErrorFallback({ error }: { error: unknown }): ReactElement {
   const status = error instanceof HttpError ? error.status : 500;
   const message = error instanceof Error ? error.message : String(error);
+  // For server errors, the id to quote to support (requestId() middleware).
+  const requestId = useRequestId();
   return createElement(
     "div",
     { role: "alert", "data-bract-error": status },
     createElement("h1", null, String(status)),
     createElement("p", null, message),
+    status >= 500 && requestId ? createElement("p", null, `Request ID: ${requestId}`) : null,
   );
 }
 

@@ -89,23 +89,23 @@ const loginPerIp = createRateLimiter(30, LOGIN_WINDOW_MS); // attempts / IP / 15
 export type LoginRate = { ok: true } | { ok: false; retryAfterMs: number };
 
 /** Throttle a password attempt. Call before authenticatePassword. */
-export function checkLoginRate(username: string, ip: string): LoginRate {
-  const u = loginPerUser.check(username.trim().toLowerCase());
+export async function checkLoginRate(username: string, ip: string): Promise<LoginRate> {
+  const u = await loginPerUser.check(username.trim().toLowerCase());
   if (!u.ok) return { ok: false, retryAfterMs: u.retryAfterMs };
-  const i = checkIpLimit(loginPerIp, ip);
+  const i = await checkIpLimit(loginPerIp, ip);
   if (!i.ok) return { ok: false, retryAfterMs: i.retryAfterMs };
   return { ok: true };
 }
 
 /** Clear the per-username counter after a successful sign-in (don't penalize the legit user). */
-export function clearLoginRate(username: string): void {
-  loginPerUser.reset(username.trim().toLowerCase());
+export async function clearLoginRate(username: string): Promise<void> {
+  await loginPerUser.reset(username.trim().toLowerCase());
 }
 
 /** Test seam: clear login throttle windows between cases. */
-export function _resetLoginRateLimits(): void {
-  loginPerUser.reset();
-  loginPerIp.reset();
+export async function _resetLoginRateLimits(): Promise<void> {
+  await loginPerUser.reset();
+  await loginPerIp.reset();
 }
 
 // A hash of a throwaway value, verified against when the username doesn't exist

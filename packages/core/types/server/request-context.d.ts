@@ -16,3 +16,11 @@ export declare function runWithRequest<T>(request: Request, fn: () => T): T;
  * called outside a request, e.g. at module scope.
  */
 export declare function getRequest(): Request;
+/**
+ * The current request's id, set by the `requestId()` middleware — for logs,
+ * error reports and support messages ("quote this id"). Undefined outside a
+ * request or when `requestId()` isn't registered.
+ */
+export declare function getRequestId(): string | undefined;
+/** Record the current request's id (the requestId() middleware). */
+export declare function setRequestId(id: string): void;

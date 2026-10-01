@@ -6,11 +6,16 @@ import * as asyncHooks from "node:async_hooks";
 // handler (serve.ts) enters this scope once per request, around the global
 // middleware pipeline, so it covers server actions, /_stream, loaders, typed
 // /api handlers and SSR alike.
-const storage = new asyncHooks.AsyncLocalStorage<Request>();
+interface RequestScope {
+  request: Request;
+  /** Set by the requestId() middleware. */
+  requestId?: string;
+}
+const storage = new asyncHooks.AsyncLocalStorage<RequestScope>();
 
 /** Run `fn` with `request` as the current request. */
 export function runWithRequest<T>(request: Request, fn: () => T): T {
-  return storage.run(request, fn);
+  return storage.run({ request }, fn);
 }
 
 /**
@@ -29,7 +34,7 @@ export function runWithRequest<T>(request: Request, fn: () => T): T {
  * called outside a request, e.g. at module scope.
  */
 export function getRequest(): Request {
-  const request = storage.getStore();
+  const request = storage.getStore()?.request;
   if (!request) {
     throw new Error(
       "[bractjs] getRequest() was called outside a request. Call it inside a server action, loader, action, " +
@@ -37,4 +42,19 @@ export function getRequest(): Request {
     );
   }
   return request;
+}
+
+/**
+ * The current request's id, set by the `requestId()` middleware — for logs,
+ * error reports and support messages ("quote this id"). Undefined outside a
+ * request or when `requestId()` isn't registered.
+ */
+export function getRequestId(): string | undefined {
+  return storage.getStore()?.requestId;
+}
+
+/** Record the current request's id (the requestId() middleware). */
+export function setRequestId(id: string): void {
+  const scope = storage.getStore();
+  if (scope) scope.requestId = id;
 }

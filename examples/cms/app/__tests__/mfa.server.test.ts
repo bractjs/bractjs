@@ -50,16 +50,16 @@ test("issueLoginCode refuses an account with no email", async () => {
 test("verifyLoginCode consumes a correct code (single use)", async () => {
   const u = await freshUser();
   plantCode(u.id, "123456");
-  expect(verifyLoginCode(u.id, "123456", `ip-${u.id}`).ok).toBe(true);
+  expect((await verifyLoginCode(u.id, "123456", `ip-${u.id}`)).ok).toBe(true);
   expect(codeRow(u.id)).toBeNull(); // deleted on success
   // A second attempt with the same code now fails — it's gone.
-  expect(verifyLoginCode(u.id, "123456", `ip-${u.id}`).ok).toBe(false);
+  expect((await verifyLoginCode(u.id, "123456", `ip-${u.id}`)).ok).toBe(false);
 });
 
 test("verifyLoginCode rejects a wrong code and counts the attempt", async () => {
   const u = await freshUser();
   plantCode(u.id, "111111");
-  const res = verifyLoginCode(u.id, "222222", `ip-${u.id}`);
+  const res = await verifyLoginCode(u.id, "222222", `ip-${u.id}`);
   expect(res.ok).toBe(false);
   expect((res as { status: number }).status).toBe(400);
   expect(codeRow(u.id)!.attempts).toBe(1);
@@ -68,7 +68,7 @@ test("verifyLoginCode rejects a wrong code and counts the attempt", async () => 
 test("verifyLoginCode rejects an expired code", async () => {
   const u = await freshUser();
   plantCode(u.id, "123456", { expiresAt: Date.now() - 1 });
-  const res = verifyLoginCode(u.id, "123456", `ip-${u.id}`);
+  const res = await verifyLoginCode(u.id, "123456", `ip-${u.id}`);
   expect(res.ok).toBe(false);
   expect((res as { status: number }).status).toBe(400);
 });
@@ -76,7 +76,7 @@ test("verifyLoginCode rejects an expired code", async () => {
 test("verifyLoginCode locks out after the attempt cap and purges the code", async () => {
   const u = await freshUser();
   plantCode(u.id, "123456", { attempts: 5 });
-  const res = verifyLoginCode(u.id, "123456", `ip-${u.id}`);
+  const res = await verifyLoginCode(u.id, "123456", `ip-${u.id}`);
   expect(res.ok).toBe(false);
   expect((res as { status: number }).status).toBe(429);
   expect(codeRow(u.id)).toBeNull();
