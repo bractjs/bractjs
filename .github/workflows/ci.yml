@@ -84,6 +84,10 @@ jobs:
         working-directory: examples/cms
         run: bun test
 
+      - name: Test (examples/todo)
+        working-directory: examples/todo
+        run: pnpm test
+
       - name: Publish dry-run (tarball contents)
         working-directory: packages/core
         run: bun run scripts/verify-pack.ts

@@ -6,6 +6,10 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`@bractjs/bractjs/testing`: test helpers for apps.** `createTestApp()` runs your app's real request pipeline in-process (global middleware from `app/server.ts`, route middleware, `beforeLoad`, loaders, actions, server actions, SSR) from source, with no build and no server. `get` / `data` / `submit` / `post` / `fetch` mirror what a browser sends, a cookie jar carries `Set-Cookie` across requests, and mutations pass the CSRF gate. `callLoader()` / `callAction()` call one route function with the arguments BractJS would pass. New guide: [Testing your app](docs/testing.md). `examples/todo` has a test suite built on it, and CI runs it.
+
 ### Fixed
 
 - **`bractjs start` now listens on `PORT`.** It always used `port` from `bractjs.config.ts` or 3000, while the scaffold's `app/server.ts` (the compiled binary) read `PORT`, so the same app listened on different ports depending on how it ran, and deploys to platforms that assign `PORT` (Fly, Render, Railway, Heroku) failed health checks. `bractjs dev` and `bractjs start` now take `--port`, then `PORT`, then the config, then 3000; `createServer()` uses its `port` option, then `PORT`, then 3000. Invalid values fail at startup with a clear message. `bractjs start --host <addr>` (or `HOST`) sets the listen address.

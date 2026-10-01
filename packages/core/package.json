@@ -54,6 +54,10 @@
     "./codegen": {
       "types": "./types/codegen-entry.d.ts",
       "default": "./src/codegen-entry.ts"
+    },
+    "./testing": {
+      "types": "./types/testing-entry.d.ts",
+      "default": "./src/testing-entry.ts"
     }
   },
   "scripts": {

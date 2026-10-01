@@ -1621,7 +1621,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 
 ## 26. Full export index
 
-The package has three entries: `@bractjs/bractjs` (everything app code needs), `@bractjs/bractjs/build` (programmatic builds + bundler plugins), and `@bractjs/bractjs/codegen` (registry/manifest generation for the native-compile workflow).
+The package has four entries: `@bractjs/bractjs` (everything app code needs), `@bractjs/bractjs/build` (programmatic builds + bundler plugins), `@bractjs/bractjs/codegen` (registry/manifest generation for the native-compile workflow), and `@bractjs/bractjs/testing` (test helpers — [Testing your app](docs/testing.md)).
 
 Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
@@ -1668,6 +1668,10 @@ From `@bractjs/bractjs/build` ([packages/core/src/build-entry.ts](packages/core/
 From `@bractjs/bractjs/codegen` ([packages/core/src/codegen-entry.ts](packages/core/src/codegen-entry.ts)):
 
 **Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`, `routesFingerprint`, `explainStaleness`
+
+From `@bractjs/bractjs/testing` ([packages/core/src/testing-entry.ts](packages/core/src/testing-entry.ts)):
+
+**Testing:** `createTestApp`, `callLoader`, `callAction` (types `TestApp`, `TestAppOptions`, `CallLoaderOptions`, `CallActionOptions`, `FormBody`)
 
 **Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `ApiRouteOptions`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `ToasterProps`, `ToastPosition`, `Toast`, `ToastEntry`, `ToastOptions`, `ToastType`, `ToastAction`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 

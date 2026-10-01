@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as buildApi from "../build-entry.ts";
 import * as codegenApi from "../codegen-entry.ts";
+import * as testingApi from "../testing-entry.ts";
 import * as rootApi from "../index.ts";
 
 // The published type surface (`types/`) is GENERATED from `src/` by
@@ -36,6 +37,7 @@ const entries = [
   { name: ".", dts: "index.d.ts", api: rootApi },
   { name: "./build", dts: "build-entry.d.ts", api: buildApi },
   { name: "./codegen", dts: "codegen-entry.d.ts", api: codegenApi },
+  { name: "./testing", dts: "testing-entry.d.ts", api: testingApi },
 ] as const;
 
 for (const { name, dts, api } of entries) {
