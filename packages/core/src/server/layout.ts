@@ -127,6 +127,7 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
     links: mod.links,
     handle: mod.handle,
     ErrorBoundary: mod.ErrorBoundary,
+    Layout: mod.Layout,
     default: mod.default,
   } as RouteModule;
 }
@@ -161,6 +162,7 @@ function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined)
     links: m.links as RouteModule["links"],
     handle: m.handle as RouteModule["handle"],
     ErrorBoundary: m.ErrorBoundary as RouteModule["ErrorBoundary"],
+    Layout: m.Layout as RouteModule["Layout"],
     default: m.default as RouteModule["default"],
   } as RouteModule;
 }
@@ -214,4 +216,33 @@ export async function resolveRouteChain(
     route: routeMod,
     files: { root: rootFile, layouts: layoutFiles, route: routeFile.filePath },
   };
+}
+
+/**
+ * The chain for a URL no route matches: root alone, with an empty route
+ * module. Root's middleware, loader and chrome still run, so the 404 page
+ * renders inside the app's own document.
+ */
+export async function resolveRootChain(appDir: string, registry?: ModuleRegistry): Promise<LayoutChain> {
+  if (registry) {
+    const rootKey = registry["root.tsx"] ? "root.tsx" : registry["root.ts"] ? "root.ts" : undefined;
+    return {
+      root: rootKey ? pickRouteModule(registry[rootKey]) : {},
+      layouts: [],
+      route: {},
+      files: { root: rootKey, layouts: [] },
+    };
+  }
+  for (const name of ["root.tsx", "root.ts"]) {
+    const rootPath = resolve(join(appDir, name));
+    if (await Bun.file(rootPath).exists()) {
+      return {
+        root: await importRouteModule(rootPath),
+        layouts: [],
+        route: {},
+        files: { root: name, layouts: [] },
+      };
+    }
+  }
+  return { root: {}, layouts: [], route: {}, files: { layouts: [] } };
 }

@@ -144,6 +144,40 @@ export default function Root() {
 
 > `<title>`/`<meta>` tags from any route's `meta()` are rendered into `<head>` via React 19 document-metadata hoisting — you do not place them manually.
 
+**Or split the document out with `Layout`** (React Router's root `Layout`). `Layout` owns `<html>`/`<head>`/`<body>` and wraps whatever renders inside it. Normally that is the default export; when the root loader fails, it is root's `ErrorBoundary`. Either way the page keeps the app's document, styles and chrome:
+
+```tsx
+export function Layout({ children }: { children?: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+      </head>
+      <body>
+        <SiteHeader />
+        {children}
+        <Scripts />
+        <LiveReload />
+      </body>
+    </html>
+  );
+}
+
+export default function Root() {
+  return <Outlet />;
+}
+
+export function ErrorBoundary({ error }: { error: unknown }) {
+  return (
+    <h1>{isRouteErrorResponse(error) && error.status === 404 ? "Page not found" : "Something went wrong"}</h1>
+  );
+}
+```
+
+`Layout` renders without loader data when the root loader has failed, so read data defensively there (`useRouteLoaderData("root")` may be `undefined`).
+
+**404s.** A browser request for a URL no route matches gets the app's own page with status 404: root's middleware and loader run, and root's `ErrorBoundary` (or a built-in fallback) renders in the `<Outlet>` with a 404 `HttpError`. Requests that don't ask for HTML (assets, `fetch` calls) get a plain 404.
+
 ---
 
 ## 4. File-based routing

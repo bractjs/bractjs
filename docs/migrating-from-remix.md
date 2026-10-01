@@ -41,7 +41,7 @@ Delete `vite.config.ts`, `react-router.config.ts`, and (RR7) `app/routes.ts`. Co
 
 | Remix / RR7                                  | BractJS                                                                                                                                                                                 |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/root.tsx` with `Layout` + `App` exports | `app/root.tsx` — one `default` export that returns the whole `<html>` document ([§3](../README.md#3-the-root-layout-approotsx)).                                                        |
+| `app/root.tsx` with `Layout` + `App` exports | Same: `Layout` wraps the `default` export (or root's `ErrorBoundary`), or a single `default` can return the whole document ([§3](../README.md#3-the-root-layout-approotsx)).            |
 | `<Meta />`, `<Links />` in root              | Optional. BractJS puts `meta()` / `links()` output and imported CSS into `<head>` itself; both components render nothing.                                                               |
 | `<Scripts />`, `<ScrollRestoration />`       | Same components, imported from `@bractjs/bractjs`. Add `<LiveReload />` (dev HMR; renders nothing in production).                                                                       |
 | `entry.server.tsx`, `server.js` / Express    | `app/server.ts` (global middleware via `pipeline.use(...)`) plus `app/lifecycle.ts` (`onStart` / `onShutdown` / `onError` / `instrumentations`). `streamTimeout` → `bractjs.config.ts`. |
@@ -188,7 +188,7 @@ Plain CSS imports (`import "./styles.css"`) and CSS Modules (`import styles from
 
 As of the current release, these have no clean equivalent. Plan around them:
 
-- **A failed root loader** renders root's `ErrorBoundary` inside a minimal framework document (BractJS has no `Layout` export for root to supply its own), and the page isn't hydrated.
+- **A failed root loader's** page isn't hydrated: root's `ErrorBoundary` renders inside `Layout` (or a minimal framework document), with no client scripts.
 - **`clientMiddleware`** isn't supported. Use `clientLoader`, or server `middleware`.
 - **`meta` merges** root → route instead of the leaf replacing the whole array.
 - **`<Form>` defaults to `post`**, not `get`.

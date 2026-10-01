@@ -320,6 +320,13 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
   clientLoaderHydrate?: boolean;
   handle?: Record<string, unknown>;
   ErrorBoundary?: React.ComponentType<{ error: unknown }>;
+  /**
+   * root.tsx only (React Router's root `Layout`): the document shell —
+   * `<html>`, `<head>`, `<body>` — wrapping whatever renders inside it: the
+   * root component normally, or root's `ErrorBoundary` when the root loader
+   * fails. Without it, root's default export renders the document itself.
+   */
+  Layout?: React.ComponentType<{ children?: React.ReactNode }>;
   /** The route component. Receives {@link RouteComponentProps} (optional to declare). */
   default?: React.ComponentType;
 }

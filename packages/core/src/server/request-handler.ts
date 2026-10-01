@@ -13,7 +13,7 @@ import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
 import { settleDeferred } from "./deferred-wire.ts";
 import { isExplicitDev } from "./env.ts";
 import { resolveHeaders } from "./headers.ts";
-import { type ModuleRegistry, resolveRouteChain } from "./layout.ts";
+import { type ModuleRegistry, resolveRootChain, resolveRouteChain } from "./layout.ts";
 import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import {
   buildLoaderArgs,
@@ -147,6 +147,20 @@ function withoutFailedHead<
     ),
     route: { ...chain.route, meta: undefined, headers: undefined },
   };
+}
+
+/** A browser navigation asking for an HTML page (vs. an asset or a data fetch). */
+function isDocumentRequest(request: Request): boolean {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  return (request.headers.get("Accept") ?? "").includes("text/html");
+}
+
+/** Wrap the root element in root.tsx's `Layout` export, when it has one. */
+function withRootLayout(
+  Layout: React.ComponentType<{ children?: React.ReactNode }> | undefined,
+  rootElement: React.ReactElement,
+): React.ReactElement {
+  return Layout ? createElement(Layout, null, rootElement) : rootElement;
 }
 
 /** `request` with `formData()` answering from an already-parsed body (callable repeatedly). */
@@ -295,10 +309,17 @@ async function route(
   }
 
   // ── Route matching ────────────────────────────────────────────────────
-  const match = matchRoute(pathname, trie);
-  if (!match) return error("Not Found", 404);
+  // A browser asking for a page no route matches gets the app's own 404:
+  // root renders (its middleware and loader run) with a 404 in the route
+  // slot, so root's ErrorBoundary shows inside the app's chrome. Anything
+  // else (assets, fetches, crawlers asking for JSON) gets a plain 404.
+  const matched = matchRoute(pathname, trie);
+  if (!matched && !isDocumentRequest(request)) return error("Not Found", 404);
+  const match = matched ?? { routeFile: undefined, params: {} as Record<string, string> };
 
-  const chain = await resolveRouteChain(match.routeFile, appDir, moduleRegistry);
+  const chain = match.routeFile
+    ? await resolveRouteChain(match.routeFile, appDir, moduleRegistry)
+    : await resolveRootChain(appDir, moduleRegistry);
 
   // Validate search params before any route work (context factory, beforeLoad,
   // action, loaders) — they all receive the validated object.
@@ -340,13 +361,13 @@ async function route(
         actionData = await runAction(
           chain.route,
           { ...args, request: actionRequest, formData },
-          chain.files?.route ?? match.routeFile.filePath,
+          chain.files?.route ?? match.routeFile?.filePath,
         );
       } catch (err) {
         if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
         if (isHttpError(err)) return error(err.message, err.status);
         // Name the failing route so the log points at the right file.
-        console.error(`[bractjs] action error in ${chain.files?.route ?? match.routeFile.filePath}:`, err);
+        console.error(`[bractjs] action error in ${chain.files?.route ?? match.routeFile?.filePath}:`, err);
         await fireOnError(onError, err, request);
         if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
         return error("Internal Server Error", 500);
@@ -388,6 +409,7 @@ async function route(
     let loaderResults;
     try {
       loaderResults = await runLoaders(loaderChain, args, onError);
+      if (!match.routeFile) loaderResults.route = { __error: { message: "Not Found", status: 404 } };
     } catch (err) {
       // Loader HttpErrors are captured into their slots (see below); only
       // redirects and framework failures land here.
@@ -403,8 +425,11 @@ async function route(
     if (failure?.scope === "root") {
       return renderRootErrorDocument({
         Boundary: pickBoundaryForFailure(undefined, [], 0, chain.root.ErrorBoundary),
+        Layout: chain.root.Layout,
         error: failure.error,
         params: match.params,
+        pathname,
+        search: url.search,
         manifest,
         nonce: getCspNonce(mwCtx.context),
         status: routeErrorStatus(failure.error),
@@ -467,13 +492,17 @@ async function route(
         search,
         matches,
       },
-      // Root receives React Router-style component props too (its own slice).
-      children: createElement(RootComponent as React.ComponentType<Record<string, unknown>>, {
-        loaderData: loaderResults.root,
-        actionData: actionData ?? undefined,
-        params: match.params,
-        matches,
-      }),
+      // Root receives React Router-style component props too (its own slice),
+      // inside root's `Layout` (the document shell) when it exports one.
+      children: withRootLayout(
+        chain.root.Layout,
+        createElement(RootComponent as React.ComponentType<Record<string, unknown>>, {
+          loaderData: loaderResults.root,
+          actionData: actionData ?? undefined,
+          params: match.params,
+          matches,
+        }),
+      ),
     });
 
     const meta = resolveMeta(withoutFailedHead(chain, failure), loaderResults, match.params, {
@@ -510,9 +539,9 @@ async function route(
       links: resolveLinks(chain),
       matches,
       headers: documentHeaders,
-      routeFile: match.routeFile.filePath,
+      routeFile: match.routeFile?.filePath,
       // Manifest key for this route — selects its extracted CSS bundles.
-      routePattern: match.routeFile.urlPattern,
+      routePattern: match.routeFile?.urlPattern,
       // Set by the opt-in csp() middleware; undefined otherwise.
       nonce: getCspNonce(mwCtx.context),
       ssrMode,
