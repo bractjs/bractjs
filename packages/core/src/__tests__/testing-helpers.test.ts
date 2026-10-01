@@ -10,6 +10,12 @@ import { callAction, callLoader, createTestApp } from "../testing-entry.ts";
 const appDir = join(import.meta.dir, "fixtures", "app");
 
 describe("createTestApp", () => {
+  test("a missing app directory fails clearly", async () => {
+    await expect(createTestApp({ appDir: "/no/such/app" })).rejects.toThrow(
+      "No app directory at /no/such/app",
+    );
+  });
+
   test("renders a document through the real pipeline", async () => {
     const app = await createTestApp({ appDir, serverEntry: false });
     const res = await app.get("/");

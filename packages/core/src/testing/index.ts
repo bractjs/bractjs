@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { buildLoaderArgs } from "../server/loader.ts";
 import type { BractJSConfig } from "../server/serve.ts";
 import { buildFetchHandler } from "../server/serve.ts";
@@ -60,6 +62,11 @@ export type FormBody = FormData | Record<string, string | Blob>;
 export async function createTestApp(options: TestAppOptions = {}): Promise<TestApp> {
   const { serverEntry = true, origin = "http://localhost", ...config } = options;
   const appDir = config.appDir ?? "./app";
+  if (!existsSync(resolve(appDir))) {
+    throw new Error(
+      `[bractjs/testing] No app directory at ${resolve(appDir)}. Run tests from the app root, or pass { appDir }.`,
+    );
+  }
   if (serverEntry) {
     // Runtime plugins (CSS Modules, "use client" stubs) are installed by
     // loadServerEntry too, before any app module loads.

@@ -63,7 +63,7 @@
   "scripts": {
     "dev": "bun run src/dev/server.ts",
     "build": "bun run src/build/bundler.ts",
-    "test": "bun test",
+    "test": "bun test src",
     "typecheck": "bunx tsc --noEmit && bunx tsc -p tsconfig.types.json",
     "typegen": "bunx tsc -p tsconfig.declarations.json",
     "prepublishOnly": "bun run typegen && bun run scripts/verify-pack.ts"
