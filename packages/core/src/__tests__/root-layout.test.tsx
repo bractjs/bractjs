@@ -1,6 +1,5 @@
 // root.tsx's `Layout` export (React Router's root Layout) and the app-styled
 // 404 for URLs no route matches.
-/* eslint-disable react/display-name -- tiny inline test components */
 import { describe, expect, test } from "bun:test";
 import { createElement, type ReactNode } from "react";
 import { Outlet } from "../client/components/Outlet.tsx";

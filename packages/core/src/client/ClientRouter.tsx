@@ -142,7 +142,9 @@ export function ClientRouter({
   }, [params]);
   const currentModuleRef = useRef(currentModule);
   const currentLayoutsRef = useRef(currentLayouts);
-  currentLayoutsRef.current = currentLayouts;
+  useEffect(() => {
+    currentLayoutsRef.current = currentLayouts;
+  }, [currentLayouts]);
   useEffect(() => {
     currentModuleRef.current = currentModule;
   }, [currentModule]);
