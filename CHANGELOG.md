@@ -8,6 +8,13 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **Production servers on Node.js and Deno.** `bractjs build --target node` bundles `app/server.ts` (app, React, framework, generated registries) into `build/node/server.js`, which runs with `node` (22+) or `deno` and no `node_modules`. `createServer()` now picks the adapter for its runtime (new `NodeAdapter` on `node:http` and `DenoAdapter` on `Deno.serve`), and the request path no longer touches Bun-only APIs (a small file/env shim replaces `Bun.file` / `Bun.env` there). CI runs the browser suite against both the Bun and the Node server. `examples/todo` moved from `bun:sqlite` to an in-memory store so it runs on both.
+- **Cloudflare Workers `env` and `ctx` reach app code** through `getPlatform<{ env; ctx }>()`, anywhere in a request. They were dropped before.
+
+### Changed
+
+- **`app/server.ts` now spreads `bractjs.config.ts` into `createServer()`** (scaffold and examples). The compiled binary and the Node build run this file and never read the config, so config-only settings (`i18n`, `ssr`, `streamTimeout`, `compression`, …) silently didn't apply there. Existing apps should add `import config from "../bractjs.config.ts"` and `...config` to the same call.
+
 - **Internationalization as a one-line opt-in.** `i18n: { locales: ["en", "fr"], defaultLocale: "en" }` in `bractjs.config.ts` serves every route at `/about` (default locale) and `/fr/about` from the same route files. The server and the client router strip the prefix before matching. Loaders and middleware get `context.locale`, and `useLocale()` reads it everywhere. `useLocalizedLink()` builds links (and language switchers) that keep the default locale unprefixed. `/en/…` redirects to the canonical URL. `detect: true` sends first visits to the `Accept-Language` locale once, remembered in a cookie. Prerendering covers every locale. Before, the `i18n` config key was accepted but did nothing. `examples/todo` has a French board at `/fr`.
 
 - **`bractjs compile` produces a truly self-contained binary.** It now embeds the client build (JS, CSS, prerendered pages, the SPA shell) and `public/` in the executable (`--asset`), and the server serves them from inside it. The binary runs from any directory with nothing beside it; before, it 404'd every script and stylesheet unless `build/client/` and `public/` were shipped next to it. `compile` also prerenders configured paths now (only `build` did), and a binary no longer warns "No build found" at startup.

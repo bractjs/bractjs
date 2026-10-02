@@ -9,7 +9,7 @@ const USAGE =
   "Usage: bractjs <command> [options]\n\n" +
   "  new      <app-name> [--tailwind]     Scaffold a new BractJS app\n" +
   "  dev      [--port n] [--host [addr]]  Dev server with HMR (loopback unless --host)\n" +
-  "  build                                Build for production (build/ dir)\n" +
+  "  build    [--target node]             Build for production (build/ dir; --target node adds a Node.js server)\n" +
   "  start    [--port n] [--host addr]    Start the production server\n" +
   "  codegen  [app] [out]                 Generate typed route types\n" +
   "  codegen:seed  [app]                  Seed _generated/ so app/server.ts typechecks (no build needed)\n" +
@@ -272,6 +272,40 @@ switch (command) {
         i18n: userCfg.i18n,
       });
       console.log(`[bract] prerender → ${written.length} files`);
+    }
+    // `--target node`: also bundle app/server.ts (app code, React, the
+    // framework, generated registries + manifest) into one ESM file that runs
+    // on Node.js — or Deno — with `node <buildDir>/node/server.js`.
+    const target = flag("target");
+    if (target && target !== "bun") {
+      if (target !== "node") {
+        console.error(`[bract] Unknown --target "${target}" (expected "node").`);
+        process.exit(1);
+      }
+      const appDirRel = userCfg.appDir ?? "./app";
+      const buildDirRel = userCfg.buildDir ?? "./build";
+      const { writeModuleRegistries, writeManifestModule } =
+        await import("../src/codegen/module-registry.ts");
+      await writeModuleRegistries(resolve(appDirRel));
+      await writeManifestModule(resolve(appDirRel), resolve(buildDirRel));
+      const outdir = join(buildDirRel, "node");
+      const result = await Bun.build({
+        entrypoints: [join(appDirRel, "server.ts")],
+        target: "node",
+        format: "esm",
+        outdir,
+        naming: "[name].[ext]",
+        define: { "process.env.NODE_ENV": JSON.stringify("production") },
+      });
+      if (!result.success) {
+        for (const log of result.logs) console.error(log);
+        process.exit(1);
+      }
+      // The bundle is ESM; mark the directory so Node loads `.js` as a module.
+      await Bun.write(join(outdir, "package.json"), JSON.stringify({ type: "module" }) + "\n");
+      console.log(
+        `[bract] node build → ${join(outdir, "server.js")}  (run: node ${join(outdir, "server.js")})`,
+      );
     }
     break;
   }

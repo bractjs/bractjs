@@ -71,8 +71,8 @@ const FEATURES: Array<{ icon: LucideIcon; title: string; body: React.ReactNode }
     title: "Server-only data",
     body: (
       <>
-        The <code>bun:sqlite</code> store lives in <code>todos.server.ts</code>. The <code>.server.ts</code>{" "}
-        suffix keeps it on the server: client bundles get an inert stub instead of the module.
+        The in-memory store lives in <code>todos.server.ts</code>. The <code>.server.ts</code> suffix keeps it
+        on the server: client bundles get an inert stub instead of the module.
       </>
     ),
   },

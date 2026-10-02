@@ -8,6 +8,10 @@
  * the repository README: https://github.com/bractjs/bractjs#readme
  */
 export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloudflare.ts";
+export type { DenoAdapterOptions } from "./adapters/deno.ts";
+export { createDenoAdapter, DenoAdapter } from "./adapters/deno.ts";
+export type { NodeAdapterOptions } from "./adapters/node.ts";
+export { createNodeAdapter, NodeAdapter } from "./adapters/node.ts";
 export { buildPath, generatePath, generatePath as href } from "./client/build-path.ts";
 export { Await, useAsyncError, useAsyncValue } from "./client/components/Await.tsx";
 export { Form } from "./client/components/Form.tsx";
@@ -100,6 +104,7 @@ export { defineLifecycle } from "./server/lifecycle.ts";
 export type { MiddlewareContext, MiddlewareFn, RouteMiddleware } from "./server/middleware.ts";
 export { createMiddlewareContext, MiddlewarePipeline, pipeline } from "./server/middleware.ts";
 export { getRequest, getRequestId } from "./server/request-context.ts";
+export { getPlatform } from "./server/platform.ts";
 export { useRequestId } from "./shared/request-id.ts";
 export type { ClientAddressOptions } from "./server/client-address.ts";
 export { getClientAddress } from "./server/client-address.ts";

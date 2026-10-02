@@ -4,6 +4,7 @@ import { BractJSProvider, type RouteManifest } from "../shared/context.ts";
 import { devBustedSpecifier } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
+import { fileExists } from "./runtime.ts";
 
 /**
  * Render the SPA-mode document shell: the app's root component around an
@@ -30,7 +31,7 @@ export async function renderSpaShell(
     RootLayout = rootMod?.Layout;
   } else {
     const rootPath = resolve(join(appDir, "root.tsx"));
-    if (await Bun.file(rootPath).exists()) {
+    if (await fileExists(rootPath)) {
       // Dev: cache-busted so an edited root shell is live without a restart.
       const spec = devBustedSpecifier(rootPath);
       const mod = (await import(spec)) as RootExports;

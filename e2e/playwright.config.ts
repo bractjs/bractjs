@@ -24,7 +24,10 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "pnpm build && pnpm start",
+    // E2E_TARGET=node: the same suite against the Node.js build
+    // (`bractjs build --target node` + `node build/node/server.js`).
+    command:
+      process.env.E2E_TARGET === "node" ? "pnpm build:node && pnpm start:node" : "pnpm build && pnpm start",
     cwd: "../examples/todo",
     env: { PORT: String(port) },
     url: `http://localhost:${port}/`,
