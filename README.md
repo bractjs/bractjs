@@ -37,7 +37,7 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 16. [Lifecycle hooks: `defineLifecycle`](#16-lifecycle-hooks)
 17. [Environment variables & `*.server.ts`](#17-environment-variables)
 18. [Typed routes](#18-typed-routes)
-19. [Internationalization (i18n) utilities](#19-internationalization-utilities)
+19. [Internationalization (i18n)](#19-internationalization-locale-prefixed-urls)
 20. [Image optimization (`<Image>` + `/_image`)](#20-image-optimization)
 21. [Build & run: CLI + programmatic API (`createDevServer`, `runBuild`, `loadUserConfig`)](#21-build--run)
 22. [Single-binary deployment (`bun build --compile`)](#22-single-binary-deployment)
@@ -1367,34 +1367,24 @@ You can also call `writeRouteTypes(appDir, outPath?)` / `generateRouteTypes(appD
 
 ---
 
-## 19. Internationalization utilities
+## 19. Internationalization (locale-prefixed URLs)
 
-BractJS exports **utilities** for locale-prefixed routing. These are helpers you wire up yourself (there is no fully-automatic locale router yet) plus the `useLocale` / `useLocalizedLink` client hooks (§9).
+One line of config serves every route in several locales:
 
 ```ts
-import { wrapRoutesWithLocale, stripLocale, localizedDataPath } from "@bractjs/bractjs";
-import type { I18nConfig } from "@bractjs/bractjs";
-
-const i18n: I18nConfig = { locales: ["en", "fr"], defaultLocale: "en" };
-
-// Add /:locale-prefixed variants alongside the originals.
-const localized = wrapRoutesWithLocale(routeFiles, i18n);
-
-// Split a locale off a pathname.
-const { locale, strippedPathname } = stripLocale("/fr/about", i18n.locales);
-// → { locale: "fr", strippedPathname: "/about" }
-
-// Build a locale-aware data path.
-localizedDataPath("/about", "fr"); // → "/fr/about"
+// bractjs.config.ts
+export default defineConfig({
+  i18n: { locales: ["en", "fr", "pt-BR"], defaultLocale: "en" },
+});
 ```
 
-On the client, read the active locale and build localized links:
+- **URLs.** The default locale is unprefixed (`/about`); every other locale is a leading segment (`/fr/about`, `/pt-BR/about`). The same route files serve both, because the server and the client router strip the prefix before matching. Only configured locales count as prefixes. `/en/about` redirects (308) to the canonical `/about`.
+- **Reading it.** Loaders, actions and middleware get `context.locale`. Components call `useLocale()`, which works on the server and in the browser and fits `<html lang={useLocale()}>` in root's `Layout` (§3).
+- **Links.** `useLocalizedLink()` returns `localize(path, locale?)`: the path in the current locale, or the one given. Use it for nav links and a language switcher: `localize(pathname, "fr")` is this page in French. `localizePath(path, locale, i18n)` is the plain function.
+- **Detection (opt-in).** `i18n.detect: true` sends a first visit to an unprefixed page to the locale `Accept-Language` prefers most. Pages set a `bract-locale` cookie, so this happens once and a visitor who switches language keeps their choice.
+- **Prerendering.** Every prerendered path is also rendered in each non-default locale (`/fr/about`).
 
-```tsx
-const locale = useLocale("en");
-const to = useLocalizedLink("en");
-<Link to={to("/about")} />; // → /en/about
-```
+`examples/todo` has a French version of its board at `/fr`. `negotiateLocale(header, i18n)` and `splitLocale(pathname, i18n)` are exported for custom logic. The older `wrapRoutesWithLocale` / `stripLocale` / `localizedDataPath` helpers still work but are deprecated in favor of the config.
 
 ---
 

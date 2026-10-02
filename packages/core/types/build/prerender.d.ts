@@ -1,3 +1,4 @@
+import { type I18nConfig } from "../shared/i18n.ts";
 import type { ServerManifest } from "../server/render.ts";
 export interface PrerenderOptions {
     /** Concrete paths to prerender (or a function resolving them, e.g. from a DB). */
@@ -7,6 +8,8 @@ export interface PrerenderOptions {
     buildDir?: string;
     /** Override the manifest instead of loading `<buildDir>/route-manifest.json`. */
     manifest?: ServerManifest;
+    /** The app's `i18n`: each path is also prerendered in every non-default locale (`/fr/about`). */
+    i18n?: I18nConfig;
 }
 export interface PrerenderResult {
     written: string[];

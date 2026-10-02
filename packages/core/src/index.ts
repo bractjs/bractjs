@@ -140,6 +140,7 @@ export type { CspOptions } from "./server/csp.ts";
 export { CSP_NONCE_KEY, csp, getCspNonce } from "./server/csp.ts";
 // i18n utilities (server-side)
 export { localizedDataPath, stripLocale, wrapRoutesWithLocale } from "./server/i18n.ts";
+export { LOCALE_COOKIE, localizePath, negotiateLocale, splitLocale } from "./shared/i18n.ts";
 // Instrumentation (React Router 8 API) — read-only request/loader/action/middleware wrappers.
 export type {
   HandlerInstrumentations,

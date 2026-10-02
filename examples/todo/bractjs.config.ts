@@ -8,4 +8,6 @@ export default defineConfig({
   clientEnv: [],
   // Compile app/styles.css with Tailwind v4 (needs bun-plugin-tailwind + tailwindcss).
   tailwind: true,
+  // Locale-prefixed URLs: /about is English, /fr/about French — same route files.
+  i18n: { locales: ["en", "fr"], defaultLocale: "en" },
 });

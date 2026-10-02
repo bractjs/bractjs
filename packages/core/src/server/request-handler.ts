@@ -1,5 +1,12 @@
 import { createElement } from "react";
 import { BractJSProvider } from "../shared/context.ts";
+import {
+  type I18nConfig,
+  LOCALE_COOKIE,
+  localizePath,
+  negotiateLocale,
+  splitLocale,
+} from "../shared/i18n.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
 import {
   firstLoaderFailure,
@@ -35,7 +42,7 @@ import {
 } from "./middleware.ts";
 import { renderRootErrorDocument, renderRoute, type ServerManifest } from "./render.ts";
 import { getRequestId } from "./request-context.ts";
-import { error, json, redirectEnvelope, sanitizeRedirect } from "./response.ts";
+import { error, json, redirect, redirectEnvelope, sanitizeRedirect } from "./response.ts";
 import { validateSearch } from "./search.ts";
 
 export interface HandlerConfig {
@@ -51,6 +58,8 @@ export interface HandlerConfig {
   moduleRegistry?: ModuleRegistry;
   /** See `BractJSConfig.streamTimeout`. */
   streamTimeout?: number;
+  /** See `BractJSConfig.i18n`: locale prefixes are stripped before matching. */
+  i18n?: I18nConfig;
 }
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
@@ -149,6 +158,25 @@ function withoutFailedHead<
   };
 }
 
+function hasLocaleCookie(request: Request): boolean {
+  return (request.headers.get("Cookie") ?? "")
+    .split(";")
+    .some((c) => c.trim().startsWith(`${LOCALE_COOKIE}=`));
+}
+
+/** Set the remembered-locale cookie on a response (copying it if its headers are immutable). */
+function withLocaleCookie(res: Response, locale: string): Response {
+  const cookie = `${LOCALE_COOKIE}=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  try {
+    res.headers.append("Set-Cookie", cookie);
+    return res;
+  } catch {
+    const copy = new Response(res.body, res);
+    copy.headers.append("Set-Cookie", cookie);
+    return copy;
+  }
+}
+
 /** A browser navigation asking for an HTML page (vs. an asset or a data fetch). */
 function isDocumentRequest(request: Request): boolean {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
@@ -195,7 +223,7 @@ async function route(
   config: HandlerConfig,
   context: Record<string, unknown>,
 ): Promise<Response> {
-  const { appDir, manifest, onError, moduleRegistry, streamTimeout } = config;
+  const { appDir, manifest, onError, moduleRegistry, streamTimeout, i18n } = config;
   const url = new URL(request.url);
   const { pathname, searchParams } = url;
 
@@ -214,7 +242,11 @@ async function route(
     if (targetPath.length > 2048) return json({ error: "Bad Request" }, { status: 400 });
     // Strip query string from path param so matching works on the pathname only.
     const [targetPathname, targetSearch] = targetPath.split("?");
-    const match = matchRoute(targetPathname, trie);
+    // i18n: match the path without its locale prefix; loaders see the locale
+    // on context.locale.
+    const dataLocale = i18n ? splitLocale(targetPathname, i18n) : null;
+    if (dataLocale) context.locale = dataLocale.locale;
+    const match = matchRoute(dataLocale?.pathname ?? targetPathname, trie);
     if (!match) return json({ error: "Not Found" }, { status: 404 });
 
     try {
@@ -280,6 +312,7 @@ async function route(
               search,
               matches,
               requestId: getRequestId(),
+              locale: dataLocale?.locale,
             },
             streamTimeout,
           ),
@@ -308,12 +341,40 @@ async function route(
     }
   }
 
+  // ── Locale ────────────────────────────────────────────────────────────
+  // i18n: `/fr/about` renders routes/about.tsx with context.locale = "fr";
+  // `/about` is the default locale. Matching sees the path without its prefix.
+  let matchPathname = pathname;
+  let locale: string | undefined;
+  if (i18n) {
+    const found = splitLocale(pathname, i18n);
+    const isRead = request.method === "GET" || request.method === "HEAD";
+    // One canonical URL per page: /en/about (the default locale) → /about.
+    if (found.prefix === i18n.defaultLocale && isRead) {
+      return redirect(found.pathname + url.search, 308);
+    }
+    // First visit to an unprefixed page: send the visitor to the locale their
+    // browser prefers. The cookie (set on every page below) makes it once-only.
+    if (i18n.detect && !found.prefix && isDocumentRequest(request) && !hasLocaleCookie(request)) {
+      const preferred = negotiateLocale(request.headers.get("Accept-Language"), i18n);
+      if (preferred && preferred !== i18n.defaultLocale) {
+        return withLocaleCookie(
+          redirect(localizePath(pathname, preferred, i18n) + url.search, 302),
+          preferred,
+        );
+      }
+    }
+    locale = found.locale;
+    matchPathname = found.pathname;
+    context.locale = locale;
+  }
+
   // ── Route matching ────────────────────────────────────────────────────
   // A browser asking for a page no route matches gets the app's own 404:
   // root renders (its middleware and loader run) with a 404 in the route
   // slot, so root's ErrorBoundary shows inside the app's chrome. Anything
   // else (assets, fetches, crawlers asking for JSON) gets a plain 404.
-  const matched = matchRoute(pathname, trie);
+  const matched = matchRoute(matchPathname, trie);
   if (!matched && !isDocumentRequest(request)) return error("Not Found", 404);
   const match = matched ?? { routeFile: undefined, params: {} as Record<string, string> };
 
@@ -334,219 +395,240 @@ async function route(
   // Middleware → context → args → beforeLoad run in runRoutePipeline (the
   // shared gate sequence with the /_data branch); everything below is the
   // document-specific work: actions, selective SSR, and the HTML render.
-  return runRoutePipeline(request, match.params, chain, search, context, async (args, mwCtx) => {
-    // ── Action (mutating methods) ─────────────────────────────────────────
-    let actionData: unknown = null;
-    // data(value, init) from the action: status/headers for the response.
-    let actionInit: ResponseInit | null = null;
-    if (MUTATING_METHODS.has(request.method)) {
-      if (!isAllowedMutation(request)) return csrfForbiddenResponse();
-      // Reject up front if the client advertises an oversized body.
-      const clRaw = request.headers.get("Content-Length");
-      if (clRaw) {
-        const cl = Number(clRaw);
-        if (Number.isFinite(cl) && cl > MAX_FORM_BYTES) {
-          return error("Payload Too Large", 413);
+  const response = await runRoutePipeline(
+    request,
+    match.params,
+    chain,
+    search,
+    context,
+    async (args, mwCtx) => {
+      // ── Action (mutating methods) ─────────────────────────────────────────
+      let actionData: unknown = null;
+      // data(value, init) from the action: status/headers for the response.
+      let actionInit: ResponseInit | null = null;
+      if (MUTATING_METHODS.has(request.method)) {
+        if (!isAllowedMutation(request)) return csrfForbiddenResponse();
+        // Reject up front if the client advertises an oversized body.
+        const clRaw = request.headers.get("Content-Length");
+        if (clRaw) {
+          const cl = Number(clRaw);
+          if (Number.isFinite(cl) && cl > MAX_FORM_BYTES) {
+            return error("Payload Too Large", 413);
+          }
+        }
+        try {
+          const ct = request.headers.get("Content-Type") ?? "";
+          const isFormLike =
+            ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded");
+          const formData = isFormLike ? await request.formData() : new FormData();
+          // The body is consumed above, so the Remix/React Router habit of
+          // `await request.formData()` inside the action would throw "Body
+          // already used" — hand the action a request that returns the parsed copy.
+          const actionRequest = isFormLike ? withParsedFormData(args.request, formData) : args.request;
+          actionData = await runAction(
+            chain.route,
+            { ...args, request: actionRequest, formData },
+            chain.files?.route ?? match.routeFile?.filePath,
+          );
+        } catch (err) {
+          if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
+          if (isHttpError(err)) return error(err.message, err.status);
+          // Name the failing route so the log points at the right file.
+          console.error(`[bractjs] action error in ${chain.files?.route ?? match.routeFile?.filePath}:`, err);
+          await fireOnError(onError, err, request);
+          if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
+          return error("Internal Server Error", 500);
+        }
+
+        // An action may *return* (not just throw) a redirect or any Response —
+        // the documented pattern is `return redirect("/")`. Propagate it verbatim
+        // so the browser/`<Form>` sees a real 3xx (and follows it) instead of a
+        // 200 with the Response serialized into a JSON body. sanitizeRedirect()
+        // neutralizes an off-origin Location that didn't go through redirect()'s
+        // allowExternal opt-in (e.g. a raw `new Response(…,{Location:"//evil"})`).
+        if (actionData instanceof Response) return sanitizeRedirect(actionData, request.url);
+        ({ value: actionData, init: actionInit } = unwrapData(actionData));
+
+        // Client-side Form submits with this header — return JSON, not HTML.
+        if (request.headers.get("X-BractJS-Action")) {
+          const res = json(
+            actionData ?? null,
+            actionInit?.status ? { status: actionInit.status } : undefined,
+          );
+          new Headers(actionInit?.headers).forEach((value, key) => {
+            if (key.toLowerCase() !== "content-type") res.headers.append(key, value);
+          });
+          return res;
         }
       }
+
+      // ── Selective SSR ─────────────────────────────────────────────────────
+      // `ssr: false` skips the ROUTE loader during document SSR (root/layout
+      // loaders still run — they render the shell). beforeLoad already ran above:
+      // it is the auth gate and must hold for every mode. The client completes
+      // the render via /_data after hydration, where the loader DOES run.
+      // React Router: a HydrateFallback + `clientLoader.hydrate = true` SSRs the
+      // fallback and lets the client loader finish the render — "data-only".
+      const routeSsr =
+        chain.route.ssr ??
+        (chain.route.clientLoaderHydrate && chain.route.HydrateFallback ? ("data-only" as const) : true);
+      const loaderChain =
+        routeSsr === false ? { ...chain, route: { ...chain.route, loader: undefined } } : chain;
+
+      // ── Loaders ───────────────────────────────────────────────────────────
+      let loaderResults;
       try {
-        const ct = request.headers.get("Content-Type") ?? "";
-        const isFormLike =
-          ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded");
-        const formData = isFormLike ? await request.formData() : new FormData();
-        // The body is consumed above, so the Remix/React Router habit of
-        // `await request.formData()` inside the action would throw "Body
-        // already used" — hand the action a request that returns the parsed copy.
-        const actionRequest = isFormLike ? withParsedFormData(args.request, formData) : args.request;
-        actionData = await runAction(
-          chain.route,
-          { ...args, request: actionRequest, formData },
-          chain.files?.route ?? match.routeFile?.filePath,
-        );
+        loaderResults = await runLoaders(loaderChain, args, onError);
+        if (!match.routeFile) loaderResults.route = { __error: { message: "Not Found", status: 404 } };
       } catch (err) {
+        // Loader HttpErrors are captured into their slots (see below); only
+        // redirects and framework failures land here.
         if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
-        if (isHttpError(err)) return error(err.message, err.status);
-        // Name the failing route so the log points at the right file.
-        console.error(`[bractjs] action error in ${chain.files?.route ?? match.routeFile?.filePath}:`, err);
         await fireOnError(onError, err, request);
         if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
         return error("Internal Server Error", 500);
       }
 
-      // An action may *return* (not just throw) a redirect or any Response —
-      // the documented pattern is `return redirect("/")`. Propagate it verbatim
-      // so the browser/`<Form>` sees a real 3xx (and follows it) instead of a
-      // 200 with the Response serialized into a JSON body. sanitizeRedirect()
-      // neutralizes an off-origin Location that didn't go through redirect()'s
-      // allowExternal opt-in (e.g. a raw `new Response(…,{Location:"//evil"})`).
-      if (actionData instanceof Response) return sanitizeRedirect(actionData, request.url);
-      ({ value: actionData, init: actionInit } = unwrapData(actionData));
-
-      // Client-side Form submits with this header — return JSON, not HTML.
-      if (request.headers.get("X-BractJS-Action")) {
-        const res = json(actionData ?? null, actionInit?.status ? { status: actionInit.status } : undefined);
-        new Headers(actionInit?.headers).forEach((value, key) => {
-          if (key.toLowerCase() !== "content-type") res.headers.append(key, value);
+      const failure = firstLoaderFailure(loaderResults);
+      // root.tsx owns <html>, so a failed root loader leaves no app shell to put
+      // a boundary in: render root's ErrorBoundary in a minimal document instead.
+      if (failure?.scope === "root") {
+        return renderRootErrorDocument({
+          Boundary: pickBoundaryForFailure(undefined, [], 0, chain.root.ErrorBoundary),
+          Layout: chain.root.Layout,
+          error: failure.error,
+          params: match.params,
+          pathname,
+          search: url.search,
+          manifest,
+          nonce: getCspNonce(mwCtx.context),
+          status: routeErrorStatus(failure.error),
         });
-        return res;
       }
-    }
 
-    // ── Selective SSR ─────────────────────────────────────────────────────
-    // `ssr: false` skips the ROUTE loader during document SSR (root/layout
-    // loaders still run — they render the shell). beforeLoad already ran above:
-    // it is the auth gate and must hold for every mode. The client completes
-    // the render via /_data after hydration, where the loader DOES run.
-    // React Router: a HydrateFallback + `clientLoader.hydrate = true` SSRs the
-    // fallback and lets the client loader finish the render — "data-only".
-    const routeSsr =
-      chain.route.ssr ??
-      (chain.route.clientLoaderHydrate && chain.route.HydrateFallback ? ("data-only" as const) : true);
-    const loaderChain =
-      routeSsr === false ? { ...chain, route: { ...chain.route, loader: undefined } } : chain;
+      const loaderData = {
+        root: loaderResults.root,
+        layouts: loaderResults.layouts,
+        route: loaderResults.route,
+      };
 
-    // ── Loaders ───────────────────────────────────────────────────────────
-    let loaderResults;
-    try {
-      loaderResults = await runLoaders(loaderChain, args, onError);
-      if (!match.routeFile) loaderResults.route = { __error: { message: "Not Found", status: 404 } };
-    } catch (err) {
-      // Loader HttpErrors are captured into their slots (see below); only
-      // redirects and framework failures land here.
-      if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
-      await fireOnError(onError, err, request);
-      if (isExplicitDev()) return error(err instanceof Error ? err.message : String(err), 500);
-      return error("Internal Server Error", 500);
-    }
+      // ── SSR render ────────────────────────────────────────────────────────
+      const RootComponent = chain.root.default ?? (() => null);
+      // A failed route loader renders the nearest ErrorBoundary in the route's
+      // place, with the error's status (404 for HttpError(404), else 500). A
+      // failed layout loader is rendered by <Outlet> at that layout's level.
+      const routeError = routeSsr === true && failure?.scope === "route" ? failure.error : null;
+      const Boundary = routeError
+        ? pickBoundaryForFailure(
+            chain.route.ErrorBoundary,
+            chain.layouts,
+            chain.layouts.length,
+            chain.root.ErrorBoundary,
+          )
+        : null;
+      const layoutError = failure?.scope === "layout" ? failure.error : null;
+      // The failure that sets the document status: one whose boundary renders
+      // (a selective-SSR route's loader error surfaces after hydration instead).
+      const statusFailure = routeError || layoutError ? failure : null;
+      // Non-default SSR modes render the Fallback (or nothing) in the component's
+      // place; the client swaps in the real component after hydration.
+      const RouteComponent =
+        Boundary && routeError
+          ? () => renderErrorBoundary(Boundary, routeError, { params: match.params })
+          : routeSsr === true
+            ? chain.route.default
+            : (chain.route.Fallback ?? chain.route.HydrateFallback);
+      const ssrMode =
+        routeSsr === true
+          ? undefined
+          : routeSsr === false
+            ? ("client-only" as const)
+            : ("data-only" as const);
 
-    const failure = firstLoaderFailure(loaderResults);
-    // root.tsx owns <html>, so a failed root loader leaves no app shell to put
-    // a boundary in: render root's ErrorBoundary in a minimal document instead.
-    if (failure?.scope === "root") {
-      return renderRootErrorDocument({
-        Boundary: pickBoundaryForFailure(undefined, [], 0, chain.root.ErrorBoundary),
-        Layout: chain.root.Layout,
-        error: failure.error,
-        params: match.params,
+      // useMatches() payload — the chain's handle + data, for breadcrumbs etc.
+      // Built from loaderChain so the loader slices line up with what ran.
+      const matches = buildMatches(loaderChain, loaderResults, match.params, pathname);
+
+      // Wrap root in BractJSProvider so <Outlet> can render the route component
+      // server-side without needing a ClientRouter.
+      // eslint-disable-next-line react/no-children-prop -- children passed via createElement props object is the intended SSR shell shape
+      const shell = createElement(BractJSProvider, {
+        value: {
+          loaderData: loaderData as Record<string, unknown>,
+          actionData,
+          params: match.params,
+          pathname,
+          manifest: manifest as unknown as import("../shared/context.ts").RouteManifest,
+          RouteComponent,
+          LayoutModules: chain.layouts,
+          RootErrorBoundary: chain.root.ErrorBoundary,
+          locale,
+          i18n,
+          location: { pathname, search: url.search, hash: "", state: null, key: "default" },
+          search,
+          matches,
+        },
+        // Root receives React Router-style component props too (its own slice),
+        // inside root's `Layout` (the document shell) when it exports one.
+        children: withRootLayout(
+          chain.root.Layout,
+          createElement(RootComponent as React.ComponentType<Record<string, unknown>>, {
+            loaderData: loaderResults.root,
+            actionData: actionData ?? undefined,
+            params: match.params,
+            matches,
+          }),
+        ),
+      });
+
+      const meta = resolveMeta(withoutFailedHead(chain, failure), loaderResults, match.params, {
         pathname,
         search: url.search,
-        manifest,
-        nonce: getCspNonce(mwCtx.context),
-        status: routeErrorStatus(failure.error),
+        error: failure?.error,
       });
-    }
+      // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
+      // baseline document headers in renderRoute. Uses the loaders that actually
+      // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
+      const routeHeaders = resolveHeaders(
+        withoutFailedHead(loaderChain, failure),
+        loaderResults,
+        match.params,
+        request,
+        actionInit,
+      );
+      // Without a headers() export, a data(…, { headers }) from the action still
+      // applies to the re-rendered document (e.g. Set-Cookie on a no-JS post).
+      const documentHeaders = routeHeaders ?? (actionInit?.headers ? new Headers(actionInit.headers) : null);
+      // Status: a layout- or route-loader error wins; else a data(…, { status })
+      // from the leaf loader, then the action (React Router parity).
+      const dataStatus = loaderResults.inits?.route?.status ?? actionInit?.status;
 
-    const loaderData = {
-      root: loaderResults.root,
-      layouts: loaderResults.layouts,
-      route: loaderResults.route,
-    };
-
-    // ── SSR render ────────────────────────────────────────────────────────
-    const RootComponent = chain.root.default ?? (() => null);
-    // A failed route loader renders the nearest ErrorBoundary in the route's
-    // place, with the error's status (404 for HttpError(404), else 500). A
-    // failed layout loader is rendered by <Outlet> at that layout's level.
-    const routeError = routeSsr === true && failure?.scope === "route" ? failure.error : null;
-    const Boundary = routeError
-      ? pickBoundaryForFailure(
-          chain.route.ErrorBoundary,
-          chain.layouts,
-          chain.layouts.length,
-          chain.root.ErrorBoundary,
-        )
-      : null;
-    const layoutError = failure?.scope === "layout" ? failure.error : null;
-    // The failure that sets the document status: one whose boundary renders
-    // (a selective-SSR route's loader error surfaces after hydration instead).
-    const statusFailure = routeError || layoutError ? failure : null;
-    // Non-default SSR modes render the Fallback (or nothing) in the component's
-    // place; the client swaps in the real component after hydration.
-    const RouteComponent =
-      Boundary && routeError
-        ? () => renderErrorBoundary(Boundary, routeError, { params: match.params })
-        : routeSsr === true
-          ? chain.route.default
-          : (chain.route.Fallback ?? chain.route.HydrateFallback);
-    const ssrMode =
-      routeSsr === true ? undefined : routeSsr === false ? ("client-only" as const) : ("data-only" as const);
-
-    // useMatches() payload — the chain's handle + data, for breadcrumbs etc.
-    // Built from loaderChain so the loader slices line up with what ran.
-    const matches = buildMatches(loaderChain, loaderResults, match.params, pathname);
-
-    // Wrap root in BractJSProvider so <Outlet> can render the route component
-    // server-side without needing a ClientRouter.
-    // eslint-disable-next-line react/no-children-prop -- children passed via createElement props object is the intended SSR shell shape
-    const shell = createElement(BractJSProvider, {
-      value: {
-        loaderData: loaderData as Record<string, unknown>,
+      return renderRoute({
+        shell,
+        loaderData,
         actionData,
         params: match.params,
         pathname,
-        manifest: manifest as unknown as import("../shared/context.ts").RouteManifest,
-        RouteComponent,
-        LayoutModules: chain.layouts,
-        RootErrorBoundary: chain.root.ErrorBoundary,
-        location: { pathname, search: url.search, hash: "", state: null, key: "default" },
         search,
+        manifest,
+        meta,
+        links: resolveLinks(chain),
         matches,
-      },
-      // Root receives React Router-style component props too (its own slice),
-      // inside root's `Layout` (the document shell) when it exports one.
-      children: withRootLayout(
-        chain.root.Layout,
-        createElement(RootComponent as React.ComponentType<Record<string, unknown>>, {
-          loaderData: loaderResults.root,
-          actionData: actionData ?? undefined,
-          params: match.params,
-          matches,
-        }),
-      ),
-    });
-
-    const meta = resolveMeta(withoutFailedHead(chain, failure), loaderResults, match.params, {
-      pathname,
-      search: url.search,
-      error: failure?.error,
-    });
-    // Route `headers()` chain (Cache-Control/ETag/Vary/…), applied on top of the
-    // baseline document headers in renderRoute. Uses the loaders that actually
-    // ran (loaderChain) so a selective-SSR route's headers() sees the same data.
-    const routeHeaders = resolveHeaders(
-      withoutFailedHead(loaderChain, failure),
-      loaderResults,
-      match.params,
-      request,
-      actionInit,
-    );
-    // Without a headers() export, a data(…, { headers }) from the action still
-    // applies to the re-rendered document (e.g. Set-Cookie on a no-JS post).
-    const documentHeaders = routeHeaders ?? (actionInit?.headers ? new Headers(actionInit.headers) : null);
-    // Status: a layout- or route-loader error wins; else a data(…, { status })
-    // from the leaf loader, then the action (React Router parity).
-    const dataStatus = loaderResults.inits?.route?.status ?? actionInit?.status;
-
-    return renderRoute({
-      shell,
-      loaderData,
-      actionData,
-      params: match.params,
-      pathname,
-      search,
-      manifest,
-      meta,
-      links: resolveLinks(chain),
-      matches,
-      headers: documentHeaders,
-      routeFile: match.routeFile?.filePath,
-      // Manifest key for this route — selects its extracted CSS bundles.
-      routePattern: match.routeFile?.urlPattern,
-      // Set by the opt-in csp() middleware; undefined otherwise.
-      nonce: getCspNonce(mwCtx.context),
-      ssrMode,
-      streamTimeout,
-      status: statusFailure ? routeErrorStatus(statusFailure.error) : dataStatus,
-    });
-  });
+        headers: documentHeaders,
+        routeFile: match.routeFile?.filePath,
+        // Manifest key for this route — selects its extracted CSS bundles.
+        routePattern: match.routeFile?.urlPattern,
+        // Set by the opt-in csp() middleware; undefined otherwise.
+        nonce: getCspNonce(mwCtx.context),
+        ssrMode,
+        streamTimeout,
+        locale,
+        i18n,
+        status: statusFailure ? routeErrorStatus(statusFailure.error) : dataStatus,
+      });
+    },
+  );
+  // With detect, remember the locale this page is in — a visitor who follows
+  // a link to another locale keeps it instead of being redirected back.
+  return i18n?.detect && locale && isDocumentRequest(request) ? withLocaleCookie(response, locale) : response;
 }

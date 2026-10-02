@@ -1,3 +1,4 @@
+import { type I18nConfig, splitLocale } from "../shared/i18n.ts";
 import type { ServerManifest } from "../server/render.ts";
 
 // ── Redirect normalization ─────────────────────────────────────────────────
@@ -155,6 +156,8 @@ function patternScore(pattern: string): number {
 
 /** Returns the highest-priority manifest pattern that matches pathname, or null. */
 export function matchPatternForPath(pathname: string, manifest: ServerManifest): string | null {
+  // i18n: routes match the path without its locale prefix (as on the server).
+  if (clientI18n) pathname = splitLocale(pathname, clientI18n).pathname;
   // Exact static match wins outright (most specific) — also a fast path.
   const normalized = pathname.replace(/^\//, "");
   if (normalized in manifest.routes) return normalized;
@@ -170,4 +173,12 @@ export function matchPatternForPath(pathname: string, manifest: ServerManifest):
     }
   }
   return best;
+}
+
+// The app's i18n config, from the bootstrap payload (set once by the client entry).
+let clientI18n: I18nConfig | null = null;
+
+/** Called by the client entry with the payload's `i18n`. Not part of the public API. */
+export function setClientI18n(i18n: I18nConfig | null | undefined): void {
+  clientI18n = i18n ?? null;
 }

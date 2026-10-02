@@ -88,6 +88,7 @@ export { defineContext } from "./server/context.ts";
 export type { CspOptions } from "./server/csp.ts";
 export { CSP_NONCE_KEY, csp, getCspNonce } from "./server/csp.ts";
 export { localizedDataPath, stripLocale, wrapRoutesWithLocale } from "./server/i18n.ts";
+export { LOCALE_COOKIE, localizePath, negotiateLocale, splitLocale } from "./shared/i18n.ts";
 export type { HandlerInstrumentations, InstrumentCall, Instrumentation, InstrumentRequestInfo, InstrumentResult, InstrumentRouteInfo, RouteInstrumentations, } from "./server/instrumentation.ts";
 export { clearInstrumentations, instrument } from "./server/instrumentation.ts";
 export type { BractJSConfig, RenderOptions, ServerManifest } from "./server/index.ts";

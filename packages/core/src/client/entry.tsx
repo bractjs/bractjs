@@ -3,7 +3,7 @@ import { hydrateRoot } from "react-dom/client";
 import { ClientRouter, loadLayoutModules } from "./ClientRouter.tsx";
 import { reviveDeferred } from "./deferred-revive.ts";
 import { Outlet } from "./components/Outlet.tsx";
-import { matchPatternForPath } from "./nav-utils.ts";
+import { matchPatternForPath, setClientI18n } from "./nav-utils.ts";
 import { type RouteModuleClient, RouterContext } from "./router.tsx";
 import type { BractJSClientData } from "./types.ts";
 
@@ -60,6 +60,9 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
       }
     }
   }
+
+  // i18n: the client matcher strips locale prefixes like the server does.
+  setClientI18n(data.i18n);
 
   // 1. Import the root component (app/root.tsx) so the client tree matches
   //    the server-rendered shell (html, head, body, header, nav, etc.).

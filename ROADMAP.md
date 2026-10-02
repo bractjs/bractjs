@@ -14,8 +14,8 @@ Open work, roughly in priority order.
 - [x] **Browser end-to-end tests in CI** (unreleased)
 - [x] **React Router–style root `Layout` export, in-app 404s** (unreleased)
 - [x] **`clientMiddleware`, client `context`, `clientLoader` on revalidation, fetchers, root and layouts** (unreleased)
-- [ ] **Built-in i18n as a one-line opt-in** — locale-prefix helpers exist (`wrapRoutesWithLocale`, `stripLocale`, `useLocale`, `useLocalizedLink`) but aren't wired into core routing end-to-end.
-- [ ] **Prerender output embedded in the compiled binary** — today `build/client/` ships alongside it, or via `--asset`.
+- [x] **Built-in i18n as a one-line opt-in** (unreleased)
+- [x] **Client build and prerender output embedded in the compiled binary** (unreleased)
 - [ ] **Deno / Node.js adapters** — validate the `BractAdapter` contract beyond Bun and Cloudflare Workers. Lowest priority: the build pipeline is `Bun.build`, so this is runtime portability only.
 
 ---

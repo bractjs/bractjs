@@ -56,6 +56,9 @@ export interface BractJSInitialData extends RouteState {
   ssrMode?: "client-only" | "data-only" | "spa";
   /** The request id from the requestId() middleware, when registered. */
   requestId?: string;
+  /** The page's locale and the app's i18n config (with `i18n` configured). */
+  locale?: string;
+  i18n?: import("../shared/i18n.ts").I18nConfig;
 }
 
 interface ClientRouterProps {
@@ -122,6 +125,8 @@ export function ClientRouter({
   const [links, setLinks] = useState<LinkDescriptor[]>(initialData.links ?? []);
   // The id of the request whose data is on screen (requestId() middleware).
   const [requestId, setRequestId] = useState<string | undefined>(initialData.requestId);
+  // The locale of the page on screen (i18n): each /_data payload carries it.
+  const [locale, setLocale] = useState<string | undefined>(initialData.locale);
   const [navDetail, setNavDetail] = useState<NavigationDetail>({});
   const [navigationType, setNavigationType] = useState<HistoryAction>("POP");
   const [hydrationPending, setHydrationPending] = useState<HydrationPending>(initialData.ssrMode ?? false);
@@ -168,6 +173,7 @@ export function ClientRouter({
     setLinks(payload.links);
     setMatches(payload.matches);
     setRequestId(typeof data.requestId === "string" ? data.requestId : undefined);
+    if (typeof data.locale === "string") setLocale(data.locale);
   }, []);
 
   const setRoute = useCallback((state: Partial<RouteState>) => {
@@ -856,6 +862,8 @@ export function ClientRouter({
         revalidate,
         revalidationState,
         hydrationPending,
+        locale,
+        i18n: initialData.i18n,
       }}
     >
       <RequestIdContext.Provider value={requestId}>

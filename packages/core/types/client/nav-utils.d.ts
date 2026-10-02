@@ -1,3 +1,4 @@
+import { type I18nConfig } from "../shared/i18n.ts";
 import type { ServerManifest } from "../server/render.ts";
 /**
  * Normalize a Location/redirect target to a same-origin path the client router
@@ -46,3 +47,5 @@ export declare function resolveHref(to: string): string;
 export declare function createLocationKey(): string;
 /** Returns the highest-priority manifest pattern that matches pathname, or null. */
 export declare function matchPatternForPath(pathname: string, manifest: ServerManifest): string | null;
+/** Called by the client entry with the payload's `i18n`. Not part of the public API. */
+export declare function setClientI18n(i18n: I18nConfig | null | undefined): void;

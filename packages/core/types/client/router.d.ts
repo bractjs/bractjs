@@ -53,6 +53,9 @@ export interface RouterContextValue extends RouteState {
     rootErrorBoundary?: ComponentType<{
         error: unknown;
     }>;
+    /** The page's locale and the app's i18n config (with `i18n` configured). */
+    locale?: string;
+    i18n?: import("../shared/i18n.ts").I18nConfig;
 }
 export declare const RouterContext: import("react").Context<RouterContextValue>;
 export declare function useRouterContext(): RouterContextValue;

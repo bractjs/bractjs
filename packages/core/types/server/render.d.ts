@@ -1,4 +1,5 @@
 import { type ComponentType, type ReactNode } from "react";
+import type { I18nConfig } from "../shared/i18n.ts";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 export interface ServerManifest {
     clientEntry: string;
@@ -58,6 +59,9 @@ export interface RenderOptions {
      * many ms (React Router's `streamTimeout`). Unset → no limit.
      */
     streamTimeout?: number;
+    /** The page's locale and the app's i18n config, for the client router. */
+    locale?: string;
+    i18n?: I18nConfig;
 }
 export declare function renderRoute(options: RenderOptions): Promise<Response>;
 export interface RootErrorDocumentOptions {
