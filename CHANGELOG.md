@@ -6,6 +6,12 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.7.0] — 2026-10-02
+
 ### Added
 
 - **Production servers on Node.js and Deno.** `bractjs build --target node` bundles `app/server.ts` (app, React, framework, generated registries) into `build/node/server.js`, which runs with `node` (22+) or `deno` and no `node_modules`. `createServer()` now picks the adapter for its runtime (new `NodeAdapter` on `node:http` and `DenoAdapter` on `Deno.serve`), and the request path no longer touches Bun-only APIs (a small file/env shim replaces `Bun.file` / `Bun.env` there). CI runs the browser suite against both the Bun and the Node server. `examples/todo` moved from `bun:sqlite` to an in-memory store so it runs on both.
@@ -34,6 +40,8 @@ All notable changes to BractJS are documented here.
 - **`@bractjs/bractjs/testing`: test helpers for apps.** `createTestApp()` runs your app's real request pipeline in-process (global middleware from `app/server.ts`, route middleware, `beforeLoad`, loaders, actions, server actions, SSR) from source, with no build and no server. `get` / `data` / `submit` / `post` / `fetch` mirror what a browser sends, a cookie jar carries `Set-Cookie` across requests, and mutations pass the CSRF gate. `callLoader()` / `callAction()` call one route function with the arguments BractJS would pass. New guide: [Testing your app](docs/testing.md). `examples/todo` has a test suite built on it, and CI runs it.
 
 - **`bractjs new` scaffolds a fuller app.** It now includes an extracted stylesheet (`app/styles.css`), a `public/favicon.svg`, `bun run test` with a sample test on `@bractjs/bractjs/testing`, and `bun run typecheck`. `--tailwind` starts the app on Tailwind v4 instead (`tailwind: true` plus the plugin), and `--no-install` skips `bun install`. App names are validated. The app depends on `^<CLI version>` rather than `latest`.
+- **`examples/todo` renames tasks with a React 19 form action**: `useActionState` + `useFormStatus` + a `"use server"` function (`app/actions.server.ts`), with the loader revalidated afterwards. The README gains a "React 19 form actions" section.
+- **`examples/todo` has a new look**: flat colors, Tailwind v4 (`tailwind: true`), lucide icons, dark mode, and a CSS Module on the About page. It also uses `<NavLink>`. Every feature it demonstrated before still works the same way.
 
 ### Fixed
 
@@ -59,10 +67,9 @@ All notable changes to BractJS are documented here.
 - **Dev: editing a file with `sed -i` (or any tool that writes a hidden temp file first) updates the right module.** The watcher reports the last file of each change burst, which was often the temp file (`.!1234!_index.tsx`). The dev server then broadcast a module swap for a file that doesn't exist and the browser logged a 404. Hidden files are now ignored.
 - **Client navigation no longer stalls on a failed `/_data` request.** A non-2xx response (an unmatched path, a failed root loader, a search-validation 400, a 5xx) used to log to the console and push the new URL while leaving the old page on screen. The router now hands off to a full document load so the server's real response renders; revalidation does the same.
 
-### Changed
+### Removed
 
-- **`examples/todo` renames tasks with a React 19 form action**: `useActionState` + `useFormStatus` + a `"use server"` function (`app/actions.server.ts`), with the loader revalidated afterwards. The README gains a "React 19 form actions" section.
-- **`examples/todo` has a new look**: flat colors, Tailwind v4 (`tailwind: true`), lucide icons, dark mode, and a CSS Module on the About page. It also uses `<NavLink>`. Every feature it demonstrated before still works the same way.
+- **`StreamFetcherResult.events`.** Deprecated since 0.2 and never emitted anything; `useFetcher({ stream: true })` returns `{ connect(actionId) }`, as the README has always documented. Code that still reads `.events` gets a type error instead of `null`.
 
 ### Docs
 
@@ -74,10 +81,6 @@ All notable changes to BractJS are documented here.
 
 - **Browser end-to-end tests** (`pnpm e2e`, `e2e/`) run a production build of `examples/todo` in Chrome and check hydration, soft navigation, forms, error pages and styles. Every test fails on a browser console error. CI runs them in a new `e2e` job and runs the `examples/cms` suite too.
 - The Tailwind examples no longer run on a second, older Bun: pnpm had auto-installed `bun@1.3.14` as a peer of `bun-plugin-tailwind`, and `pnpm` scripts picked it up. A root `pnpm.overrides` entry removes it.
-
-### Removed
-
-- **`StreamFetcherResult.events`.** Deprecated since 0.2 and never emitted anything; `useFetcher({ stream: true })` returns `{ connect(actionId) }`, as the README has always documented. Code that still reads `.events` gets a type error instead of `null`.
 
 ---
 
