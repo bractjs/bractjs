@@ -1,4 +1,5 @@
 import type { LoaderData } from "../../shared/route-types.ts";
+import type { RegisteredRouteIds, RouteLoaderData } from "../registry.ts";
 import { useMatches } from "./useMatches.ts";
 
 /**
@@ -8,15 +9,22 @@ import { useMatches } from "./useMatches.ts";
  * extension may be omitted (`"root"`, `"routes/blog/layout"`). Returns
  * `undefined` when that route isn't currently matched.
  *
+ * With generated route types (`bractjs codegen`) the result is typed from
+ * the id — `useRouteLoaderData("root")` is root's loader data, no generic
+ * needed. Without them (or to override) pass the loader type:
+ *
  * ```tsx
+ * const { user } = useRouteLoaderData("root")!;
  * const { user } = useRouteLoaderData<typeof rootLoader>("root")!;
  * ```
  */
-export function useRouteLoaderData<T = unknown>(routeId: string): LoaderData<T> | undefined {
+export function useRouteLoaderData<T = never, Id extends RegisteredRouteIds | (string & {}) = string>(
+  routeId: Id,
+): ([T] extends [never] ? RouteLoaderData<Id> : LoaderData<T>) | undefined {
   const matches = useMatches();
   const want = stripExt(routeId);
   const match = matches.find((m) => m.id === routeId || stripExt(m.id) === want);
-  return match?.data as LoaderData<T> | undefined;
+  return match?.data as ([T] extends [never] ? RouteLoaderData<Id> : LoaderData<T>) | undefined;
 }
 
 function stripExt(id: string): string {

@@ -56,7 +56,7 @@ export { createSearchParams, useSearchParams } from "./client/hooks/useSearchPar
 export type { SubmitFunction } from "./client/hooks/useSubmit.ts";
 export { useSubmit } from "./client/hooks/useSubmit.ts";
 export { useToast, useToasts } from "./client/hooks/useToast.ts";
-export type { InferSchemaOutput, ParamsFor, Register, RegisteredRoutes, RouteContextMap, RouteRegistry, RouteSearchParamsMap, SearchFor, SearchOutputFor, } from "./client/registry.ts";
+export type { InferSchemaOutput, ParamsFor, Register, RegisteredRouteIds, RegisteredRouteModules, RegisteredRoutes, RouteActionData, RouteContextMap, RouteLoaderData, RouteRegistry, RouteSearchParamsMap, SearchFor, SearchOutputFor, } from "./client/registry.ts";
 export { createClient } from "./client/rpc.ts";
 export { serializeSearch } from "./client/search-serializer.ts";
 export type { SubmitEncType, SubmitOptions, SubmitTarget } from "./client/submission.ts";
