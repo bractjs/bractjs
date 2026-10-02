@@ -49,6 +49,8 @@ All notable changes to BractJS are documented here.
 
 ### Internal
 
+- **Releases publish from CI with npm provenance.** Pushing a `v*` tag now publishes `@bractjs/bractjs` through npm trusted publishing (OIDC, no stored token) after the verify job passes, then drafts the GitHub Release. The package page shows a provenance badge linking the tarball to its source commit and workflow. The artifact actions move to `upload-artifact@v7` / `download-artifact@v8`.
+
 - **Browser end-to-end tests** (`pnpm e2e`, `e2e/`) run a production build of `examples/todo` in Chrome and check hydration, soft navigation, forms, error pages and styles. Every test fails on a browser console error. CI runs them in a new `e2e` job and runs the `examples/cms` suite too.
 - The Tailwind examples no longer run on a second, older Bun: pnpm had auto-installed `bun@1.3.14` as a peer of `bun-plugin-tailwind`, and `pnpm` scripts picked it up. A root `pnpm.overrides` entry removes it.
 

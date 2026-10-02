@@ -1,11 +1,16 @@
 name: Release
 
-# Runs when a release tag is pushed. It deliberately does NOT publish to npm:
-# releases are published from a maintainer's machine behind a 2FA OTP, and the
-# tag goes up afterwards. So by the time this runs, the version is already on the
-# registry — this job's job is to catch a release that was cut inconsistently
-# (tag, package.json, and CHANGELOG disagreeing) and to draft the GitHub Release
-# from the changelog instead of by hand.
+# Runs when a release tag is pushed:
+#   verify  — tag, package.json and CHANGELOG agree; typecheck, tests, tarball gate.
+#   publish — `npm publish --provenance` through npm trusted publishing (OIDC):
+#             no token or OTP is stored anywhere; npm trusts this workflow file
+#             in this repo. Skipped when the version is already on the registry,
+#             so a tag pushed after a manual publish still goes through.
+#   draft   — drafts the GitHub Release from the CHANGELOG section.
+#
+# One-time setup on npmjs.com (package settings → Trusted publishing): add a
+# GitHub Actions publisher for repository bractjs/bractjs, workflow release.yml,
+# environment "npm".
 on:
   push:
     tags: ["v*"]
@@ -94,14 +99,60 @@ jobs:
           fi
           wc -l notes.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: notes.md
           retention-days: 1
 
-  draft:
+  publish:
     needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # A protected environment: add required reviewers in the repo settings to
+    # make every publish wait for a human approval.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing + provenance
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Skip if this version is already published
+        id: published
+        working-directory: packages/core
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@bractjs/bractjs@$VERSION" version >/dev/null 2>&1; then
+            echo "@bractjs/bractjs@$VERSION is already on npm — nothing to publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --ignore-scripts: prepublishOnly (typegen + tarball gate) needs the dev
+      # toolchain and already ran in `verify` against this exact commit; the
+      # generated types are committed, so the tarball is the same.
+      - name: Publish with provenance
+        if: steps.published.outputs.skip != 'true'
+        working-directory: packages/core
+        run: npm publish --provenance --access public --ignore-scripts
+
+  draft:
+    needs: [verify, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -111,7 +162,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-notes
 

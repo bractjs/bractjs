@@ -106,36 +106,40 @@ Revisit both pins once `typescript-eslint` supports TypeScript 7.
 > publish, verification, troubleshooting) lives in
 > [PUBLISH_GUIDE.md](PUBLISH_GUIDE.md). The short version follows.
 
-The framework is the **only** published package; publish it from
-`packages/core/`. The repo root is `"private": true` and cannot be published
-(this is intentional — it prevents publishing the workspace by accident).
+The framework is the **only** published package, from `packages/core/`. The
+repo root is `"private": true` and cannot be published (this is intentional — it
+prevents publishing the workspace by accident).
+
+**Releases publish from CI.** Pushing a `v*` tag runs
+`.github/workflows/release.yml`:
+
+1. **verify**: the tag, `packages/core/package.json` and the newest CHANGELOG
+   heading must agree. It then runs the typecheck, the generated-types check,
+   the tests (compile-smoke required) and the tarball gate.
+2. **publish**: `npm publish --provenance` through npm trusted publishing
+   (OIDC). No npm token or OTP exists anywhere. npm trusts this workflow, in
+   this repo, under the `npm` environment. It is skipped when the version is
+   already on npm.
+3. **draft**: drafts the GitHub Release from the CHANGELOG section for a
+   human to publish.
 
 ```sh
-# 1. From the repo root — make sure the workspace is green
-pnpm install
+# 1. Move [Unreleased] notes under the new version heading in CHANGELOG.md, then:
+cd packages/core
+npm version minor --no-git-tag-version   # or patch / major
+cd ../..
 pnpm test
 
-# 2. Bump the version (edits packages/core/package.json and creates a git tag)
-cd packages/core
-npm version patch        # or: minor / major
-
-# 3. (Recommended) confirm the tarball contents before publishing
-npm publish --dry-run    # expect files: src, bin, types, templates, LICENSE (+ package.json, README.md)
-
-# 4. Publish
-npm publish              # publishConfig.access is already "public"
+# 2. Commit through a PR, merge, then tag the merge commit
+git tag v0.7.0 && git push origin v0.7.0
 ```
 
-Notes:
-
-- `packages/core` has **no `workspace:*` dependencies** (only `react`/`react-dom`
-  peer deps), so nothing needs version-rewriting at publish time. Either
-  `npm publish` or `pnpm publish` works; `npm publish` matches the pre-monorepo
-  flow most closely.
-- One-liner alternative from the repo root:
-  `pnpm --filter @bractjs/bractjs publish`.
-- The published package shape (name, `exports`, `types`, the `bractjs` CLI bin)
-  is unchanged by the monorepo conversion, so consumers are unaffected.
+One-time setup on npmjs.com (package settings → **Trusted publishing**): add a
+GitHub Actions publisher for `bractjs/bractjs`, workflow `release.yml`,
+environment `npm`. Optionally add required reviewers to the `npm` environment
+in the GitHub repo settings, so each publish waits for an approval. A manual
+`npm publish` from `packages/core` still works as a fallback; the workflow
+then skips publishing and only drafts the release.
 
 Update [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]` as part of any
 user-facing change, and move those notes under the new version heading at
