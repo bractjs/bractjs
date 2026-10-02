@@ -6,6 +6,8 @@
     "dev": "bractjs dev",
     "build": "NODE_ENV=production bractjs build",
     "start": "NODE_ENV=production bractjs start",
+    "build:node": "NODE_ENV=production bractjs build --target node",
+    "start:node": "NODE_ENV=production node build/node/server.js",
     "compile": "NODE_ENV=production bractjs compile ./bin/todo-app ./app/server.ts",
     "start:bin": "./bin/todo-app",
     "pretypecheck": "bractjs codegen:seed",

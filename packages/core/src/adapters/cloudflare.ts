@@ -2,17 +2,20 @@
  * Cloudflare Workers adapter for BractJS.
  *
  * Usage in your worker entrypoint:
- *   import { createCloudflareAdapter } from 'bractjs/adapters/cloudflare';
- *   import { buildFetchHandler } from 'bractjs';
+ *   import { buildFetchHandler, makeCloudflareHandler } from "@bractjs/bractjs";
  *
  *   const handler = buildFetchHandler({ appDir: './app', ... });
- *   export default createCloudflareAdapter(handler);
+ *   export default makeCloudflareHandler(handler);
+ *
+ * The Worker's `env` bindings and `ctx` reach app code through
+ * `getPlatform<{ env; ctx }>()` (loaders, actions, API handlers, middleware).
  *
  * Build with:
  *   bun build --target=browser --outfile=dist/worker.js src/worker.ts
  */
 
 import type { BractAdapter } from "../server/adapter.ts";
+import { setPlatform } from "../server/platform.ts";
 
 // Cloudflare Workers ExportedHandler shape (subset we need).
 interface CloudflareEnv {
@@ -38,13 +41,12 @@ export function createCloudflareAdapter(
   handler: (request: Request) => Promise<Response>,
 ): CloudflareExportedHandler & BractAdapter {
   return {
-    // BractAdapter compat
-    fetch(request: Request) {
+    // Works both as a BractAdapter (fetch(request)) and as the Workers export
+    // (fetch(request, env, ctx)); env/ctx reach app code via getPlatform().
+    fetch(request: Request, env?: CloudflareEnv, ctx?: CloudflareExecutionContext) {
+      if (env !== undefined || ctx !== undefined) setPlatform(request, { env, ctx });
       return handler(request);
     },
-    // Cloudflare Workers entrypoint — env and ctx are available for KV, D1, etc.
-    // Forward them via a custom header so route handlers can read them if needed.
-    // (Full KV/D1 integration would require framework-level dependency injection.)
   };
 }
 
@@ -58,7 +60,8 @@ export function makeCloudflareHandler(handler: (request: Request) => Promise<Res
   fetch(request: Request, env: CloudflareEnv, ctx: CloudflareExecutionContext): Promise<Response>;
 } {
   return {
-    fetch(request, _env, _ctx) {
+    fetch(request, env, ctx) {
+      setPlatform(request, { env, ctx });
       return handler(request);
     },
   };

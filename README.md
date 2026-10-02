@@ -41,7 +41,7 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 20. [Image optimization (`<Image>` + `/_image`)](#20-image-optimization)
 21. [Build & run: CLI + programmatic API (`createDevServer`, `runBuild`, `loadUserConfig`)](#21-build--run)
 22. [Single-binary deployment (`bun build --compile`)](#22-single-binary-deployment)
-23. [Custom adapters (`BunAdapter`, Cloudflare)](#23-custom-adapters)
+23. [Runtimes and adapters (Bun, Node.js, Deno, Cloudflare)](#23-runtimes-and-adapters)
 24. [Build plugins (for custom `Bun.build`)](#24-build-plugins)
 25. [Configuration reference](#25-configuration-reference)
 26. [Full export index](#26-full-export-index)
@@ -53,7 +53,7 @@ This README is a **step-by-step guide to every function and feature** BractJS ex
 
 ## 1. Install & create an app
 
-BractJS requires [Bun](https://bun.sh). There is no Node.js runtime path.
+BractJS develops and builds with [Bun](https://bun.sh). Production servers run on Bun (`bractjs start`, or a single binary), or on Node.js and Deno after `bractjs build --target node` (§23).
 
 ```sh
 # Scaffold a new app
@@ -1587,9 +1587,19 @@ The codegen functions are exported from `@bractjs/bractjs/codegen`: `writeModule
 
 ---
 
-## 23. Custom adapters
+## 23. Runtimes and adapters
 
-The server core is adapter-agnostic. The default is `BunAdapter` (wraps `Bun.serve`); supply your own via `createServer({ adapter })`.
+The server core is adapter-agnostic. `createServer()` picks the adapter for the runtime it runs on: `BunAdapter` (`Bun.serve`), `NodeAdapter` (`node:http`) or `DenoAdapter` (`Deno.serve`). Pass `createServer({ adapter })` to choose or configure one.
+
+**Node.js (and Deno).** Development and builds stay on Bun. `bractjs build --target node` also bundles `app/server.ts`, with the app, React, the framework and the generated registries, into `build/node/server.js`. It runs with no `node_modules`:
+
+```sh
+bractjs build --target node
+NODE_ENV=production PORT=3000 node build/node/server.js   # Node 22+
+deno run -A build/node/server.js                           # Deno
+```
+
+Ship `build/` and `public/` with it. The app's server code must itself run on Node: `bun:*` modules (`bun:sqlite`) and `Bun.*` APIs don't, and neither does the `/_image` optimizer, which shells out through Bun. `examples/todo` runs on both, and CI runs its browser tests against the Node build. Request bodies are capped at 16 MiB as on Bun (`createNodeAdapter({ maxRequestBodySize })`).
 
 ```ts
 import type { BractAdapter } from "@bractjs/bractjs";
@@ -1606,6 +1616,8 @@ const handler = buildFetchHandler({ appDir: "./app", manifest });
 export default makeCloudflareHandler(handler);
 // or createCloudflareAdapter(handler) for the BractAdapter-compatible form
 ```
+
+The Worker's `env` bindings (KV, D1, R2, secrets) and `ctx` reach app code through `getPlatform<{ env; ctx }>()`, callable anywhere in a request: loaders, actions, API handlers, server actions, middleware. It returns `undefined` on Bun, Node and Deno.
 
 ---
 
@@ -1726,7 +1738,7 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Programmatic:** `createDevServer`, `loadUserConfig`, `defineConfig`
 
-**Adapters:** `createCloudflareAdapter`, `makeCloudflareHandler`
+**Adapters:** `createNodeAdapter`, `NodeAdapter`, `createDenoAdapter`, `DenoAdapter`, `createCloudflareAdapter`, `makeCloudflareHandler`, `getPlatform`
 
 From `@bractjs/bractjs/build` ([packages/core/src/build-entry.ts](packages/core/src/build-entry.ts)):
 

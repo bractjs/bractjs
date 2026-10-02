@@ -93,11 +93,17 @@ jobs:
         run: bun run scripts/verify-pack.ts
 
   e2e:
-    # Browser end-to-end tests against a production build of examples/todo.
-    # Pinned Bun only: this checks the framework's browser behavior, not Bun drift.
+    # Browser end-to-end tests against a production build of examples/todo —
+    # served by Bun (`bractjs start`) and by Node.js (`bractjs build --target
+    # node`, run with `node`). Pinned Bun only: this checks the framework's
+    # behavior, not Bun drift.
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    name: e2e (chrome)
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [bun, node]
+    name: e2e (chrome, ${{ matrix.target }} server)
     steps:
       - uses: actions/checkout@v7
 
@@ -119,12 +125,13 @@ jobs:
       - name: Browser tests
         env:
           CI: "1"
+          E2E_TARGET: ${{ matrix.target }}
         run: pnpm e2e
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.target }}
           path: e2e/playwright-report
           retention-days: 7

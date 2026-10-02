@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { embeddedFile } from "./embedded.ts";
 import { join, resolve, sep } from "node:path";
 import { isDevRuntime } from "./env.ts";
+import { fileBody, fileExists } from "./runtime.ts";
 
 const IMMUTABLE = "public, max-age=31536000, immutable";
 const NO_CACHE = "no-cache";
@@ -26,10 +27,10 @@ function clientAssetCacheControl(): string {
  *
  * Three outcomes:
  * 1. realpath succeeds + stays inside `root` → return resolved path
- * 2. realpath throws AND `Bun.file(candidate)` exists → return the candidate
+ * 2. realpath throws AND the file exists → return the candidate
  *    path. This is the embedded-asset case: `bun --compile` exposes assets
  *    through virtual paths that don't appear in the filesystem, so realpath
- *    errors with ENOENT/EINVAL but `Bun.file()` still reads them.
+ *    errors with ENOENT/EINVAL but Bun's file API still reads them.
  * 3. otherwise → null (escape, ENOENT, etc.)
  *
  * The structural `startsWith(root + sep)` check at the top runs before any
@@ -50,8 +51,8 @@ async function safeRealpath(root: string, requested: string): Promise<string | n
     // realpath fails for paths embedded by `bun build --compile --asset`.
     // The structural check above already prevented traversal, so the only
     // remaining concern is whether the asset actually exists — defer to
-    // Bun.file() which reads from the embed table.
-    if (await Bun.file(candidate).exists()) return candidate;
+    // the runtime's file check, which reads from the embed table.
+    if (await fileExists(candidate)) return candidate;
     return null;
   }
 }
@@ -87,10 +88,14 @@ export async function serveStatic(
     }
     const full = await safeRealpath(root, rel);
     if (!full) return null;
-    const file = Bun.file(full);
-    if (!(await file.exists())) return null;
-    return new Response(file, {
-      headers: { "Cache-Control": clientAssetCacheControl(), "X-Content-Type-Options": NOSNIFF },
+    const file = await fileBody(full);
+    if (!file) return null;
+    return new Response(file.body, {
+      headers: {
+        "Content-Type": file.type,
+        "Cache-Control": clientAssetCacheControl(),
+        "X-Content-Type-Options": NOSNIFF,
+      },
     });
   }
 
@@ -105,10 +110,10 @@ export async function serveStatic(
     }
     const full = await safeRealpath(root, rel);
     if (!full) return null;
-    const file = Bun.file(full);
-    if (!(await file.exists())) return null;
-    return new Response(file, {
-      headers: { "Cache-Control": NO_CACHE, "X-Content-Type-Options": NOSNIFF },
+    const file = await fileBody(full);
+    if (!file) return null;
+    return new Response(file.body, {
+      headers: { "Content-Type": file.type, "Cache-Control": NO_CACHE, "X-Content-Type-Options": NOSNIFF },
     });
   }
 

@@ -8,7 +8,7 @@ apps live in [`examples/*`](examples) and are linked to the framework via
 **pnpm** manages dependencies; **Bun** is the runtime, test runner, and bundler.
 You need both installed:
 
-- [Bun](https://bun.sh) (the framework runs on it — there is no Node.js runtime path)
+- [Bun](https://bun.sh) (the framework develops, builds and tests on it; production servers can also run on Node.js via `bractjs build --target node`)
 - [pnpm](https://pnpm.io) 9+ (`corepack enable pnpm` works if you have Node 16.13+)
 
 ## Setup

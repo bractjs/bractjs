@@ -6,12 +6,12 @@ Read [Concepts](concepts.md) alongside this. The biggest behavioral differences 
 
 ## Before you start: platform differences
 
-| Remix / RR7                              | BractJS                                                                                                                              |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Node, Bun, Deno, Workers via adapters    | **Bun only** (≥ 1.1). No Node.js runtime path. A Cloudflare Workers adapter exists ([§23](../README.md#23-custom-adapters)).         |
-| Vite (plugins, `vite.config.ts`)         | `Bun.build`. **Vite plugins do not work.** Bun plugins go in `bractjs.config.ts` → `plugins` ([§24](../README.md#24-build-plugins)). |
-| Deploy to a Node host / Vercel / Netlify | `bractjs start` on a Bun host, or `bractjs compile` → one self-contained executable ([deployment](deployment.md)).                   |
-| React 18 or 19                           | React 19 only.                                                                                                                       |
+| Remix / RR7                              | BractJS                                                                                                                                                                    |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node, Bun, Deno, Workers via adapters    | Develop and build on Bun. Serve on Bun, or on Node.js / Deno via `bractjs build --target node`; Cloudflare Workers adapter ([§23](../README.md#23-runtimes-and-adapters)). |
+| Vite (plugins, `vite.config.ts`)         | `Bun.build`. **Vite plugins do not work.** Bun plugins go in `bractjs.config.ts` → `plugins` ([§24](../README.md#24-build-plugins)).                                       |
+| Deploy to a Node host / Vercel / Netlify | `bractjs start` on a Bun host, or `bractjs compile` → one self-contained executable ([deployment](deployment.md)).                                                         |
+| React 18 or 19                           | React 19 only.                                                                                                                                                             |
 
 If you depend on a Node-only library or a Vite plugin, check it works with Bun first — that's the one thing a port can't route around.
 
@@ -193,7 +193,7 @@ As of the current release, these have no clean equivalent. Plan around them:
 - **`meta` merges** root → route instead of the leaf replacing the whole array.
 - **`<Form>` defaults to `post`**, not `get`.
 - **Route middleware doesn't cover `/api` or `"use server"`**: see [Middleware and auth](#middleware-and-auth).
-- **No Vite ecosystem, no Node runtime**: see [platform differences](#before-you-start-platform-differences).
+- **No Vite ecosystem, and Bun for development**: see [platform differences](#before-you-start-platform-differences).
 
 ## Porting checklist
 

@@ -16,7 +16,7 @@ Open work, roughly in priority order.
 - [x] **`clientMiddleware`, client `context`, `clientLoader` on revalidation, fetchers, root and layouts** (unreleased)
 - [x] **Built-in i18n as a one-line opt-in** (unreleased)
 - [x] **Client build and prerender output embedded in the compiled binary** (unreleased)
-- [ ] **Deno / Node.js adapters** — validate the `BractAdapter` contract beyond Bun and Cloudflare Workers. Lowest priority: the build pipeline is `Bun.build`, so this is runtime portability only.
+- [x] **Node.js / Deno production servers** (`bractjs build --target node`; unreleased)
 
 ---
 

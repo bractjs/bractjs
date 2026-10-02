@@ -2,11 +2,13 @@
  * Cloudflare Workers adapter for BractJS.
  *
  * Usage in your worker entrypoint:
- *   import { createCloudflareAdapter } from 'bractjs/adapters/cloudflare';
- *   import { buildFetchHandler } from 'bractjs';
+ *   import { buildFetchHandler, makeCloudflareHandler } from "@bractjs/bractjs";
  *
  *   const handler = buildFetchHandler({ appDir: './app', ... });
- *   export default createCloudflareAdapter(handler);
+ *   export default makeCloudflareHandler(handler);
+ *
+ * The Worker's `env` bindings and `ctx` reach app code through
+ * `getPlatform<{ env; ctx }>()` (loaders, actions, API handlers, middleware).
  *
  * Build with:
  *   bun build --target=browser --outfile=dist/worker.js src/worker.ts

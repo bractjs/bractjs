@@ -1,5 +1,5 @@
 export function isDev(): boolean {
-  return Bun.env.NODE_ENV !== "production";
+  return process.env.NODE_ENV !== "production";
 }
 
 /**
@@ -63,7 +63,7 @@ export function devBustedSpecifier(path: string): string {
  * (server errors → response bodies) rather than isDev().
  */
 export function isExplicitDev(): boolean {
-  const v = Bun.env.NODE_ENV;
+  const v = process.env.NODE_ENV;
   return v === "development" || v === "dev";
 }
 
@@ -87,7 +87,7 @@ export function envPort(): number | undefined {
 }
 
 export function requireEnv(key: string): string {
-  const value = Bun.env[key];
+  const value = process.env[key];
   if (!value) {
     throw new Error(`Missing required environment variable: ${key}`);
   }

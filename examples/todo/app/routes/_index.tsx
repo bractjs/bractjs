@@ -107,8 +107,7 @@ export default function IndexPage() {
           {locale === "fr" ? "Tableau des tâches" : "Todo board"}
         </h1>
         <p className="text-muted">
-          Tasks live in a <code>bun:sqlite</code> store inside a <code>*.server.ts</code> module. Open one to
-          rename it.
+          Tasks live in an in-memory store inside a <code>*.server.ts</code> module. Open one to rename it.
         </p>
       </header>
 

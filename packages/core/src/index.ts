@@ -10,6 +10,10 @@
 
 // Adapters
 export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloudflare.ts";
+export type { DenoAdapterOptions } from "./adapters/deno.ts";
+export { createDenoAdapter, DenoAdapter } from "./adapters/deno.ts";
+export type { NodeAdapterOptions } from "./adapters/node.ts";
+export { createNodeAdapter, NodeAdapter } from "./adapters/node.ts";
 // Build pipeline (runBuild, runPrerender, bundler plugins) lives at
 // `@bractjs/bractjs/build`; codegen (module registries for the compiled
 // binary) at `@bractjs/bractjs/codegen`. See src/build-entry.ts and
@@ -163,6 +167,7 @@ export type { MiddlewareContext, MiddlewareFn, RouteMiddleware } from "./server/
 // Middleware
 export { createMiddlewareContext, MiddlewarePipeline, pipeline } from "./server/middleware.ts";
 export { getRequest, getRequestId } from "./server/request-context.ts";
+export { getPlatform } from "./server/platform.ts";
 export { useRequestId } from "./shared/request-id.ts";
 export type { ClientAddressOptions } from "./server/client-address.ts";
 export { getClientAddress } from "./server/client-address.ts";

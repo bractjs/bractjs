@@ -4,6 +4,8 @@ import { handleImageRequest } from "../image/handler.ts";
 import { handleActionRequest } from "./action-handler.ts";
 import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
 import type { I18nConfig } from "../shared/i18n.ts";
+import { DenoAdapter } from "../adapters/deno.ts";
+import { NodeAdapter } from "../adapters/node.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
 import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
@@ -23,6 +25,7 @@ import { embeddedFile } from "./embedded.ts";
 import { serveStatic } from "./static.ts";
 import { installCssModulesRuntime } from "./css-modules-runtime.ts";
 import { installUseClientServerStub } from "./use-client-runtime.ts";
+import { fileBody, fileExists, readText } from "./runtime.ts";
 
 export type { I18nConfig } from "../shared/i18n.ts";
 
@@ -246,8 +249,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       const shellPath = join(buildDir, "client", "__spa.html");
       const embedded = embeddedFile(join(buildDir, "client"), "__spa.html");
       if (embedded) return embedded.text();
-      const file = Bun.file(shellPath);
-      if (await file.exists()) return file.text();
+      if (await fileExists(shellPath)) return readText(shellPath);
       const key = manifest.clientEntry;
       if (spaShellCache?.key === key) return spaShellCache.html;
       const html = await renderSpaShell(appDir, manifest, moduleRegistry);
@@ -263,8 +265,8 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     const path = join(buildDir, "client", "_prerender", relHtmlOrJson);
     const embedded = embeddedFile(join(buildDir, "client"), `_prerender/${relHtmlOrJson}`);
     if (embedded) return embedded;
-    const file = Bun.file(path);
-    return (await file.exists()) ? file : null;
+    const file = await fileBody(path);
+    return file ? new Blob([await new Response(file.body).arrayBuffer()], { type: file.type }) : null;
   }
 
   // The full per-request dispatch: special endpoints (API, actions, stream,
@@ -537,8 +539,9 @@ export function createServer(config?: Partial<BractJSConfig>): {
   const appHandler = buildFetchHandler(config ?? {});
   const fetchHandler = config?.compression === false ? appHandler : withCompression(appHandler);
 
-  // Use provided adapter or fall back to the default Bun adapter.
-  const adapter = config?.adapter ?? new BunAdapter(config?.maxRequestBodySize, config?.hostname);
+  // The provided adapter, else the one for the runtime this is running on:
+  // Bun, Deno, or Node.js (a `bractjs build --target node` server).
+  const adapter = config?.adapter ?? defaultAdapter(config);
 
   if (adapter instanceof BunAdapter) {
     adapter.setHandler(fetchHandler);
@@ -625,4 +628,11 @@ export function createServer(config?: Partial<BractJSConfig>): {
 // Allow running directly: bun run src/server/serve.ts
 if (import.meta.main) {
   createServer();
+}
+
+function defaultAdapter(config: Partial<BractJSConfig> | undefined): BractAdapter {
+  const g = globalThis as { Bun?: unknown; Deno?: unknown };
+  if (g.Bun) return new BunAdapter(config?.maxRequestBodySize, config?.hostname);
+  if (g.Deno) return new DenoAdapter({ hostname: config?.hostname });
+  return new NodeAdapter({ hostname: config?.hostname, maxRequestBodySize: config?.maxRequestBodySize });
 }

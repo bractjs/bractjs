@@ -42,6 +42,10 @@ The binary boots with **zero filesystem reads**. `bractjs compile` embeds `build
 - Global middleware belongs in `app/server.ts` — that's how it applies in dev, `start`, _and_ the binary (see [Concepts](concepts.md#the-three-run-modes)).
 - `lifecycle.ts` hooks are picked up automatically by `dev`/`start`, but a compiled entry wires them explicitly: `createServer({ ...lifecycle })` ([§16](../README.md#16-lifecycle-hooks)).
 
+## On Node.js or Deno
+
+`bractjs build --target node` adds `build/node/server.js`: `app/server.ts` bundled with the app, React and the framework, for Node.js 22+ or Deno. Ship `build/` and `public/`, then run `NODE_ENV=production node build/node/server.js`. `createServer()` picks the right adapter by itself. The app's server code must run on that runtime: no `bun:sqlite` or `Bun.*`, and no `/_image` optimizer. See [§23](../README.md#23-runtimes-and-adapters).
+
 ## Rendering modes and what they change
 
 All opt-in, all composable with either run path ([§21](../README.md#21-build--run)):
@@ -51,7 +55,7 @@ All opt-in, all composable with either run path ([§21](../README.md#21-build--r
 - **App-wide SPA mode** — `ssr: false` in `bractjs.config.ts`. One static shell for every document GET; the server still runs loaders (`/_data`), actions (CSRF intact), `/api`, and `/_image`. Trade-off: no SEO for route content.
 - **Prerendering (SSG)** — `prerender: ["/", "/about", ...]` in `bractjs.config.ts` (or an async function returning paths). The build runs the real loaders and writes each path's HTML **and** `/_data` payload under `build/client/_prerender/`; production serves those before falling back to dynamic SSR. Loaders' dependencies (DB, env) must be available at build time; paths must be concrete; a query string opts back into SSR.
 
-Prerender note for binaries: `bractjs compile` prerenders the configured paths and embeds the output, so the binary serves those pages as files. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs ([§23](../README.md#23-custom-adapters)).
+Prerender note for binaries: `bractjs compile` prerenders the configured paths and embeds the output, so the binary serves those pages as files. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs ([§23](../README.md#23-runtimes-and-adapters)).
 
 ## Behind a reverse proxy
 
@@ -82,7 +86,7 @@ If your proxy strips `Sec-Fetch-Site` (some WAFs do), the gate falls back to thi
 
 ## Embedding in your own server
 
-`buildFetchHandler(config)` returns the adapter-agnostic `(Request) => Promise<Response>` core — mount it under your own `Bun.serve`, or supply a custom adapter via `createServer({ adapter })`. ([§21](../README.md#21-build--run), [§23](../README.md#23-custom-adapters))
+`buildFetchHandler(config)` returns the adapter-agnostic `(Request) => Promise<Response>` core — mount it under your own `Bun.serve`, or supply a custom adapter via `createServer({ adapter })`. ([§21](../README.md#21-build--run), [§23](../README.md#23-runtimes-and-adapters))
 
 ## Production checklist
 

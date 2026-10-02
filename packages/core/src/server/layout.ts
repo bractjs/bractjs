@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import type { RouteModule } from "../shared/route-types.ts";
 import { devBustedSpecifier } from "./env.ts";
 import { layoutDirsFromFilePath, type RouteFile } from "./scanner.ts";
+import { fileExists } from "./runtime.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ export async function resolveLayoutChain(routeFile: RouteFile, appDir: string): 
   // root.tsx is always first — resolve to absolute so dynamic import works
   // regardless of which package file calls importRouteModule.
   const rootPath = resolve(join(appDir, "root.tsx"));
-  if (await Bun.file(rootPath).exists()) {
+  if (await fileExists(rootPath)) {
     layoutFiles.push(rootPath);
   }
 
@@ -51,7 +52,7 @@ export async function resolveLayoutChain(routeFile: RouteFile, appDir: string): 
   for (const dir of layoutDirsFromFilePath(routeFile.filePath)) {
     for (const ext of ["tsx", "ts"]) {
       const layoutPath = resolve(join(appDir, "routes", dir, `layout.${ext}`));
-      if (await Bun.file(layoutPath).exists()) {
+      if (await fileExists(layoutPath)) {
         layoutFiles.push(layoutPath);
         break;
       }
@@ -235,7 +236,7 @@ export async function resolveRootChain(appDir: string, registry?: ModuleRegistry
   }
   for (const name of ["root.tsx", "root.ts"]) {
     const rootPath = resolve(join(appDir, name));
-    if (await Bun.file(rootPath).exists()) {
+    if (await fileExists(rootPath)) {
       return {
         root: await importRouteModule(rootPath),
         layouts: [],
