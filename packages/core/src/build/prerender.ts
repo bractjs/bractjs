@@ -1,3 +1,4 @@
+import { type I18nConfig, localizePath } from "../shared/i18n.ts";
 import { join } from "node:path";
 import { buildFetchHandler } from "../server/serve.ts";
 import type { ServerManifest } from "../server/render.ts";
@@ -10,6 +11,8 @@ export interface PrerenderOptions {
   buildDir?: string;
   /** Override the manifest instead of loading `<buildDir>/route-manifest.json`. */
   manifest?: ServerManifest;
+  /** The app's `i18n`: each path is also prerendered in every non-default locale (`/fr/about`). */
+  i18n?: I18nConfig;
 }
 
 export interface PrerenderResult {
@@ -54,13 +57,18 @@ export function prerenderPaths(path: string): { html: string; data: string } {
  */
 export async function runPrerender(options: PrerenderOptions): Promise<PrerenderResult> {
   const buildDir = options.buildDir ?? "./build";
-  const paths = typeof options.prerender === "function" ? await options.prerender() : options.prerender;
+  const listed = typeof options.prerender === "function" ? await options.prerender() : options.prerender;
+  const i18n = options.i18n;
+  const paths = i18n
+    ? [...new Set(listed.flatMap((p) => i18n.locales.map((l) => localizePath(p, l, i18n))))]
+    : listed;
 
   const handler = buildFetchHandler({
     appDir: options.appDir ?? "./app",
     publicDir: options.publicDir,
     buildDir,
     manifest: options.manifest,
+    i18n,
   });
 
   const written: string[] = [];

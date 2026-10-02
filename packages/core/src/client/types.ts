@@ -23,6 +23,9 @@ export interface BractJSClientData {
   ssrMode?: "client-only" | "data-only" | "spa";
   /** The request id from the requestId() middleware, when registered. */
   requestId?: string;
+  /** The page's locale and the app's i18n config (with `i18n` configured). */
+  locale?: string;
+  i18n?: import("../shared/i18n.ts").I18nConfig;
 }
 
 // ── Window augmentation ────────────────────────────────────────────────────

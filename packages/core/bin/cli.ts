@@ -269,6 +269,7 @@ switch (command) {
         appDir: userCfg.appDir ?? "./app",
         publicDir: userCfg.publicDir,
         buildDir: userCfg.buildDir ?? "./build",
+        i18n: userCfg.i18n,
       });
       console.log(`[bract] prerender → ${written.length} files`);
     }
@@ -387,6 +388,7 @@ switch (command) {
         appDir: appDirRel,
         publicDir: userCfg.publicDir,
         buildDir: buildDirRel,
+        i18n: userCfg.i18n,
       });
       console.log(`[bract]       prerender → ${written.length} files`);
     }

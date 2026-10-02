@@ -12,6 +12,7 @@ import {
   StyleLinks,
 } from "../shared/style-links.tsx";
 import { BractJSContext, type RouteManifest } from "../shared/context.ts";
+import type { I18nConfig } from "../shared/i18n.ts";
 import { RequestIdContext } from "../shared/request-id.ts";
 import { renderErrorBoundary } from "../shared/route-error.ts";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
@@ -82,6 +83,9 @@ export interface RenderOptions {
    * many ms (React Router's `streamTimeout`). Unset → no limit.
    */
   streamTimeout?: number;
+  /** The page's locale and the app's i18n config, for the client router. */
+  locale?: string;
+  i18n?: I18nConfig;
 }
 
 export async function renderRoute(options: RenderOptions): Promise<Response> {
@@ -105,7 +109,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   const { matches: wireMatches, ...wireLoaderData } = wire;
   const bootstrapScriptContent =
     devOverlay +
-    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, links: options.links?.length ? options.links : undefined, ssrMode: options.ssrMode, requestId })};`;
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, links: options.links?.length ? options.links : undefined, ssrMode: options.ssrMode, requestId, locale: options.locale, i18n: options.i18n })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers

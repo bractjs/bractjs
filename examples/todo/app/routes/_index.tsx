@@ -14,6 +14,7 @@ import {
   useActionData,
   useLoaderData,
   useNavigation,
+  useLocale,
   useSearch,
 } from "@bractjs/bractjs";
 import { Circle, CircleCheck, Eraser, LoaderCircle, Plus, Trash2 } from "lucide-react";
@@ -91,6 +92,8 @@ export default function IndexPage() {
   useActionToast(actionData);
   const nav = useNavigation();
   const busy = nav.state === "submitting";
+  // i18n: "/fr" renders this same route in French (see bractjs.config.ts).
+  const locale = useLocale();
   const counts: Record<Filter, number> = {
     all: stats.total,
     active: stats.active,
@@ -100,7 +103,9 @@ export default function IndexPage() {
   return (
     <main className="grid gap-6">
       <header className="grid gap-1">
-        <h1 className="text-3xl font-bold tracking-tight">Todo board</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {locale === "fr" ? "Tableau des tâches" : "Todo board"}
+        </h1>
         <p className="text-muted">
           Tasks live in a <code>bun:sqlite</code> store inside a <code>*.server.ts</code> module. Open one to
           rename it.

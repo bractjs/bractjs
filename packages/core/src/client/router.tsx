@@ -57,6 +57,9 @@ export interface RouterContextValue extends RouteState {
   hydrationPending: HydrationPending;
   /** root.tsx's ErrorBoundary — the fallback when a failing route has none. */
   rootErrorBoundary?: ComponentType<{ error: unknown }>;
+  /** The page's locale and the app's i18n config (with `i18n` configured). */
+  locale?: string;
+  i18n?: import("../shared/i18n.ts").I18nConfig;
 }
 
 export const RouterContext = createContext<RouterContextValue>(null!);

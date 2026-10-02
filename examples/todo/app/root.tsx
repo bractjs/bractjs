@@ -7,6 +7,9 @@ import {
   Scripts,
   ScrollRestoration,
   Toaster,
+  useLocale,
+  useLocalizedLink,
+  useLocation,
 } from "@bractjs/bractjs";
 import { ArrowLeft, CircleAlert, ListChecks } from "lucide-react";
 import type { ReactNode } from "react";
@@ -35,8 +38,12 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
 // normally, and root's ErrorBoundary when the root loader fails — so even that
 // page keeps the app's <html>, styles and header.
 export function Layout({ children }: { children?: ReactNode }) {
+  // i18n (bractjs.config.ts): the page's locale, and links that keep it.
+  const locale = useLocale();
+  const localize = useLocalizedLink();
+  const { pathname } = useLocation();
   return (
-    <html lang="en">
+    <html lang={locale}>
       <head>
         <meta charSet="utf-8" />
         <link rel="icon" type="image/x-icon" href="/public/favicon.ico" />
@@ -49,12 +56,27 @@ export function Layout({ children }: { children?: ReactNode }) {
               Bract Todo
             </Link>
             <nav aria-label="Primary" className="ml-auto flex gap-1">
-              <NavLink to="/" className={navClass}>
+              <NavLink to={localize("/")} end className={navClass}>
                 Board
               </NavLink>
-              <NavLink to="/about" className={navClass}>
+              <NavLink to={localize("/about")} className={navClass}>
                 About
               </NavLink>
+              <span aria-hidden className="mx-1 w-px self-stretch bg-teal-ink/30" />
+              {/* Language switcher: this page in each locale. */}
+              {(["en", "fr"] as const).map((l) => (
+                <Link
+                  key={l}
+                  to={localize(pathname, l)}
+                  hrefLang={l}
+                  aria-current={l === locale ? "true" : undefined}
+                  className={`rounded-md px-2 py-1.5 text-sm font-semibold uppercase ${
+                    l === locale ? "bg-teal-ink text-teal" : "text-teal-ink hover:bg-teal-ink/15"
+                  }`}
+                >
+                  {l}
+                </Link>
+              ))}
             </nav>
           </div>
         </header>

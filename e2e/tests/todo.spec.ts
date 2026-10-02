@@ -239,3 +239,16 @@ test("clientMiddleware + clientLoader run on client navigation", async ({ page }
   await expect(page.getByRole("heading", { name: "About this demo" })).toBeVisible();
   await expect(page.getByTestId("client-loaded")).toContainText("Loaded in the browser in");
 });
+
+test("i18n: /fr renders the board in French, and the switcher soft-navigates", async ({ page }) => {
+  await page.goto("/fr");
+  await expect(page.getByRole("heading", { name: "Tableau des tâches" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await hydrated(page);
+  await markDocument(page);
+  await page.getByRole("link", { name: "en", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Todo board" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expectSameDocument(page);
+});

@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { validateI18n } from "../shared/i18n.ts";
 import type { BractJSConfig } from "../server/serve.ts";
 
 /**
@@ -73,6 +74,13 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
       (Array.isArray(c.prerender) && c.prerender.every((p) => typeof p === "string")),
     "an array of paths or a function returning one",
   );
+  if (c.i18n !== undefined) {
+    try {
+      validateI18n(c.i18n);
+    } catch (err) {
+      throw new Error(`bractjs.config: ${(err as Error).message}`);
+    }
+  }
 
   return c as Partial<BractJSConfig>;
 }

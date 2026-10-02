@@ -1,4 +1,5 @@
 import { type ComponentType, createContext, createElement, type ReactNode, useContext } from "react";
+import type { I18nConfig } from "./i18n.ts";
 import type { RouteMatch, RouterLocation } from "./route-types.ts";
 
 export interface RouteManifest {
@@ -30,6 +31,10 @@ export interface BractJSContextValue {
   search?: Record<string, unknown>;
   /** The matched route chain (root → layouts → route) for `useMatches()`. */
   matches?: RouteMatch[];
+  /** The page's locale (with `i18n` configured), for `useLocale()` during SSR. */
+  locale?: string;
+  /** The app's `i18n` config, for `useLocalizedLink()` during SSR. */
+  i18n?: I18nConfig;
 }
 
 export const BractJSContext = createContext<BractJSContextValue>(null!);

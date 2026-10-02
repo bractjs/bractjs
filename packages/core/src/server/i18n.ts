@@ -1,11 +1,12 @@
+import type { I18nConfig } from "../shared/i18n.ts";
 import type { RouteFile } from "./scanner.ts";
 
-export interface I18nConfig {
-  locales: string[];
-  defaultLocale: string;
-}
-
 /**
+ * @deprecated Set `i18n` in bractjs.config.ts instead: the server and client
+ * router then strip a locale prefix before matching, with no duplicated routes.
+ * (This helper's `[locale]` segment also matched any string, not just the
+ * configured locales.)
+ *
  * Given a list of route files, return augmented copies that include a
  * `/:locale` prefix in their URL pattern.
  *

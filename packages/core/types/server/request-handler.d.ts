@@ -1,3 +1,4 @@
+import { type I18nConfig } from "../shared/i18n.ts";
 import { type ModuleRegistry } from "./layout.ts";
 import { type OnErrorHook } from "./lifecycle.ts";
 import type { TrieNode } from "./matcher.ts";
@@ -15,5 +16,7 @@ export interface HandlerConfig {
     moduleRegistry?: ModuleRegistry;
     /** See `BractJSConfig.streamTimeout`. */
     streamTimeout?: number;
+    /** See `BractJSConfig.i18n`: locale prefixes are stripped before matching. */
+    i18n?: I18nConfig;
 }
 export declare function handleRequest(request: Request, trie: TrieNode, config: HandlerConfig, context?: Record<string, unknown>): Promise<Response>;

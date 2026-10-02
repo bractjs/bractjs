@@ -3,6 +3,7 @@ import { loadManifest } from "../build/manifest.ts";
 import { handleImageRequest } from "../image/handler.ts";
 import { handleActionRequest } from "./action-handler.ts";
 import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
+import type { I18nConfig } from "../shared/i18n.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
 import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
@@ -23,10 +24,7 @@ import { serveStatic } from "./static.ts";
 import { installCssModulesRuntime } from "./css-modules-runtime.ts";
 import { installUseClientServerStub } from "./use-client-runtime.ts";
 
-export interface I18nConfig {
-  locales: string[];
-  defaultLocale: string;
-}
+export type { I18nConfig } from "../shared/i18n.ts";
 
 export interface BractJSConfig {
   port: number;
@@ -50,7 +48,11 @@ export interface BractJSConfig {
   allowedHosts?: string[];
   /** Optional custom adapter (Cloudflare Workers, Deno, Node, etc.). Defaults to Bun.serve(). */
   adapter?: BractAdapter;
-  /** i18n locale prefix routing (E2). */
+  /**
+   * Locale-prefixed URLs: `{ locales: ["en", "fr"], defaultLocale: "en" }`
+   * serves `/about` in English and `/fr/about` in French from the same route
+   * files. See README §19.
+   */
   i18n?: I18nConfig;
   /**
    * SPA mode: `false` serves one static shell for every document GET instead
@@ -395,6 +397,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       onError,
       moduleRegistry,
       streamTimeout: config.streamTimeout,
+      i18n: config.i18n,
     };
     return handleRequest(request, trie, handlerConfig, context);
   }
