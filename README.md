@@ -1325,6 +1325,19 @@ export async function loader({ params }: TypedLoaderArgs<"/blog/:id">) {
 routes["/blog/:id"]({ id: "123" }); // → "/blog/123"  (typo'd routes won't compile)
 ```
 
+**Loader and action data by route.** Codegen also registers every module (root, layouts, routes) under its route id: the app-relative path without the extension, the same ids `useMatches()` reports. Other components' data is then typed without importing their loaders:
+
+```tsx
+const { user } = useRouteLoaderData("root")!;                  // root's loader data
+const { section } = useRouteLoaderData("routes/blog/layout")!;  // a layout's
+
+import type { ActionDataFor, ComponentPropsFor, LoaderDataFor } from "../route-types.gen.ts";
+type Post = LoaderDataFor<"/blog/:id">;                         // by URL pattern
+export default function Post({ loaderData, params }: ComponentPropsFor<"/blog/:id">) { … }
+```
+
+A module's `clientLoader` / `clientAction` types its data when it has one, since that is what the component sees. `data()` wrappers are unwrapped. An explicit generic (`useRouteLoaderData<typeof loader>("root")`) still works and wins.
+
 **Type a route's search params or context** by augmenting the package interfaces — `SearchParams<T>` / `Context<T>` and `useSearchParams<T>()` pick it up:
 
 ```ts

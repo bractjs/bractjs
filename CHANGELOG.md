@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **Typed loader data by route id.** `bractjs codegen` now registers every module (root, layouts, routes) under its route id. `useRouteLoaderData("root")` and `useRouteLoaderData("routes/blog/layout")` return that module's loader data with no generic, and the generated file exports `LoaderDataFor<"/blog/:id">`, `ActionDataFor<…>` and `ComponentPropsFor<…>` (React Router's `Route.ComponentProps`). A `clientLoader`/`clientAction` types the data when present, and `data()` is unwrapped. Explicit generics keep working, and apps without codegen are unaffected (`unknown`).
+
 - **`clientMiddleware` (React Router 8).** A route, layout or root module can export `clientMiddleware: [({ request, params, context }, next) => …]`. It runs root → layouts → route around the client data work of a navigation, revalidation, `<Form>` submission or fetcher call. `context` is a per-navigation `RouterContextProvider` shared with `clientLoader` / `clientAction` (and client `beforeLoad`), so middleware can `context.set(key, value)` for them. `throw redirect(...)` navigates. `unstable_clientMiddleware` is read too, and the route linter no longer flags either name.
 - **`clientLoader` runs everywhere it should.** It now also runs on `revalidate()` (and after mutations), in `fetcher.load`, and for root and layout modules (each replaces its own loader slice). `clientAction` now runs for `fetcher.submit`. Before, only the leaf route's `clientLoader` ran, and only on navigation.
 

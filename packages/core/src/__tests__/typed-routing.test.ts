@@ -236,4 +236,65 @@ describe("typed routing (type-level)", () => {
     expect(output).not.toMatch(/error TS/);
     expect(code).toBe(0);
   }, 60_000);
+
+  test("route-id typing: useRouteLoaderData, LoaderDataFor, ComponentPropsFor", async () => {
+    if (!tscAvailable) return;
+
+    const app = join(TMP, "route-ids");
+    await mkdir(join(app, "routes", "posts"), { recursive: true });
+    await writeFile(
+      join(app, "root.tsx"),
+      `export async function loader() { return { user: { name: "ada" } }; }\nexport default () => null;\n`,
+    );
+    await writeFile(
+      join(app, "routes", "posts", "layout.tsx"),
+      `export function loader() { return { section: "posts" }; }\nexport default () => null;\n`,
+    );
+    await writeFile(
+      join(app, "routes", "posts", "[id].tsx"),
+      `import { data } from "@bractjs/bractjs";\n` +
+        `export function loader() { return data({ title: "t", views: 1 }, { status: 200 }); }\n` +
+        `export async function action() { return { saved: true as const }; }\n` +
+        `export default () => null;\n`,
+    );
+    await writeFile(join(app, "routes", "plain.tsx"), "export default () => null;\n");
+    await writeFile(join(app, "route-types.gen.ts"), await generateRouteTypes(app));
+    await writeFile(join(app, "tsconfig.json"), tsconfig("."));
+    await writeFile(
+      join(app, "usage.tsx"),
+      `import { useRouteLoaderData } from "@bractjs/bractjs";\n` +
+        `import type { ActionDataFor, ComponentPropsFor, LoaderDataFor } from "./route-types.gen.ts";\n` +
+        `import "./route-types.gen.ts";\n` +
+        `export function Ok() {\n` +
+        `  // Typed from the id — no generic.\n` +
+        `  const name: string = useRouteLoaderData("root")!.user.name;\n` +
+        `  const section: string = useRouteLoaderData("routes/posts/layout")!.section;\n` +
+        `  // data() is unwrapped.\n` +
+        `  const views: number = useRouteLoaderData("routes/posts/[id]")!.views;\n` +
+        `  // An explicit generic still wins (back-compat).\n` +
+        `  const custom: { n: number } | undefined = useRouteLoaderData<{ n: number }>("anything");\n` +
+        `  const title: string = (null as unknown as LoaderDataFor<"/posts/:id">).title;\n` +
+        `  const saved: true = (null as unknown as ActionDataFor<"/posts/:id">).saved;\n` +
+        `  const props = null as unknown as ComponentPropsFor<"/posts/:id">;\n` +
+        `  const id: string = props.params.id;\n` +
+        `  const plain: undefined = null as unknown as LoaderDataFor<"/plain">;\n` +
+        `  void name; void section; void views; void custom; void title; void saved; void id; void plain;\n` +
+        `  return null;\n` +
+        `}\n` +
+        `export function Bad() {\n` +
+        `  // @ts-expect-error root's loader data has no \`missing\` field\n` +
+        `  void useRouteLoaderData("root")!.missing;\n` +
+        `  // @ts-expect-error views is a number\n` +
+        `  const v: string = useRouteLoaderData("routes/posts/[id]")!.views;\n` +
+        `  // @ts-expect-error /posts/:id has no \`slug\` param\n` +
+        `  void (null as unknown as ComponentPropsFor<"/posts/:id">).params.slug;\n` +
+        `  void v;\n` +
+        `  return null;\n` +
+        `}\n`,
+    );
+    const { code, output } = await runTsc(app);
+    expect(output).not.toContain("TS2578");
+    expect(output).not.toMatch(/error TS/);
+    expect(code).toBe(0);
+  }, 60_000);
 });

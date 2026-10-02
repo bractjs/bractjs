@@ -46,7 +46,7 @@ function pathToIdent(prefix: string, relPath: string): string {
  * dirs are derived from each route's FILE path (via `layoutDirsFromFilePath`)
  * so route-group folders are covered identically to the runtime.
  */
-async function collectLayouts(appDir: string, routes: RouteFile[]): Promise<string[]> {
+export async function collectLayouts(appDir: string, routes: RouteFile[]): Promise<string[]> {
   const layoutPaths = new Set<string>();
   for (const route of routes) {
     for (const dir of layoutDirsFromFilePath(route.filePath)) {

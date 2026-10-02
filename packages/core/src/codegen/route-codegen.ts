@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { hashString } from "../build/hash.ts";
 import type { Segment } from "../server/scanner.ts";
 import { scanRoutes } from "../server/scanner.ts";
+import { collectLayouts } from "./module-registry.ts";
 
 // Convert [param] / [[optional]] / [...catchAll] notation to :param colon-style.
 function patternToColon(urlPattern: string): string {
@@ -210,7 +211,10 @@ function contextTypeLines(routes: Array<{ pattern: string }>): string {
 
 // The `Register` augmentation: this is what wires the app's routes into the
 // package's runtime helpers (<Link>, useNavigate, useParams, useSearchParams).
-function registerAugmentationLines(routes: Array<{ pattern: string; params: string[] }>): string {
+function registerAugmentationLines(
+  routes: Array<{ pattern: string; params: string[] }>,
+  hasModules: boolean,
+): string {
   const paramEntries = routes
     .map((r) => {
       assertSafePattern(r.pattern);
@@ -232,6 +236,7 @@ function registerAugmentationLines(routes: Array<{ pattern: string; params: stri
     "      };",
     "      search: RouteSearchParamsMap;",
     "      searchOutput: GeneratedSearchOutput;",
+    ...(hasModules ? ["      modules: RouteModules;"] : []),
     "    };",
     "  }",
     "}",
@@ -295,6 +300,52 @@ export async function explainStalenessForApp(appDir: string, outPath?: string): 
   return explainStaleness(existing, await routePatternsForApp(appDir));
 }
 
+/** A module file's route id: its app-relative path without the extension (`"routes/[id]"`). */
+function routeIdOf(filePath: string): string {
+  return filePath
+    .split("\\")
+    .join("/")
+    .replace(/\.(tsx|ts|jsx|js)$/, "");
+}
+
+// Route id → module type, plus the id each URL pattern renders, so
+// useRouteLoaderData("root") and LoaderDataFor<"/posts/:id"> are typed.
+function routeModuleTypeLines(
+  modules: Array<{ id: string; file: string }>,
+  routes: Array<{ pattern: string; filePath: string }>,
+): string {
+  const moduleEntries = modules.map((m) => {
+    assertSafeFilePath(m.file);
+    return `  ${JSON.stringify(m.id)}: typeof import(${JSON.stringify("./" + m.file)});`;
+  });
+  const idEntries = routes.map(
+    (r) => `  ${JSON.stringify(r.pattern)}: ${JSON.stringify(routeIdOf(r.filePath))};`,
+  );
+  return [
+    "/** Route modules by id — the ids `useMatches()` and `useRouteLoaderData()` use. */",
+    "export type RouteModules = {",
+    ...moduleEntries,
+    "};",
+    "",
+    "/** The route id each URL pattern renders. */",
+    "export type RouteIdByPath = {",
+    ...idEntries,
+    "};",
+    "",
+    '/** A route\'s loader data by URL pattern: `LoaderDataFor<"/posts/:id">`. */',
+    "export type LoaderDataFor<T extends AppRoutes> = RouteLoaderData<RouteIdByPath[T]>;",
+    '/** A route\'s action data by URL pattern: `ActionDataFor<"/posts/:id">`. */',
+    "export type ActionDataFor<T extends AppRoutes> = RouteActionData<RouteIdByPath[T]>;",
+    "/** Props a route component receives (React Router `Route.ComponentProps`), typed for its pattern. */",
+    "export type ComponentPropsFor<T extends AppRoutes> = {",
+    "  loaderData: LoaderDataFor<T>;",
+    "  actionData: ActionDataFor<T> | undefined;",
+    "  params: RouteParams<T>;",
+    '  matches: RouteComponentProps["matches"];',
+    "};",
+  ].join("\n");
+}
+
 export async function generateRouteTypes(appDir: string): Promise<string> {
   const routeFiles = await scanRoutes(appDir);
   const routes = routeFiles
@@ -324,7 +375,27 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
   // user augments via `declare module "@bractjs/bractjs"`. `InferSchemaOutput`
   // derives each route's validated search shape from its `searchSchema` export.
   const IMPORTS =
-    'import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs";';
+    "import type {\n" +
+    "  InferSchemaOutput,\n" +
+    "  RouteActionData,\n" +
+    "  RouteComponentProps,\n" +
+    "  RouteContextMap,\n" +
+    "  RouteLoaderData,\n" +
+    "  RouteSearchParamsMap,\n" +
+    '} from "@bractjs/bractjs";';
+
+  // Every module a route id can name: root, layouts, routes.
+  const layoutFiles = await collectLayouts(appDir, routeFiles);
+  const rootFile = (await Bun.file(join(appDir, "root.tsx")).exists())
+    ? "root.tsx"
+    : (await Bun.file(join(appDir, "root.ts")).exists())
+      ? "root.ts"
+      : undefined;
+  const modules = [
+    ...(rootFile ? [{ id: "root", file: rootFile }] : []),
+    ...layoutFiles.map((file) => ({ id: routeIdOf(file), file })),
+    ...routes.map((r) => ({ id: routeIdOf(r.filePath), file: r.filePath.split("\\").join("/") })),
+  ];
 
   // Freshness breadcrumb: lets the dev server detect drift without re-deriving
   // the whole file, and lets writeRouteTypes skip identical writes.
@@ -368,8 +439,9 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
     builderEntries,
     "} as const;",
     "",
+    routes.length > 0 ? routeModuleTypeLines(modules, routes) + "\n" : "",
     // No routes → AppRoutes is `never`; nothing to register.
-    routes.length > 0 ? registerAugmentationLines(routes) : "",
+    routes.length > 0 ? registerAugmentationLines(routes, true) : "",
     "",
   ].join("\n");
 }

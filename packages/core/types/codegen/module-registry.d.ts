@@ -1,4 +1,12 @@
 import { type RouteFile } from "../server/scanner.ts";
+/**
+ * Find every `routes/<dir>/layout.tsx` (or `.ts`) that exists on disk for the
+ * given set of routes. Mirrors the runtime probe in `resolveLayoutChain` but
+ * runs once at codegen time so the generated registry is exhaustive. Layout
+ * dirs are derived from each route's FILE path (via `layoutDirsFromFilePath`)
+ * so route-group folders are covered identically to the runtime.
+ */
+export declare function collectLayouts(appDir: string, routes: RouteFile[]): Promise<string[]>;
 export interface RouteRegistryInput {
     appDir: string;
     routes: RouteFile[];

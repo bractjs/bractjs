@@ -62,9 +62,13 @@ describe("route-codegen — output shape", () => {
     // re-declared as bare top-level interfaces in the app file.
     expect(out).not.toMatch(/^export interface RouteSearchParamsMap/m);
     expect(out).not.toMatch(/^export interface RouteContextMap/m);
-    expect(out).toContain(
-      'import type { RouteSearchParamsMap, RouteContextMap, InferSchemaOutput } from "@bractjs/bractjs"',
-    );
+    for (const name of ["RouteSearchParamsMap", "RouteContextMap", "InferSchemaOutput", "RouteLoaderData"]) {
+      expect(out).toMatch(new RegExp(`import type \\{[^}]*\\b${name}\\b[^}]*\\} from "@bractjs/bractjs"`));
+    }
+    // Route-id typing: modules by id, the id per pattern, and the Register entry.
+    expect(out).toContain('"routes/users/[id]": typeof import("./routes/users/[id].tsx");');
+    expect(out).toContain('"/users/:id": "routes/users/[id]";');
+    expect(out).toContain("modules: RouteModules;");
 
     // The Register seam carries the route union and a per-route params map.
     expect(out).toContain("interface Register {");

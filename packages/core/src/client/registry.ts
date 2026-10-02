@@ -40,6 +40,8 @@
  * Augmentable registration interface. Empty by default; `route-types.gen.ts`
  * augments it with this app's `RouteRegistry`. See file header.
  */
+import type { ActionData, LoaderData } from "../shared/route-types.ts";
+
 export interface Register {}
 
 /** The shape the generated file plugs into `Register["routes"]`. */
@@ -135,3 +137,50 @@ export type InferSchemaOutput<S> = S extends { parse(input: unknown): infer T }
 
 /** Whether a route literal carries any path params. Reserved for a future strict `<Link>` mode. */
 export type HasParams<TTo> = keyof ParamsFor<TTo> extends never ? false : true;
+
+// ── Typed loader / action data per route id ──────────────────────────────────
+
+/**
+ * Route id → module type (`"root"`, `"routes/[id]"`, `"routes/blog/layout"` —
+ * the ids `useMatches()` reports, minus the file extension), registered by
+ * codegen under `Register.routes.modules`.
+ */
+export type RegisteredRouteModules = Register extends { routes: { modules: infer M } }
+  ? M
+  : Record<string, unknown>;
+
+/** The app's route ids when registered, else `string`. */
+export type RegisteredRouteIds = Register extends { routes: { modules: infer M } }
+  ? keyof M & string
+  : string;
+
+// A module's loader data: its clientLoader's when it has one (that's what the
+// component sees after client navigation), else its server loader's.
+type ModuleLoaderData<M> = M extends { clientLoader: infer C }
+  ? LoaderData<C>
+  : M extends { loader: infer L }
+    ? LoaderData<L>
+    : undefined;
+
+type ModuleActionData<M> = M extends { clientAction: infer C }
+  ? ActionData<C>
+  : M extends { action: infer A }
+    ? ActionData<A>
+    : undefined;
+
+/**
+ * The loader data of a route id (`"root"`, `"routes/posts/[id]"`) — `unknown`
+ * for an id codegen doesn't know, or when the app has no generated types.
+ */
+export type RouteLoaderData<Id> = Register extends { routes: { modules: infer M } }
+  ? Id extends keyof M
+    ? ModuleLoaderData<M[Id]>
+    : unknown
+  : unknown;
+
+/** The action data of a route id, or `unknown` when it isn't registered. */
+export type RouteActionData<Id> = Register extends { routes: { modules: infer M } }
+  ? Id extends keyof M
+    ? ModuleActionData<M[Id]>
+    : unknown
+  : unknown;
