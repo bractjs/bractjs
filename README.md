@@ -1539,7 +1539,7 @@ export default {
 
 `bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations _into_ a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported from `@bractjs/bractjs/build` for custom pipelines.
 
-Deployment notes: with `bun build --compile`, ship `build/client/` (including `_prerender/`) alongside the binary — or pass it via `--asset`. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs.
+Deployment notes: `bractjs compile` prerenders too and embeds the output in the binary. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs.
 
 ---
 
@@ -1586,10 +1586,10 @@ bractjs codegen:registry                          # A — scan routes/actions �
 bractjs build                                     # B — client + server bundles + manifest
 bractjs codegen:manifest                          # C — embed manifest as a TS constant
 bun build --compile app/server.ts \               # D — single binary
-  --asset build/client/ --outfile ./myapp
+  --asset build/client --asset public --outfile ./myapp
 ```
 
-`--asset build/client/` embeds JS/CSS into the binary (true single file); omit it to ship `myapp` + `build/client/` side by side.
+`--asset build/client --asset public` embeds the client build (JS, CSS, prerendered pages, the SPA shell) and public files, so the binary is a true single file that runs from any directory. `bractjs compile` passes both for you. Run the compile from the app root: the server looks embedded files up by their directory name.
 
 The codegen functions are exported from `@bractjs/bractjs/codegen`: `writeModuleRegistries(appDir)`, `writeManifestModule(appDir, buildDir)`, and the lower-level `generateRouteRegistry` / `generateActionRegistry` / `generateManifestModule`.
 

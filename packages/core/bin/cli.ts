@@ -380,11 +380,27 @@ switch (command) {
 
     console.log("[bract] (2/4) client + server build…");
     await runBuild({ ...userCfg, appDir: appDirRel, buildDir: buildDirRel });
+    if (userCfg.prerender) {
+      const { runPrerender } = await import("../src/build/prerender.ts");
+      const { written } = await runPrerender({
+        prerender: userCfg.prerender,
+        appDir: appDirRel,
+        publicDir: userCfg.publicDir,
+        buildDir: buildDirRel,
+      });
+      console.log(`[bract]       prerender → ${written.length} files`);
+    }
 
     console.log("[bract] (3/4) manifest codegen…");
     await writeManifestModule(appDir, buildDir);
 
     console.log("[bract] (4/4) bun build --compile →", outFile);
+    // Embed the client build (JS, CSS, prerendered pages, the SPA shell) and
+    // public/ in the executable, so it serves them with no files beside it.
+    // Paths stay relative to this directory — the server looks them up the
+    // same way (src/server/embedded.ts).
+    const publicDirRel = userCfg.publicDir ?? "./public";
+    const assets = [join(buildDirRel, "client"), publicDirRel].filter((dir) => existsSync(resolve(dir)));
     const result = Bun.spawnSync(
       [
         "bun",
@@ -396,6 +412,7 @@ switch (command) {
         entryPath,
         "--outfile",
         outFile,
+        ...assets.flatMap((dir) => ["--asset", dir]),
       ],
       {
         cwd: process.cwd(),

@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **`bractjs compile` produces a truly self-contained binary.** It now embeds the client build (JS, CSS, prerendered pages, the SPA shell) and `public/` in the executable (`--asset`), and the server serves them from inside it. The binary runs from any directory with nothing beside it; before, it 404'd every script and stylesheet unless `build/client/` and `public/` were shipped next to it. `compile` also prerenders configured paths now (only `build` did), and a binary no longer warns "No build found" at startup.
+
 - **Typed loader data by route id.** `bractjs codegen` now registers every module (root, layouts, routes) under its route id. `useRouteLoaderData("root")` and `useRouteLoaderData("routes/blog/layout")` return that module's loader data with no generic, and the generated file exports `LoaderDataFor<"/blog/:id">`, `ActionDataFor<…>` and `ComponentPropsFor<…>` (React Router's `Route.ComponentProps`). A `clientLoader`/`clientAction` types the data when present, and `data()` is unwrapped. Explicit generics keep working, and apps without codegen are unaffected (`unknown`).
 
 - **`clientMiddleware` (React Router 8).** A route, layout or root module can export `clientMiddleware: [({ request, params, context }, next) => …]`. It runs root → layouts → route around the client data work of a navigation, revalidation, `<Form>` submission or fetcher call. `context` is a per-navigation `RouterContextProvider` shared with `clientLoader` / `clientAction` (and client `beforeLoad`), so middleware can `context.set(key, value)` for them. `throw redirect(...)` navigates. `unstable_clientMiddleware` is read too, and the route linter no longer flags either name.
@@ -25,6 +27,8 @@ All notable changes to BractJS are documented here.
 - **`bractjs new` scaffolds a fuller app.** It now includes an extracted stylesheet (`app/styles.css`), a `public/favicon.svg`, `bun run test` with a sample test on `@bractjs/bractjs/testing`, and `bun run typecheck`. `--tailwind` starts the app on Tailwind v4 instead (`tailwind: true` plus the plugin), and `--no-install` skips `bun install`. App names are validated. The app depends on `^<CLI version>` rather than `latest`.
 
 ### Fixed
+
+- **CSS imported by an `_index` route is linked again.** The index route's manifest key is `""`, which the stylesheet lookup treated as "no route", so its route-scoped CSS never got a `<link>` (documents and client navigation alike).
 
 - **Scaffolded apps get their `.gitignore` again.** npm never publishes a file named `.gitignore`, so apps created from the published package had none (`node_modules/`, `build/` and the generated files showed up in git). The template now ships it as `gitignore` and `bractjs new` renames it.
 - **No duplicate `<title>` in new apps.** The template's root hard-coded a `<title>` next to the route's `meta()` title. Root now supplies the default through `meta()`.

@@ -28,12 +28,12 @@ Copy one file to a server (or a `FROM scratch`-style container) and run it. No `
 
 ```sh
 bractjs codegen:registry     # A — scan routes/actions → static import tables (app/_generated/)
-bractjs build                # B — client + server bundles + asset manifest
+bractjs build                # B — client + server bundles + asset manifest (+ prerender, if configured)
 bractjs codegen:manifest     # C — snapshot the manifest as a TS constant
-bun build --compile app/server.ts --asset build/client/ --outfile ./myapp   # D
+bun build --compile app/server.ts --asset build/client --asset public --outfile ./myapp   # D
 ```
 
-The binary boots with **zero filesystem reads of `app/`**. `--asset build/client/` embeds the JS/CSS into the executable (a true single file); omit it to ship the binary with `build/client/` alongside instead. ([§22](../README.md#22-single-binary-deployment))
+The binary boots with **zero filesystem reads**. `bractjs compile` embeds `build/client` (JS, CSS, prerendered pages, the SPA shell) and `public/` in the executable, so it is a true single file: run it from any directory, with nothing next to it. ([§22](../README.md#22-single-binary-deployment))
 
 ### The rules that keep the binary working
 
@@ -51,7 +51,7 @@ All opt-in, all composable with either run path ([§21](../README.md#21-build--r
 - **App-wide SPA mode** — `ssr: false` in `bractjs.config.ts`. One static shell for every document GET; the server still runs loaders (`/_data`), actions (CSRF intact), `/api`, and `/_image`. Trade-off: no SEO for route content.
 - **Prerendering (SSG)** — `prerender: ["/", "/about", ...]` in `bractjs.config.ts` (or an async function returning paths). The build runs the real loaders and writes each path's HTML **and** `/_data` payload under `build/client/_prerender/`; production serves those before falling back to dynamic SSR. Loaders' dependencies (DB, env) must be available at build time; paths must be concrete; a query string opts back into SSR.
 
-Prerender note for binaries: ship `build/client/` (including `_prerender/`) via `--asset` or alongside the executable. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs ([§23](../README.md#23-custom-adapters)).
+Prerender note for binaries: `bractjs compile` prerenders the configured paths and embeds the output, so the binary serves those pages as files. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs ([§23](../README.md#23-custom-adapters)).
 
 ## Behind a reverse proxy
 
