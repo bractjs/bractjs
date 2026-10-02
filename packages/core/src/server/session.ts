@@ -22,7 +22,10 @@ export interface Session {
   flash(key: string, val: unknown): void;
   /** A snapshot of the stored values (flash values included under their internal keys). */
   readonly data: Readonly<SessionData>;
-  /** Always `""` — cookie sessions carry their data, not an id (React Router parity). */
+  /**
+   * The session's id in a server-side store ({@link createSessionStorage});
+   * `""` for cookie sessions, which carry their data instead (React Router parity).
+   */
   readonly id: string;
 }
 
@@ -58,6 +61,8 @@ export interface CookieSessionOptions {
   secure?: boolean;
   /** `SameSite` attribute (default `"Lax"`). */
   sameSite?: "Strict" | "Lax" | "None";
+  /** `Domain` attribute, to share the session across subdomains (`"example.com"`). Default: this host only. */
+  domain?: string;
 }
 
 /** Per-commit overrides for {@link SessionStorage.commitSession}. */
@@ -125,7 +130,7 @@ async function verify(data: string, sig: string, secrets: string[]): Promise<boo
 
 const flashKey = (key: string) => `__flash_${key}__`;
 
-function makeSession(data: SessionData): InternalSession {
+function makeSession(data: SessionData, id = ""): InternalSession {
   const own = (key: string) => Object.prototype.hasOwnProperty.call(data, key);
   return {
     [DATA]: data,
@@ -155,8 +160,61 @@ function makeSession(data: SessionData): InternalSession {
     get data() {
       return { ...data };
     },
-    id: "",
+    id,
   };
+}
+
+// Browsers drop a cookie over 4096 bytes (name + value + attributes) without
+// telling anyone: the user just gets logged out, or the flash never shows.
+const MAX_COOKIE_BYTES = 4096;
+
+interface CookieAttrs {
+  name: string;
+  sameSite: "Strict" | "Lax" | "None";
+  secure: boolean;
+  domain?: string;
+}
+
+function serializeCookie(attrs: CookieAttrs, value: string, maxAge: number | undefined): string {
+  const parts = [`${attrs.name}=${value}`, "HttpOnly", `SameSite=${attrs.sameSite}`, "Path=/"];
+  if (attrs.domain) parts.push(`Domain=${attrs.domain}`);
+  if (maxAge !== undefined) parts.push(`Max-Age=${maxAge}`);
+  if (attrs.secure) parts.push("Secure");
+  const header = parts.join("; ");
+  const bytes = new TextEncoder().encode(header).length;
+  if (bytes > MAX_COOKIE_BYTES) {
+    throw new Error(
+      `[bractjs] The "${attrs.name}" session cookie would be ${bytes} bytes; browsers silently drop cookies ` +
+        `over ${MAX_COOKIE_BYTES}. Store less in the session, or keep the data server-side with ` +
+        `createSessionStorage() / createMemorySessionStorage(), whose cookie holds only an id.`,
+    );
+  }
+  return header;
+}
+
+/** The signed `name=value` pair from a Cookie header, verified; null when absent or forged. */
+async function readSignedCookie(cookie: string | null | undefined, name: string, secrets: string[]) {
+  if (!cookie) return null;
+  const pair = cookie
+    .split(";")
+    .map((s) => s.trim())
+    .find((p) => p.startsWith(`${name}=`));
+  if (!pair) return null;
+  const value = pair.slice(name.length + 1);
+  const dot = value.lastIndexOf(".");
+  if (dot === -1) return null;
+  const payload = value.slice(0, dot);
+  if (!(await verify(payload, value.slice(dot + 1), secrets))) return null;
+  return payload;
+}
+
+function checkSecrets(fn: string, secrets: unknown): asserts secrets is string[] {
+  if (!Array.isArray(secrets) || secrets.length === 0) {
+    throw new Error(`${fn}: secrets must be a non-empty array`);
+  }
+  if (!secrets.every((s) => typeof s === "string" && s.length >= 16)) {
+    throw new Error(`${fn}: each secret must be a string of length >= 16`);
+  }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -177,31 +235,14 @@ function makeSession(data: SessionData): InternalSession {
  */
 // SECURITY(medium): caller can opt out of the Secure flag by passing secure:false; this is safe only on HTTP-only local dev — never use in production without HTTPS.
 export function createCookieSession(options: CookieSessionOptions): CookieSessionStorage {
-  const { name, secrets, maxAge, secure = true, sameSite = "Lax" } = options;
-  if (!Array.isArray(secrets) || secrets.length === 0) {
-    throw new Error("createCookieSession: secrets must be a non-empty array");
-  }
-  if (!secrets.every((s) => typeof s === "string" && s.length >= 16)) {
-    throw new Error("createCookieSession: each secret must be a string of length >= 16");
-  }
+  const { name, secrets, maxAge, secure = true, sameSite = "Lax", domain } = options;
+  checkSecrets("createCookieSession", secrets);
+  const attrs: CookieAttrs = { name, sameSite, secure, domain };
 
   return {
     async getSession(cookie?: string | null): Promise<Session> {
-      if (!cookie) return makeSession({});
-      const pair = cookie
-        .split(";")
-        .map((s) => s.trim())
-        .find((p) => p.startsWith(`${name}=`));
-      if (!pair) return makeSession({});
-
-      const value = pair.slice(name.length + 1);
-      const dot = value.lastIndexOf(".");
-      if (dot === -1) return makeSession({});
-
-      const encoded = value.slice(0, dot);
-      const sig = value.slice(dot + 1);
-      if (!(await verify(encoded, sig, secrets))) return makeSession({});
-
+      const encoded = await readSignedCookie(cookie, name, secrets);
+      if (encoded === null) return makeSession({});
       try {
         return makeSession(decode(encoded));
       } catch {
@@ -213,20 +254,114 @@ export function createCookieSession(options: CookieSessionOptions): CookieSessio
       const data = (session as InternalSession)[DATA] ?? {};
       const encoded = encode(data);
       const sig = await sign(encoded, secrets[0]);
-      const age = opts?.maxAge ?? maxAge;
-
-      const parts = [`${name}=${encoded}.${sig}`, "HttpOnly", `SameSite=${sameSite}`, "Path=/"];
-      if (age !== undefined) parts.push(`Max-Age=${age}`);
-      if (secure) parts.push("Secure");
-      return parts.join("; ");
+      return serializeCookie(attrs, `${encoded}.${sig}`, opts?.maxAge ?? maxAge);
     },
 
     async destroySession(): Promise<string> {
-      const parts = [`${name}=`, "HttpOnly", `SameSite=${sameSite}`, "Path=/", "Max-Age=0"];
-      if (secure) parts.push("Secure");
-      return parts.join("; ");
+      return serializeCookie(attrs, "", 0);
     },
   };
+}
+
+/** The data functions behind {@link createSessionStorage} — React Router's `createSessionStorage` strategy. */
+export interface SessionDataStrategy {
+  /** Store new session data; return its id (unguessable — e.g. `crypto.randomUUID()`). */
+  createData(data: SessionData, expires?: Date): Promise<string> | string;
+  /** The data for an id, or null when unknown/expired. */
+  readData(id: string): Promise<SessionData | null> | SessionData | null;
+  /** Replace the data for an id. */
+  updateData(id: string, data: SessionData, expires?: Date): Promise<void> | void;
+  /** Forget an id. */
+  deleteData(id: string): Promise<void> | void;
+}
+
+/** Options for {@link createSessionStorage}: the cookie that carries the id, plus the data strategy. */
+export interface SessionStorageOptions extends SessionDataStrategy {
+  cookie: CookieSessionStorageOptions["cookie"];
+}
+
+/**
+ * Sessions whose data lives server-side (a database, Redis, memory): the
+ * cookie carries only a signed session id, so there's no 4 KB limit, data
+ * isn't visible to the client, and sessions can be revoked by deleting them.
+ * Same API as cookie sessions — `getSession` / `commitSession` /
+ * `destroySession` — and React Router's `createSessionStorage` signature.
+ *
+ * ```ts
+ * const sessions = createSessionStorage({
+ *   cookie: { name: "__session", secrets: [process.env.SESSION_SECRET!], maxAge: 60 * 60 * 24 * 7 },
+ *   createData: (data, expires) => db.sessions.insert({ data, expires }).id,
+ *   readData: (id) => db.sessions.find(id)?.data ?? null,
+ *   updateData: (id, data, expires) => db.sessions.update(id, { data, expires }),
+ *   deleteData: (id) => db.sessions.delete(id),
+ * });
+ * ```
+ */
+export function createSessionStorage(options: SessionStorageOptions): CookieSessionStorage {
+  const cookie = cookieAttrsFrom(options.cookie);
+  const secrets = options.cookie.secrets ?? [];
+  checkSecrets("createSessionStorage", secrets);
+  const expiresFor = (maxAge: number | undefined) =>
+    maxAge === undefined ? undefined : new Date(Date.now() + maxAge * 1000);
+
+  return {
+    async getSession(header?: string | null): Promise<Session> {
+      const id = await readSignedCookie(header, cookie.name, secrets);
+      if (id === null) return makeSession({});
+      const data = await options.readData(id);
+      if (!data || hasForbiddenKey(data)) return makeSession({});
+      return makeSession({ ...data }, id);
+    },
+
+    async commitSession(session: Session, opts?: CommitOptions): Promise<string> {
+      const data = (session as InternalSession)[DATA] ?? {};
+      const maxAge = opts?.maxAge ?? cookie.maxAge;
+      const expires = expiresFor(maxAge);
+      let id = session.id;
+      if (id) await options.updateData(id, data, expires);
+      else id = await options.createData(data, expires);
+      return serializeCookie(cookie, `${id}.${await sign(id, secrets[0])}`, maxAge);
+    },
+
+    async destroySession(session?: Session): Promise<string> {
+      if (session?.id) await options.deleteData(session.id);
+      return serializeCookie(cookie, "", 0);
+    },
+  };
+}
+
+/**
+ * {@link createSessionStorage} backed by an in-process `Map` — for
+ * development, tests and single-server apps. Sessions vanish on restart and
+ * aren't shared between processes; expired ones are dropped as they're read.
+ */
+export function createMemorySessionStorage(options: {
+  cookie: CookieSessionStorageOptions["cookie"];
+}): CookieSessionStorage {
+  const store = new Map<string, { data: SessionData; expires?: Date }>();
+  return createSessionStorage({
+    cookie: options.cookie,
+    createData(data, expires) {
+      const id = crypto.randomUUID();
+      store.set(id, { data: structuredClone(data), expires });
+      return id;
+    },
+    readData(id) {
+      const entry = store.get(id);
+      if (!entry) return null;
+      if (entry.expires && entry.expires.getTime() <= Date.now()) {
+        store.delete(id);
+        return null;
+      }
+      return structuredClone(entry.data);
+    },
+    updateData(id, data, expires) {
+      store.set(id, { data: structuredClone(data), expires });
+    },
+    deleteData(id) {
+      store.delete(id);
+    },
+  });
 }
 
 /** React Router's `createCookieSessionStorage` options (the cookie subset BractJS supports). */
@@ -241,6 +376,25 @@ export interface CookieSessionStorageOptions {
     httpOnly?: boolean;
     /** Accepted for compatibility; BractJS session cookies are always `Path=/`. */
     path?: string;
+    /** `Domain` attribute (share the session across subdomains). */
+    domain?: string;
+  };
+}
+
+function cookieAttrsFrom(c: CookieSessionStorageOptions["cookie"]): CookieAttrs & { maxAge?: number } {
+  const s = c.sameSite;
+  const sameSite =
+    s === undefined || s === false
+      ? "Lax"
+      : s === true
+        ? "Strict"
+        : ((s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) as "Lax" | "Strict" | "None");
+  return {
+    name: c.name ?? "__session",
+    sameSite,
+    secure: c.secure ?? true,
+    domain: c.domain,
+    maxAge: c.maxAge,
   };
 }
 
@@ -251,20 +405,13 @@ export interface CookieSessionStorageOptions {
  */
 export function createCookieSessionStorage(options: CookieSessionStorageOptions): CookieSessionStorage {
   const c = options.cookie ?? {};
-  const s = c.sameSite;
-  const sameSite =
-    s === undefined || s === true
-      ? s === true
-        ? "Strict"
-        : undefined
-      : s === false
-        ? "Lax"
-        : ((s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) as "Lax" | "Strict" | "None");
+  const attrs = cookieAttrsFrom(c);
   return createCookieSession({
-    name: c.name ?? "__session",
+    name: attrs.name,
     secrets: c.secrets ?? [],
-    maxAge: c.maxAge,
-    secure: c.secure,
-    sameSite,
+    maxAge: attrs.maxAge,
+    secure: attrs.secure,
+    sameSite: attrs.sameSite,
+    domain: attrs.domain,
   });
 }

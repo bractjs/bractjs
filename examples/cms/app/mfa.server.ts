@@ -39,9 +39,9 @@ export async function issueLoginCode(
   if (!user.email) {
     return { ok: false, reason: "This account has no email set for two-factor sign-in.", status: 400 };
   }
-  const ipLimit = checkIpLimit(issuePerIp, ip);
+  const ipLimit = await checkIpLimit(issuePerIp, ip);
   if (!ipLimit.ok) return tooMany(ipLimit.retryAfterMs);
-  const userLimit = issuePerUser.check(user.id);
+  const userLimit = await issuePerUser.check(user.id);
   if (!userLimit.ok) return tooMany(userLimit.retryAfterMs);
 
   // CSPRNG, not Math.random(): the code is a security token. Uniform in
@@ -63,8 +63,8 @@ export async function issueLoginCode(
 }
 
 /** Check a submitted code for `userId`; consumes it on success. */
-export function verifyLoginCode(userId: string, code: string, ip: string): MfaResult {
-  const ipLimit = checkIpLimit(verifyPerIp, ip);
+export async function verifyLoginCode(userId: string, code: string, ip: string): Promise<MfaResult> {
+  const ipLimit = await checkIpLimit(verifyPerIp, ip);
   if (!ipLimit.ok) return tooMany(ipLimit.retryAfterMs);
 
   const row = db
@@ -92,8 +92,8 @@ function tooMany(retryAfterMs: number): MfaResult {
 }
 
 /** Test seam: clear rate-limit windows between cases. */
-export function _resetRateLimits(): void {
-  issuePerUser.reset();
-  issuePerIp.reset();
-  verifyPerIp.reset();
+export async function _resetRateLimits(): Promise<void> {
+  await issuePerUser.reset();
+  await issuePerIp.reset();
+  await verifyPerIp.reset();
 }

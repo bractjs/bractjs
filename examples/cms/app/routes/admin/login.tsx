@@ -51,14 +51,14 @@ export async function action({ request, formData }: ActionArgs): Promise<ActionD
   // Throttle the password factor itself (the MFA limiters only apply after a
   // correct password). Keyed by username so it can't be sidestepped by IP churn.
   const ip = clientIp(request);
-  if (!checkLoginRate(creds.username, ip).ok) {
+  if (!(await checkLoginRate(creds.username, ip)).ok) {
     return { error: "Too many sign-in attempts. Please wait a few minutes and try again." };
   }
   const user = await authenticatePassword(creds.username, creds.password);
   // Same message + same work whether the username or the password was wrong, so
   // the form can't be used to enumerate valid usernames.
   if (!user) return { error: "Invalid username or password." };
-  clearLoginRate(creds.username); // legit sign-in — reset the counter
+  await clearLoginRate(creds.username); // legit sign-in — reset the counter
   const issued = await issueLoginCode(user, ip);
   if (!issued.ok) return { error: issued.reason };
   // Factor 1 passed: hold the user id in the signed pending cookie and move to

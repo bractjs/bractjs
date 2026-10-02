@@ -1017,12 +1017,16 @@ pipeline
 
 ### Built-in middleware
 
-| Middleware           | What it does                                                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `requestLogger()`    | Logs `[METHOD] /path → status in Xms`. Never logs the query string or headers (token-leak safe).                             |
-| `cors(options)`      | Sets CORS headers, handles `OPTIONS` preflight (204), always sets `Vary: Origin`, refuses `credentials:true` + `origin:"*"`. |
-| `authGuard(options)` | Reads the session, sets `ctx.context.user`; with `required:true` returns 401 when unauthenticated.                           |
-| `csp(options?)`      | Opt-in nonce-based Content-Security-Policy (see below).                                                                      |
+| Middleware             | What it does                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requestLogger(opts?)` | Logs `[METHOD] /path → status in Xms` (`{ format: "json" }` for one JSON object per line). Never logs the query string or headers (token-leak safe).                                  |
+| `requestId(opts?)`     | Gives each request an id (reusing a safe incoming `X-Request-Id`), echoes it, exposes it via `getRequestId()` / `useRequestId()`, and adds it to log lines and the built-in 500 page. |
+| `healthCheck(opts?)`   | Answers `GET /healthz` with `200 {"status":"ok"}`, or `503` when your `check()` fails. Register it first.                                                                             |
+| `secureHeaders(opts?)` | HSTS (over HTTPS), Permissions-Policy, COOP, CORP, `X-Frame-Options`, `Referrer-Policy`, `nosniff`, on every response.                                                                |
+| `rateLimit(opts)`      | `429` + `Retry-After` past `max` requests per `windowMs` per client IP (or your `key`). See [production](docs/production.md).                                                         |
+| `cors(options)`        | Sets CORS headers, handles `OPTIONS` preflight (204), always sets `Vary: Origin`, refuses `credentials:true` + `origin:"*"`.                                                          |
+| `authGuard(options)`   | Reads the session, sets `ctx.context.user`; with `required:true` returns 401 when unauthenticated.                                                                                    |
+| `csp(options?)`        | Opt-in nonce-based Content-Security-Policy (see below).                                                                                                                               |
 
 **`cors(options)`** — `{ origin: string | string[]; methods?: string[]; credentials?: boolean }`:
 
@@ -1141,6 +1145,20 @@ export async function action({ request }: ActionArgs) {
 - Each secret must be ≥16 chars; `secrets` must be non-empty (throws otherwise).
 - Tampered cookies are silently rejected → empty session.
 - Generate a secret: `openssl rand -base64 32`.
+- `domain: "example.com"` shares the session across subdomains.
+- **Size limit:** browsers silently drop cookies over 4096 bytes, so `commitSession` throws instead of writing one. Keep cookie sessions small, or keep the data server-side (below).
+
+**Server-side sessions.** `createSessionStorage({ cookie, createData, readData, updateData, deleteData })` (React Router's signature) keeps the data in your store and puts only a signed session id in the cookie. That removes the size limit, keeps the data private, and lets you revoke a session by deleting it. Same `getSession` / `commitSession` / `destroySession` API. `createMemorySessionStorage({ cookie })` is the in-process version, for development and tests.
+
+```ts
+const sessions = createSessionStorage({
+  cookie: { name: "__session", secrets: [Bun.env.SESSION_SECRET!], maxAge: 60 * 60 * 24 * 7 },
+  createData: (data, expires) => db.insertSession({ data, expires }), // returns the new id
+  readData: (id) => db.findSession(id)?.data ?? null,
+  updateData: (id, data, expires) => db.updateSession(id, { data, expires }),
+  deleteData: (id) => db.deleteSession(id),
+});
+```
 
 ---
 

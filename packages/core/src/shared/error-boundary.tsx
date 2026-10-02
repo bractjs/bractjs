@@ -1,4 +1,5 @@
 import { Component, type ComponentType, type ReactElement, type ReactNode } from "react";
+import { useRequestId } from "./request-id.ts";
 import { RouteErrorContext } from "./route-error.ts";
 
 // ── DefaultErrorBoundary ───────────────────────────────────────────────────
@@ -8,7 +9,12 @@ interface DefaultErrorBoundaryProps {
   requestId?: string;
 }
 
-export function DefaultErrorBoundary({ error, requestId }: DefaultErrorBoundaryProps): ReactElement {
+export function DefaultErrorBoundary({
+  error,
+  requestId: requestIdProp,
+}: DefaultErrorBoundaryProps): ReactElement {
+  const contextRequestId = useRequestId();
+  const requestId = requestIdProp ?? contextRequestId;
   if (process.env.NODE_ENV !== "production") {
     return (
       <div style={{ padding: "2rem", fontFamily: "monospace" }}>

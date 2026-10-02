@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { RequestIdContext } from "../shared/request-id.ts";
 import type { ServerManifest } from "../server/render.ts";
 import { LinkTags } from "../shared/link-tags.tsx";
 import { MetaTags } from "../shared/meta-tags.tsx";
@@ -46,6 +47,8 @@ export interface BractJSInitialData extends RouteState {
   links?: LinkDescriptor[];
   /** Present when the document did not SSR the route component (selective SSR / SPA shell). */
   ssrMode?: "client-only" | "data-only" | "spa";
+  /** The request id from the requestId() middleware, when registered. */
+  requestId?: string;
 }
 
 interface ClientRouterProps {
@@ -107,6 +110,8 @@ export function ClientRouter({
   const [currentLayouts, setCurrentLayouts] = useState<Array<RouteModuleClient | null>>(initialLayouts);
   const [meta, setMeta] = useState<MetaDescriptor[]>(initialData.meta ?? []);
   const [links, setLinks] = useState<LinkDescriptor[]>(initialData.links ?? []);
+  // The id of the request whose data is on screen (requestId() middleware).
+  const [requestId, setRequestId] = useState<string | undefined>(initialData.requestId);
   const [navDetail, setNavDetail] = useState<NavigationDetail>({});
   const [navigationType, setNavigationType] = useState<HistoryAction>("POP");
   const [hydrationPending, setHydrationPending] = useState<HydrationPending>(initialData.ssrMode ?? false);
@@ -148,6 +153,7 @@ export function ClientRouter({
     setMeta(payload.meta);
     setLinks(payload.links);
     setMatches(payload.matches);
+    setRequestId(typeof data.requestId === "string" ? data.requestId : undefined);
   }, []);
 
   const setRoute = useCallback((state: Partial<RouteState>) => {
@@ -777,23 +783,25 @@ export function ClientRouter({
         hydrationPending,
       }}
     >
-      <NavigationContext.Provider value={{ state: navState, detail: navDetail, navigate, submit }}>
-        <MetaTags meta={meta} />
-        <LinkTags links={links} />
-        {/*
+      <RequestIdContext.Provider value={requestId}>
+        <NavigationContext.Provider value={{ state: navState, detail: navDetail, navigate, submit }}>
+          <MetaTags meta={meta} />
+          <LinkTags links={links} />
+          {/*
           Mirrors the server tree so hydration matches, and keeps the document's
           stylesheets in sync across soft navigation. React dedupes by href, so
           re-rendering never duplicates a sheet; `precedence` also makes React
           wait for a newly-inserted stylesheet to load before committing, which
           is what stops a route swap from painting unstyled.
         */}
-        <StyleLinks hrefs={baseCssHrefs(manifest)} precedence={CSS_PRECEDENCE_BASE} />
-        <StyleLinks
-          hrefs={routeCssHrefs(manifest, matchPatternForPath(location.pathname, manifest))}
-          precedence={CSS_PRECEDENCE_ROUTE}
-        />
-        {children}
-      </NavigationContext.Provider>
+          <StyleLinks hrefs={baseCssHrefs(manifest)} precedence={CSS_PRECEDENCE_BASE} />
+          <StyleLinks
+            hrefs={routeCssHrefs(manifest, matchPatternForPath(location.pathname, manifest))}
+            precedence={CSS_PRECEDENCE_ROUTE}
+          />
+          {children}
+        </NavigationContext.Provider>
+      </RequestIdContext.Provider>
     </RouterContext.Provider>
   );
 }

@@ -11,11 +11,13 @@ import {
   routeCssHrefs,
   StyleLinks,
 } from "../shared/style-links.tsx";
+import { RequestIdContext } from "../shared/request-id.ts";
 import { renderErrorBoundary } from "../shared/route-error.ts";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 import { appendDeferredScript, encodeDeferred } from "./deferred-wire.ts";
 import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
 import { mergeMeta } from "./meta.ts";
+import { getRequestId } from "./request-context.ts";
 
 export interface ServerManifest {
   clientEntry: string;
@@ -97,11 +99,12 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   // head in sync on soft navigation — keep it shaped, not stringified HTML.
   // defer() fields can't be JSON-serialized: the data island carries id markers
   // and the settled values follow at the end of the HTML stream.
+  const requestId = getRequestId();
   const { payload: wire, pending: deferred } = encodeDeferred({ ...loaderData, matches: options.matches });
   const { matches: wireMatches, ...wireLoaderData } = wire;
   const bootstrapScriptContent =
     devOverlay +
-    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, links: options.links?.length ? options.links : undefined, ssrMode: options.ssrMode })};`;
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, links: options.links?.length ? options.links : undefined, ssrMode: options.ssrMode, requestId })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers
@@ -127,7 +130,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
         hrefs: routeCssHrefs(manifest, options.routePattern),
         precedence: CSS_PRECEDENCE_ROUTE,
       }),
-      shell,
+      createElement(RequestIdContext.Provider, { value: requestId }, shell),
     ),
   );
 
@@ -219,7 +222,15 @@ export async function renderRootErrorDocument(options: RootErrorDocumentOptions)
         createElement("title", null, title),
         createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
       ),
-      createElement("body", null, renderErrorBoundary(Boundary, error, { params })),
+      createElement(
+        "body",
+        null,
+        createElement(
+          RequestIdContext.Provider,
+          { value: getRequestId() },
+          renderErrorBoundary(Boundary, error, { params }),
+        ),
+      ),
     ),
   );
   let renderError: unknown;
