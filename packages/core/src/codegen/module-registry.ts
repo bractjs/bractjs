@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import { layoutDirsFromFilePath, type RouteFile, scanRoutes } from "../server/scanner.ts";
-import { hasServerDirective } from "../shared/directives.ts";
+import { hasServerDirective, isActionModulePath } from "../shared/directives.ts";
 
 // Codegen entry-points: `bun build --compile` can't statically trace
 // `Bun.Glob` scans or `import(absPath)` calls, so we materialise the route /
@@ -64,14 +64,7 @@ async function collectLayouts(appDir: string, routes: RouteFile[]): Promise<stri
 
 // ── Action discovery ───────────────────────────────────────────────────────
 
-function isEligibleActionPath(rel: string): boolean {
-  return (
-    rel.endsWith(".server.ts") ||
-    rel.endsWith(".server.tsx") ||
-    rel.startsWith("routes/") ||
-    rel.startsWith("routes\\")
-  );
-}
+const isEligibleActionPath = isActionModulePath;
 
 async function collectActionFiles(appDir: string): Promise<string[]> {
   const glob = new Bun.Glob("**/*.{ts,tsx}");

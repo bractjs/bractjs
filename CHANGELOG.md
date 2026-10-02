@@ -8,6 +8,14 @@ All notable changes to BractJS are documented here.
 
 ### Fixed
 
+- **`bractjs start` now listens on `PORT`.** It always used `port` from `bractjs.config.ts` or 3000, while the scaffold's `app/server.ts` (the compiled binary) read `PORT`, so the same app listened on different ports depending on how it ran, and deploys to platforms that assign `PORT` (Fly, Render, Railway, Heroku) failed health checks. `bractjs dev` and `bractjs start` now take `--port`, then `PORT`, then the config, then 3000; `createServer()` uses its `port` option, then `PORT`, then 3000. Invalid values fail at startup with a clear message. `bractjs start --host <addr>` (or `HOST`) sets the listen address.
+- **Server actions work with React 19 forms.** A `"use server"` function called with a `FormData` that wasn't its only argument — `useActionState` calls `action(prevState, formData)` — had the form JSON-serialized to `{}`, so every field was silently lost. The client proxy now sends any mix of JSON values and `FormData` (files included) as one multipart body and the server rebuilds the same arguments. `fn(formData)` and JSON-only calls are unchanged.
+- **The page refreshes after a server action.** `<form action={serverFn}>` and `useActionState` left the page's loader data stale; the loaders now re-run after the action resolves, as after a `<Form>` submission.
+- **`redirect()` and `HttpError` work in server actions.** `throw redirect("/x")` (or returning one) answered with a 500; it now soft-navigates. `throw new HttpError(403, "…")` rejects the call with that message and a `status` property instead of a generic 500.
+- **`"use server"` in a `*.server.ts` file works.** The client build stubbed the file like any server-only module, so calling its actions in the browser threw; it is now proxied to `/_action`. A `"use server"` file outside `routes/` and `*.server.ts` — which the server never publishes — now gets a build warning instead of silently 404ing on every call, and the README's example moved to `app/actions.server.ts` (its old `app/actions.ts` path was one of those).
+- **`createDevServer({ port })` is honored when `bractjs.config.ts` also sets `port`.** The config value silently overrode the option.
+- **CLI:** `bractjs --version` prints the version; `--help` (and no command) prints usage and exits 0 instead of 1; an unknown command says so and suggests the closest one. `bractjs compile` honors `appDir` / `buildDir` from the config instead of assuming `./app` and `./build`.
+
 - **Root and layout loader errors render an `ErrorBoundary` instead of a JSON body.** Before, only route loaders did: `throw new HttpError(403, "…")` in a `layout.tsx` loader answered a page load with `{"error":"…"}`, and client navigation to it silently stayed on the old page while the URL changed. Now:
   - A failed **layout** loader renders the nearest `ErrorBoundary` in that layout's place, so root and the layouts above it still render. The boundary is the layout's own `ErrorBoundary` export (newly supported on layouts), else the next enclosing layout's, else root's, else the built-in fallback. The HTTP status is the error's. This works on document loads and client navigation, and hydrates cleanly.
   - A failed **root** loader gets a minimal framework-rendered document with root's `ErrorBoundary` (or the fallback), the app-wide stylesheets and the error's status. It isn't hydrated. Client navigation that hits it falls back to a full page load.
@@ -20,6 +28,7 @@ All notable changes to BractJS are documented here.
 
 ### Changed
 
+- **`examples/todo` renames tasks with a React 19 form action**: `useActionState` + `useFormStatus` + a `"use server"` function (`app/actions.server.ts`), with the loader revalidated afterwards. The README gains a "React 19 form actions" section.
 - **`examples/todo` has a new look**: flat colors, Tailwind v4 (`tailwind: true`), lucide icons, dark mode, and a CSS Module on the About page. It also uses `<NavLink>`. Every feature it demonstrated before still works the same way.
 
 ### Docs

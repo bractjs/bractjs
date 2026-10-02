@@ -25,3 +25,15 @@ export function hasServerDirective(src: string): boolean {
 export function hasClientDirective(src: string): boolean {
   return CLIENT_RE.test(src);
 }
+
+/**
+ * Where `"use server"` actions may live: a route module (`routes/…`) or a
+ * `*.server.ts(x)` file, as an appDir-relative path. Only these files are
+ * scanned and published as `/_action` endpoints — a directive anywhere else is
+ * ignored (and the build warns), so a stray directive in a shared helper can't
+ * turn it into a public endpoint.
+ */
+export function isActionModulePath(rel: string): boolean {
+  const posix = rel.split("\\").join("/");
+  return /\.server\.tsx?$/.test(posix) || posix.startsWith("routes/");
+}

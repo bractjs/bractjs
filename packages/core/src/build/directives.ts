@@ -1,6 +1,6 @@
 import type { BunPlugin } from "bun";
 import { relative, resolve, isAbsolute } from "node:path";
-import { hasClientDirective, hasServerDirective } from "../shared/directives.ts";
+import { hasClientDirective, hasServerDirective, isActionModulePath } from "../shared/directives.ts";
 
 // Re-exported for existing importers (use-client-runtime.ts); the shared
 // module in src/shared/directives.ts is the single source of truth, keeping
@@ -74,16 +74,51 @@ export const useClientStubPlugin: BunPlugin = {
 
 // Async fetch helper inlined into every generated "use server" proxy module.
 const PROXY_HELPER = `async function __bract(id: string, args: unknown[]): Promise<unknown> {
-  const isForm = args.length === 1 && args[0] instanceof FormData;
-  const r = await fetch("/_action?id=" + encodeURIComponent(id), {
-    method: "POST",
-    headers: isForm
-      ? { "X-BractJS-Action": "1" }
-      : { "Content-Type": "application/json", "X-BractJS-Action": "1" },
-    body: isForm ? (args[0] as FormData) : JSON.stringify(args),
-  });
-  if (!r.ok) throw new Error("[bractjs] action " + id + " failed: " + r.status);
-  return r.json() as Promise<unknown>;
+  // A FormData anywhere in the arguments — <form action={fn}> passes
+  // (formData), React 19's useActionState passes (prevState, formData) — goes
+  // as multipart: the JSON argument list with each form replaced by a marker,
+  // and the forms' entries (files included) prefixed with their position.
+  // The server rebuilds the same arguments (server/action-handler.ts).
+  const hasForm = args.some((a) => a instanceof FormData);
+  let body: BodyInit;
+  const headers: Record<string, string> = { "X-BractJS-Action": "1" };
+  if (hasForm) {
+    const fd = new FormData();
+    fd.append("__bract_args", JSON.stringify(args.map((a, i) => (a instanceof FormData ? { $bractForm: i } : a))));
+    args.forEach((a, i) => {
+      if (a instanceof FormData) for (const [k, v] of a.entries()) fd.append(i + ":" + k, v);
+    });
+    body = fd;
+  } else {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(args);
+  }
+  const r = await fetch("/_action?id=" + encodeURIComponent(id), { method: "POST", headers, body });
+  const router = (globalThis as { __BRACTJS_ROUTER__?: {
+    revalidate(info?: { formMethod?: string; formAction?: string }): Promise<void>;
+    navigate(to: string): Promise<void>;
+  } }).__BRACTJS_ROUTER__;
+  // A redirect from the action: follow it like a <Form> submission would.
+  const location = r.headers.get("X-BractJS-Redirect");
+  if (location) {
+    if (router) await router.navigate(location);
+    else window.location.assign(location);
+    return undefined;
+  }
+  if (!r.ok) {
+    let message = "[bractjs] action " + id + " failed: " + r.status;
+    try {
+      const data = (await r.clone().json()) as { error?: string };
+      if (data && typeof data.error === "string") message = data.error;
+    } catch {}
+    throw Object.assign(new Error(message), { status: r.status });
+  }
+  const result = await r.json();
+  // The action probably changed data the page shows: re-run its loaders, as
+  // after a <Form> submission. Awaited, so a useActionState transition settles
+  // with the new result and the fresh page data together.
+  await router?.revalidate({ formMethod: "POST", formAction: "/_action" });
+  return result;
 }`;
 
 /**
@@ -103,6 +138,9 @@ export function createUseServerProxyPlugin(appDir?: string): BunPlugin {
         const names = extractExports(src);
         if (names.length === 0) return { contents: "export {};", loader: "ts" };
         const key = pathKeyForAction(path, appDir);
+        // Still proxied (server source never ships), but the server won't
+        // publish it: say so instead of letting every call 404.
+        if (appDir && !key.startsWith("/") && !isActionModulePath(key)) warnIgnoredActionModule(key);
         const proxies = await Promise.all(
           names.map(async (name) => {
             const id = await actionId(key, name);
@@ -113,6 +151,17 @@ export function createUseServerProxyPlugin(appDir?: string): BunPlugin {
       });
     },
   };
+}
+
+const warnedActionModules = new Set<string>();
+function warnIgnoredActionModule(rel: string): void {
+  if (warnedActionModules.has(rel)) return;
+  warnedActionModules.add(rel);
+  console.warn(
+    `[bractjs] "use server" in ${rel} is ignored: server actions must live in a route module ` +
+      `(routes/…) or a *.server.ts file. Rename it to ${rel.replace(/\.(tsx?)$/, ".server.$1")} — ` +
+      `until then, every call to its actions returns 404.`,
+  );
 }
 
 /**

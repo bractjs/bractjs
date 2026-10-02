@@ -6,7 +6,7 @@ import { loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts"
 import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
 import { cssModuleClassesChanged, installCssModulesRuntime } from "../server/css-modules-runtime.ts";
 import { listApiRoutes } from "../server/api-route.ts";
-import { bumpDevModuleGeneration, setDevHmrPort, setRuntimeMode } from "../server/env.ts";
+import { bumpDevModuleGeneration, envPort, parsePort, setDevHmrPort, setRuntimeMode } from "../server/env.ts";
 import type { LifecycleHooks } from "../server/lifecycle.ts";
 import { filePathToPattern, scanRoutes } from "../server/scanner.ts";
 import type { BractJSConfig } from "../server/serve.ts";
@@ -177,7 +177,12 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
   installCssModulesRuntime();
 
   const hmrPort = options?.hmrPort ?? merged.hmrPort ?? 3001;
-  const appPort = options?.port ?? merged.port ?? 3000;
+  // Flag/option > PORT env > config > 3000.
+  const appPort =
+    parsePort(options?.port, "the `port` option") ??
+    envPort() ??
+    parsePort(merged.port, "bractjs.config.ts") ??
+    3000;
   // SECURITY(medium): loopback by default. The dev server exposes source-
   // derived endpoints (/_hmr/module, dev error messages) that must not be
   // reachable from the local network unless the developer opts in.
@@ -242,7 +247,7 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
   let srv: ReturnType<typeof createServer>;
   try {
-    srv = createServer({ port: appPort, ...merged, hostname, ...lifecycle });
+    srv = createServer({ ...merged, port: appPort, hostname, ...lifecycle });
   } catch (err) {
     hmr.stop();
     if ((err as { code?: string }).code === "EADDRINUSE") onPortInUse("app server", appPort);

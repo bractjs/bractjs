@@ -5,6 +5,79 @@ import { fillTemplate } from "./scaffold-template.ts";
 
 const command = process.argv[2];
 
+const USAGE =
+  "Usage: bractjs <command> [options]\n\n" +
+  "  new      <app-name>                  Scaffold a new BractJS app\n" +
+  "  dev      [--port n] [--host [addr]]  Dev server with HMR (loopback unless --host)\n" +
+  "  build                                Build for production (build/ dir)\n" +
+  "  start    [--port n] [--host addr]    Start the production server\n" +
+  "  codegen  [app] [out]                 Generate typed route types\n" +
+  "  codegen:seed  [app]                  Seed _generated/ so app/server.ts typechecks (no build needed)\n" +
+  "  codegen:registry  [app]              Generate _generated/{routes,actions}.ts\n" +
+  "  codegen:manifest  [app] [build]      Generate _generated/manifest.ts\n" +
+  "  compile  [outfile] [entry]           Full single-binary pipeline\n\n" +
+  "  -v, --version                        Print the BractJS version\n" +
+  "  -h, --help                           Print this help\n\n" +
+  "Ports: --port wins, then the PORT environment variable, then `port` in bractjs.config.ts, then 3000.";
+
+const COMMANDS = [
+  "new",
+  "dev",
+  "build",
+  "start",
+  "codegen",
+  "codegen:seed",
+  "codegen:registry",
+  "codegen:manifest",
+  "compile",
+];
+
+/** Value of `--name value` or `--name=value`; `""` for a bare `--name`; undefined when absent. */
+function flag(name: string): string | undefined {
+  const args = process.argv.slice(3);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === `--${name}`) {
+      const next = args[i + 1];
+      return next !== undefined && !next.startsWith("-") ? next : "";
+    }
+    if (args[i].startsWith(`--${name}=`)) return args[i].slice(name.length + 3);
+  }
+  return undefined;
+}
+
+/** `--port` as a validated number (exits with the error on a bad value). */
+async function portFlag(): Promise<number | undefined> {
+  const { parsePort } = await import("../src/server/env.ts");
+  try {
+    return parsePort(flag("port"), "--port");
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
+}
+
+/** Closest known command by edit distance, for "did you mean" (≤ 3 edits). */
+function closestCommand(input: string): string | undefined {
+  const distance = (a: string, b: string): number => {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array<number>(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++)
+      for (let j = 1; j <= b.length; j++)
+        d[i][j] = Math.min(
+          d[i - 1][j] + 1,
+          d[i][j - 1] + 1,
+          d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+        );
+    return d[a.length][b.length];
+  };
+  let best: { cmd: string; d: number } | undefined;
+  for (const cmd of COMMANDS) {
+    const d = distance(input, cmd);
+    if (!best || d < best.d) best = { cmd, d };
+  }
+  return best && best.d <= 3 ? best.cmd : undefined;
+}
+
 // ── new <app-name> ──────────────────────────────────────────────────────────
 
 async function scaffoldNew(appName: string): Promise<void> {
@@ -67,6 +140,20 @@ async function copyDir(src: string, dest: string, appName: string, bractPath: st
 // ── dispatch ────────────────────────────────────────────────────────────────
 
 switch (command) {
+  case "-v":
+  case "--version": {
+    const pkg = (await Bun.file(join(import.meta.dirname, "../package.json")).json()) as { version: string };
+    console.log(pkg.version);
+    break;
+  }
+
+  case undefined:
+  case "-h":
+  case "--help":
+  case "help":
+    console.log(USAGE);
+    break;
+
   case "new":
     await scaffoldNew(process.argv[3]);
     break;
@@ -83,6 +170,10 @@ switch (command) {
       const next = process.argv[hostIdx + 1];
       process.env.BRACTJS_DEV_HOST = next && !next.startsWith("-") ? next : "0.0.0.0";
     }
+    // `--port n` → PORT for the child (createDevServer reads it after the
+    // option and before the config file).
+    const devPort = await portFlag();
+    if (devPort !== undefined) process.env.PORT = String(devPort);
 
     // Reserved child exit code meaning "a server module changed — respawn me".
     // 75 = EX_TEMPFAIL, chosen to never collide with real failure codes.
@@ -172,7 +263,18 @@ switch (command) {
         entry.error instanceof Error ? entry.error.message : entry.error,
       );
     }
-    createServer({ port: 3000, buildDir: "./build", ...userCfg, ...lifecycle });
+    // --port > PORT > config `port` > 3000; --host > HOST > config `hostname` >
+    // all interfaces. Hosting platforms (Fly, Render, Railway) set PORT.
+    const { envPort, parsePort } = await import("../src/server/env.ts");
+    let port: number;
+    try {
+      port = (await portFlag()) ?? envPort() ?? parsePort(userCfg.port, "bractjs.config.ts") ?? 3000;
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+    const hostname = flag("host") || process.env.HOST || userCfg.hostname;
+    createServer({ buildDir: "./build", ...userCfg, ...lifecycle, port, hostname });
     break;
   }
 
@@ -231,17 +333,20 @@ switch (command) {
     const { runBuild } = await import("../src/build/bundler.ts");
     const { loadUserConfig } = await import("../src/config/load.ts");
 
-    const appDir = resolve(process.cwd(), "./app");
-    const buildDir = resolve(process.cwd(), "./build");
+    // Honor `appDir` / `buildDir` from bractjs.config.ts like build and start do.
+    const userCfg = await loadUserConfig();
+    const appDirRel = userCfg.appDir ?? "./app";
+    const buildDirRel = userCfg.buildDir ?? "./build";
+    const appDir = resolve(process.cwd(), appDirRel);
+    const buildDir = resolve(process.cwd(), buildDirRel);
     const outFile = process.argv[3] ?? "./bractjs-app";
-    const entryPath = process.argv[4] ?? "./app/server.ts";
+    const entryPath = process.argv[4] ?? join(appDirRel, "server.ts");
 
     console.log("[bract] (1/4) registry codegen…");
     await writeModuleRegistries(appDir);
 
     console.log("[bract] (2/4) client + server build…");
-    const userCfg = await loadUserConfig();
-    await runBuild({ appDir: "./app", buildDir: "./build", ...userCfg });
+    await runBuild({ ...userCfg, appDir: appDirRel, buildDir: buildDirRel });
 
     console.log("[bract] (3/4) manifest codegen…");
     await writeManifestModule(appDir, buildDir);
@@ -280,18 +385,10 @@ switch (command) {
     break;
   }
 
-  default:
-    console.log(
-      "Usage: bractjs <command>\n" +
-        "  new      <app-name>            Scaffold a new BractJS app\n" +
-        "  dev      [--host [addr]]       Start dev server with HMR (loopback unless --host)\n" +
-        "  build                          Build for production (build/ dir)\n" +
-        "  start                          Start production server\n" +
-        "  codegen  [app] [out]           Generate typed route types\n" +
-        "  codegen:seed  [app]            Seed _generated/ so app/server.ts typechecks (no build needed)\n" +
-        "  codegen:registry  [app]        Generate _generated/{routes,actions}.ts\n" +
-        "  codegen:manifest  [app] [build]  Generate _generated/manifest.ts\n" +
-        "  compile  [outfile] [entry]     Full single-binary pipeline",
-    );
+  default: {
+    const guess = closestCommand(command);
+    console.error(`Unknown command "${command}".${guess ? ` Did you mean "${guess}"?` : ""}\n`);
+    console.error(USAGE);
     process.exit(1);
+  }
 }

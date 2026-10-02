@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { hasServerDirective } from "../shared/directives.ts";
+import { hasServerDirective, isActionModulePath } from "../shared/directives.ts";
 import { devBustedSpecifier } from "./env.ts";
 
 const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
@@ -85,14 +85,7 @@ export function resolveAction(id: string): ((...args: unknown[]) => Promise<unkn
   return registry.get(id) ?? null;
 }
 
-function isEligible(rel: string): boolean {
-  return (
-    rel.endsWith(".server.ts") ||
-    rel.endsWith(".server.tsx") ||
-    rel.startsWith("routes/") ||
-    rel.startsWith("routes\\")
-  );
-}
+const isEligible = isActionModulePath;
 
 export async function loadServerActions(appDir: string): Promise<void> {
   const glob = new Bun.Glob("**/*.{ts,tsx}");

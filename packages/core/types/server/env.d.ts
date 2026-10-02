@@ -17,5 +17,13 @@ export declare function devBustedSpecifier(path: string): string;
  * (server errors → response bodies) rather than isDev().
  */
 export declare function isExplicitDev(): boolean;
+/**
+ * Parse a TCP port from a flag, env var or config value. Returns undefined for
+ * an absent/empty value; throws a readable error for anything that isn't an
+ * integer in 1–65535 (a typo'd PORT should fail loudly, not bind port NaN).
+ */
+export declare function parsePort(value: string | number | undefined, source: string): number | undefined;
+/** The `PORT` environment variable, validated — what hosting platforms (Fly, Render, Railway, Heroku) set. */
+export declare function envPort(): number | undefined;
 export declare function requireEnv(key: string): string;
 export declare function safeStringify(data: unknown): string;

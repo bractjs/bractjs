@@ -2,7 +2,8 @@
 //
 // A dynamic route. `params.id` comes from the `[id]` filename. The loader
 // throws `HttpError(404)` for an unknown id (rendered by the ErrorBoundary
-// below), and the action handles rename / toggle / delete.
+// below). The route action handles toggle / delete; renaming is a React 19
+// form action backed by a "use server" function (app/actions.server.ts).
 
 import type { LoaderArgs, MetaArgs } from "@bractjs/bractjs";
 import {
@@ -11,11 +12,9 @@ import {
   HttpError,
   Link,
   redirect,
-  safeValidate,
   useActionData,
   useLoaderData,
   useNavigate,
-  useNavigation,
   useParams,
   useRevalidator,
 } from "@bractjs/bractjs";
@@ -25,15 +24,18 @@ import {
   Circle,
   CircleCheck,
   Link2,
+  LoaderCircle,
   Pencil,
   RefreshCw,
   SearchX,
   Trash2,
 } from "lucide-react";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 
-import { deleteTodo, getTodo, renameTodo, toggleTodo } from "../todos.server.ts";
+import { renameTask } from "../actions.server.ts";
+import { deleteTodo, getTodo, toggleTodo } from "../todos.server.ts";
 import { Button, ErrorNote, input, panel, useActionToast } from "../ui.tsx";
-import { type TodoInput, TodoTitleSchema } from "../validation.ts";
 
 export async function loader({ params }: LoaderArgs) {
   const todo = getTodo(params.id);
@@ -50,12 +52,6 @@ export function meta({ loaderData }: MetaArgs<Awaited<ReturnType<typeof loader>>
 
 // One handler per intent; `<Form intent>` renders the matching hidden input.
 export const action = defineActions({
-  rename: async ({ params, formData }) => {
-    const result = await safeValidate<TodoInput>(TodoTitleSchema, formData);
-    if (!result.ok) return { error: result.firstError };
-    renameTodo(params.id, result.data.title);
-    return { ok: "Task renamed" };
-  },
   toggle: ({ params }) => {
     toggleTodo(params.id);
     return { ok: "Task updated" };
@@ -90,8 +86,6 @@ export default function TodoDetail() {
   const { todo } = useLoaderData<typeof loader>();
   const actionData = useActionData<{ error?: string; ok?: string }>();
   useActionToast(actionData);
-  const nav = useNavigation();
-  const busy = nav.state === "submitting";
 
   // Typed routing: the route literal types `id` as a string, and `navigate`
   // type-checks both the target route and its params against this app's routes.
@@ -159,26 +153,8 @@ export default function TodoDetail() {
 
         <h1 className="text-3xl font-bold tracking-tight [overflow-wrap:anywhere]">{todo.title}</h1>
 
-        <Form method="post" intent="rename" key={todo.title} className="grid gap-2">
-          <label htmlFor="title" className="text-sm font-semibold">
-            Rename task
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="title"
-              name="title"
-              type="text"
-              maxLength={120}
-              required
-              defaultValue={todo.title}
-              className={input}
-            />
-            <Button type="submit" tone="primary" icon={Pencil} disabled={busy}>
-              {busy ? "Saving…" : "Save"}
-            </Button>
-          </div>
-          {actionData?.error ? <ErrorNote>{actionData.error}</ErrorNote> : null}
-        </Form>
+        {/* React 19 form action: a "use server" function + useActionState. */}
+        <RenameForm id={todo.id} title={todo.title} />
 
         <div className="flex flex-wrap gap-2 border-t border-line pt-5">
           <Form method="post" intent="toggle">
@@ -194,5 +170,50 @@ export default function TodoDetail() {
         </div>
       </section>
     </main>
+  );
+}
+
+// The rename form runs a server action through React 19's useActionState: the
+// action's return value becomes `state`, `isPending` covers the round trip,
+// and BractJS revalidates the loader afterwards — the heading above updates.
+function RenameForm({ id, title }: { id: string; title: string }) {
+  const [state, formAction] = useActionState(renameTask, null);
+  useActionToast(state);
+  return (
+    <form action={formAction} key={title} className="grid gap-2">
+      <input type="hidden" name="id" value={id} />
+      <label htmlFor="title" className="text-sm font-semibold">
+        Rename task
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="title"
+          name="title"
+          type="text"
+          maxLength={120}
+          required
+          defaultValue={title}
+          className={input}
+        />
+        <SaveButton />
+      </div>
+      {state?.error ? <ErrorNote>{state.error}</ErrorNote> : null}
+    </form>
+  );
+}
+
+// useFormStatus reads the pending state of the <form> it's rendered inside.
+function SaveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button
+      type="submit"
+      tone="primary"
+      icon={pending ? LoaderCircle : Pencil}
+      spin={pending}
+      disabled={pending}
+    >
+      {pending ? "Saving…" : "Save"}
+    </Button>
   );
 }

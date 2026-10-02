@@ -34,7 +34,7 @@ import {
   runRouteMiddleware,
 } from "./middleware.ts";
 import { renderRootErrorDocument, renderRoute, type ServerManifest } from "./render.ts";
-import { error, json, sanitizeRedirect } from "./response.ts";
+import { error, json, redirectEnvelope, sanitizeRedirect } from "./response.ts";
 import { validateSearch } from "./search.ts";
 
 export interface HandlerConfig {
@@ -120,15 +120,9 @@ async function runRoutePipeline(
  * posts (no header) keep the plain 3xx.
  */
 function envelopeActionRedirect(res: Response, request: Request): Response {
-  if (res.status < 300 || res.status >= 400) return res;
   if (!MUTATING_METHODS.has(request.method)) return res;
   if (request.headers.get("X-BractJS-Action") !== "1") return res;
-  const location = res.headers.get("Location");
-  if (!location) return res;
-  const headers = new Headers(res.headers);
-  headers.delete("Location");
-  headers.set("X-BractJS-Redirect", location);
-  return new Response(null, { status: 204, headers });
+  return redirectEnvelope(res);
 }
 
 /**
