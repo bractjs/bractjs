@@ -64,7 +64,7 @@ cd my-app
 bun run dev
 ```
 
-`bractjs new <name>` copies the scaffold template, runs `bun install`, and seeds `app/_generated/` so the single-binary entry typechecks before your first build.
+`bractjs new <name>` copies the scaffold template, runs `bun install`, and seeds `app/_generated/` so the single-binary entry typechecks before your first build. The app comes with a stylesheet (`app/styles.css`), `bun run test` (a sample test using [`@bractjs/bractjs/testing`](docs/testing.md)) and `bun run typecheck`. Pass `--tailwind` to start with Tailwind v4 instead of plain CSS, or `--no-install` to skip the install.
 
 Add it to an existing project instead:
 
@@ -1360,16 +1360,17 @@ Generates a `srcset` across breakpoints (320→1920px). Optimized images are cac
 
 ### CLI
 
-| Command                                  | Description                                            |
-| ---------------------------------------- | ------------------------------------------------------ |
-| `bractjs new <name>`                     | Scaffold a new app into `<name>/`.                     |
-| `bractjs dev`                            | Dev server with HMR (port 3000, HMR ws 3001).          |
-| `bractjs build`                          | Dual server + client build with content-hashed output. |
-| `bractjs start`                          | Serve the production build.                            |
-| `bractjs codegen [app] [out]`            | Generate `route-types.gen.ts`.                         |
-| `bractjs codegen:registry [app]`         | Generate `app/_generated/{routes,actions}.ts`.         |
-| `bractjs codegen:manifest [app] [build]` | Snapshot manifest → `app/_generated/manifest.ts`.      |
-| `bractjs compile [outfile] [entry]`      | Full single-binary pipeline.                           |
+| Command                                  | Description                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------------- |
+| `bractjs new <name> [--tailwind]`        | Scaffold a new app into `<name>/` (`--no-install` skips `bun install`). |
+| `bractjs dev [--port n] [--host]`        | Dev server with HMR (port 3000, HMR ws 3001).                           |
+| `bractjs build`                          | Dual server + client build with content-hashed output.                  |
+| `bractjs start [--port n] [--host a]`    | Serve the production build (`PORT` respected).                          |
+| `bractjs --version` / `--help`           | Print the version / usage.                                              |
+| `bractjs codegen [app] [out]`            | Generate `route-types.gen.ts`.                                          |
+| `bractjs codegen:registry [app]`         | Generate `app/_generated/{routes,actions}.ts`.                          |
+| `bractjs codegen:manifest [app] [build]` | Snapshot manifest → `app/_generated/manifest.ts`.                       |
+| `bractjs compile [outfile] [entry]`      | Full single-binary pipeline.                                            |
 
 The CLI is a thin wrapper — every command delegates to a public function, so you can script the same thing.
 
@@ -1621,7 +1622,7 @@ export default defineConfig({ port: 3000, clientEnv: ["PUBLIC_API_URL"] });
 
 ## 26. Full export index
 
-The package has three entries: `@bractjs/bractjs` (everything app code needs), `@bractjs/bractjs/build` (programmatic builds + bundler plugins), and `@bractjs/bractjs/codegen` (registry/manifest generation for the native-compile workflow).
+The package has four entries: `@bractjs/bractjs` (everything app code needs), `@bractjs/bractjs/build` (programmatic builds + bundler plugins), `@bractjs/bractjs/codegen` (registry/manifest generation for the native-compile workflow), and `@bractjs/bractjs/testing` (test helpers — [Testing your app](docs/testing.md)).
 
 Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](packages/core/src/index.ts)):
 
@@ -1668,6 +1669,10 @@ From `@bractjs/bractjs/build` ([packages/core/src/build-entry.ts](packages/core/
 From `@bractjs/bractjs/codegen` ([packages/core/src/codegen-entry.ts](packages/core/src/codegen-entry.ts)):
 
 **Codegen:** `writeModuleRegistries`, `writeManifestModule`, `generateRouteRegistry`, `generateActionRegistry`, `generateManifestModule`, `routesFingerprint`, `explainStaleness`
+
+From `@bractjs/bractjs/testing` ([packages/core/src/testing-entry.ts](packages/core/src/testing-entry.ts)):
+
+**Testing:** `createTestApp`, `callLoader`, `callAction` (types `TestApp`, `TestAppOptions`, `CallLoaderOptions`, `CallActionOptions`, `FormBody`)
 
 **Types:** `LoaderArgs`, `ActionArgs`, `MetaArgs`, `MetaDescriptor`, `LoaderFunction`, `ActionFunction`, `MetaFunction`, `RouteModule`, `RouteDefinition`, `RouteFile`, `Segment`, `RouterLocation`, `ShouldRevalidateArgs`, `ShouldRevalidateFunction`, `BractJSConfig`, `RenderOptions`, `ServerManifest`, `ContextFactory`, `ApiRouteDefinition`, `ApiRouteOptions`, `AppApiRoutes`, `FieldErrors`, `ValidationError`, `BractAdapter`, `LifecycleHooks`, `MiddlewareFn`, `MiddlewareContext`, `CorsOptions`, `AuthGuardOptions`, `CspOptions`, `SessionStorageLike`, `SessionLike`, `Session`, `SessionStorage`, `SessionData`, `CookieSessionOptions`, `CommitOptions`, `ImageProps`, `ImageFormat`, `ImageFit`, `SearchParamsResult`, `SetSearchFn`, `SetSearchOptions`, `SearchOutputFor`, `InferSchemaOutput`, `LoaderData`, `ActionData`, `SafeValidateResult`, `FetcherResult`, `FetcherEntry`, `FetcherState`, `FetcherFormProps`, `UseFetcherOptions`, `Revalidator`, `ScrollRestorationProps`, `ToasterProps`, `ToastPosition`, `Toast`, `ToastEntry`, `ToastOptions`, `ToastType`, `ToastAction`, `PrerenderOptions`, `PrerenderResult`, `I18nConfig`, `DevServerOptions`, `DevServer`, `BuildConfig`, `CodegenResult`, `ModuleRegistry`, `BractJSContextValue`, `RouteManifest`
 

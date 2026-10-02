@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { fillTemplate } from "./scaffold-template.ts";
+import { fillTemplate, type TemplateVars } from "./scaffold-template.ts";
 
 const command = process.argv[2];
 
 const USAGE =
   "Usage: bractjs <command> [options]\n\n" +
-  "  new      <app-name>                  Scaffold a new BractJS app\n" +
+  "  new      <app-name> [--tailwind]     Scaffold a new BractJS app\n" +
   "  dev      [--port n] [--host [addr]]  Dev server with HMR (loopback unless --host)\n" +
   "  build                                Build for production (build/ dir)\n" +
   "  start    [--port n] [--host addr]    Start the production server\n" +
@@ -80,9 +80,22 @@ function closestCommand(input: string): string | undefined {
 
 // ── new <app-name> ──────────────────────────────────────────────────────────
 
-async function scaffoldNew(appName: string): Promise<void> {
+const TAILWIND_DEV_DEPS = { "bun-plugin-tailwind": "^0.1.2", tailwindcss: "^4.3.3" };
+
+async function scaffoldNew(): Promise<void> {
+  const args = process.argv.slice(3);
+  const appName = args.find((a) => !a.startsWith("-"));
+  const tailwind = args.includes("--tailwind");
+  const install = !args.includes("--no-install");
   if (!appName) {
-    console.error("Usage: bractjs new <app-name>");
+    console.error("Usage: bractjs new <app-name> [--tailwind] [--no-install]");
+    process.exit(1);
+  }
+  // It becomes the package name and the directory name.
+  if (!/^[a-z0-9][a-z0-9._-]*$/.test(appName) || appName.length > 214) {
+    console.error(
+      `"${appName}" isn't a valid app name: use lowercase letters, digits, "-", "_" and "." (it becomes the package name).`,
+    );
     process.exit(1);
   }
 
@@ -92,20 +105,36 @@ async function scaffoldNew(appName: string): Promise<void> {
     process.exit(1);
   }
 
-  const templateDir = join(import.meta.dirname, "../templates/new-app");
-  // Absolute path to the bractjs package itself — used as a file: dep before npm publish
-  const bractPackageDir = resolve(import.meta.dirname, "..");
-  console.log(`Creating ${appName}...`);
+  const templatesDir = join(import.meta.dirname, "../templates");
+  const pkg = (await Bun.file(join(import.meta.dirname, "../package.json")).json()) as { version: string };
+  const vars = { APP_NAME: appName, BRACTJS_VERSION: pkg.version };
+  console.log(`Creating ${appName}${tailwind ? " (Tailwind)" : ""}...`);
 
-  // Recursively copy template files, substituting {{APP_NAME}} and {{BRACT_PATH}}
-  await copyDir(templateDir, appDir, appName, bractPackageDir);
+  await copyDir(join(templatesDir, "new-app"), appDir, vars);
+  if (tailwind) {
+    // The overlay replaces styles.css + bractjs.config.ts; the plugin and
+    // Tailwind itself become devDependencies.
+    await copyDir(join(templatesDir, "new-app-tailwind"), appDir, vars, ["OVERLAY.md"]);
+    const pkgPath = join(appDir, "package.json");
+    const appPkg = (await Bun.file(pkgPath).json()) as { devDependencies: Record<string, string> };
+    appPkg.devDependencies = Object.fromEntries(
+      Object.entries({ ...appPkg.devDependencies, ...TAILWIND_DEV_DEPS }).sort(([a], [b]) =>
+        a.localeCompare(b),
+      ),
+    );
+    await Bun.write(pkgPath, JSON.stringify(appPkg, null, 2) + "\n");
+  }
 
-  // Install dependencies
-  console.log("Installing dependencies...");
-  const result = Bun.spawnSync(["bun", "install"], { cwd: appDir, stdio: ["inherit", "inherit", "inherit"] });
-  if (result.exitCode !== 0) {
-    console.error("bun install failed.");
-    process.exit(result.exitCode ?? 1);
+  if (install) {
+    console.log("Installing dependencies...");
+    const result = Bun.spawnSync(["bun", "install"], {
+      cwd: appDir,
+      stdio: ["inherit", "inherit", "inherit"],
+    });
+    if (result.exitCode !== 0) {
+      console.error("bun install failed.");
+      process.exit(result.exitCode ?? 1);
+    }
   }
 
   // Seed `app/_generated/` so the template's `app/server.ts` typechecks
@@ -122,18 +151,22 @@ async function scaffoldNew(appName: string): Promise<void> {
   console.log(`\n✓ Created ${appName}\n`);
   console.log("Next steps:");
   console.log(`  cd ${appName}`);
+  if (!install) console.log("  bun install");
   console.log("  bun run dev");
 }
 
-async function copyDir(src: string, dest: string, appName: string, bractPath: string): Promise<void> {
+/**
+ * Copy a template directory, filling `{{PLACEHOLDERS}}`. Files named
+ * `gitignore` become `.gitignore`: npm never publishes a file called
+ * `.gitignore`, so the template can't ship one under that name.
+ */
+async function copyDir(src: string, dest: string, vars: TemplateVars, skip: string[] = []): Promise<void> {
   const glob = new Bun.Glob("**/*");
-  for await (const rel of glob.scan({ cwd: src, onlyFiles: true })) {
-    const srcPath = join(src, rel);
-    const destPath = join(dest, rel);
-    await Bun.write(destPath, ""); // creates parent dirs
-    let content = await Bun.file(srcPath).text();
-    content = fillTemplate(content, { APP_NAME: appName, BRACT_PATH: bractPath });
-    await Bun.write(destPath, content);
+  for await (const rel of glob.scan({ cwd: src, onlyFiles: true, dot: true })) {
+    if (skip.includes(rel)) continue;
+    const destRel = rel.split("/").at(-1) === "gitignore" ? rel.replace(/gitignore$/, ".gitignore") : rel;
+    const destPath = join(dest, destRel);
+    await Bun.write(destPath, fillTemplate(await Bun.file(join(src, rel)).text(), vars));
   }
 }
 
@@ -155,7 +188,7 @@ switch (command) {
     break;
 
   case "new":
-    await scaffoldNew(process.argv[3]);
+    await scaffoldNew();
     break;
 
   case "dev": {
