@@ -16,6 +16,7 @@ import {
   useNavigation,
   useSearch,
 } from "@bractjs/bractjs";
+import { Circle, CircleCheck, Eraser, LoaderCircle, Plus, Trash2 } from "lucide-react";
 
 import {
   addTodo,
@@ -26,19 +27,15 @@ import {
   listTodos,
   toggleTodo,
 } from "../todos.server.ts";
-import {
-  card,
-  dangerButton,
-  ErrorNote,
-  ghostButton,
-  input,
-  primaryButton,
-  StatPill,
-  useActionToast,
-} from "../ui.tsx";
+import { Button, ErrorNote, IconButton, input, panel, useActionToast } from "../ui.tsx";
 import { type BoardSearch, BoardSearchSchema, type TodoInput, TodoTitleSchema } from "../validation.ts";
 
-const FILTERS: Filter[] = ["all", "active", "completed"];
+// Filter tabs: the value in `?filter=` and what the tab says.
+const FILTERS: Array<{ value: Filter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Open" },
+  { value: "completed", label: "Done" },
+];
 
 // Validates/coerces `?filter=` BEFORE the loader runs. The loader receives the
 // output via `search`; the component reads the same object with useSearch().
@@ -82,7 +79,7 @@ export const action = defineActions({
   },
   "clear-completed": () => {
     clearCompleted();
-    return { ok: "Completed tasks cleared" };
+    return { ok: "Done tasks cleared" };
   },
 });
 
@@ -94,170 +91,127 @@ export default function IndexPage() {
   useActionToast(actionData);
   const nav = useNavigation();
   const busy = nav.state === "submitting";
+  const counts: Record<Filter, number> = {
+    all: stats.total,
+    active: stats.active,
+    completed: stats.completed,
+  };
 
   return (
-    <main style={{ display: "grid", gap: "1rem" }}>
-      <section style={card}>
-        <p
-          style={{
-            margin: 0,
-            fontSize: ".78rem",
-            letterSpacing: ".08em",
-            color: "var(--muted)",
-            textTransform: "uppercase",
-          }}
-        >
-          Demo App
+    <main className="grid gap-6">
+      <header className="grid gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">Todo board</h1>
+        <p className="text-muted">
+          Tasks live in a <code>bun:sqlite</code> store inside a <code>*.server.ts</code> module. Open one to
+          rename it.
         </p>
-        <h1 style={{ margin: ".45rem 0 .6rem", fontSize: "clamp(1.6rem, 3vw, 2.2rem)" }}>Todo Board</h1>
-        <p style={{ margin: 0, color: "var(--muted)" }}>
-          Backed by a <code>bun:sqlite</code> store in a <code>*.server.ts</code> module. Tap a task to open
-          its detail page, or use the filters below.
-        </p>
-      </section>
+      </header>
 
-      <section style={{ ...card, display: "grid", gap: ".8rem" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: ".6rem", alignItems: "center" }}>
-          <StatPill label="Total" value={stats.total} tone="#132024" />
-          <StatPill label="Active" value={stats.active} tone="#0f8b8d" />
-          <StatPill label="Completed" value={stats.completed} tone="#2f7d32" />
-
-          <nav
-            aria-label="Filter tasks"
-            style={{ marginLeft: "auto", display: "inline-flex", gap: ".35rem", flexWrap: "wrap" }}
-          >
-            {FILTERS.map((f) => {
-              const active = f === filter;
-              return (
-                <Link
-                  key={f}
-                  to="/"
-                  search={f === "all" ? {} : { filter: f }}
-                  style={{
-                    textTransform: "capitalize",
-                    textDecoration: "none",
-                    fontSize: ".86rem",
-                    fontWeight: active ? 700 : 500,
-                    color: active ? "#fff" : "var(--muted)",
-                    background: active ? "var(--accent)" : "#fff",
-                    border: "1px solid var(--line)",
-                    borderRadius: "999px",
-                    padding: ".3rem .7rem",
-                  }}
-                >
-                  {f}
-                </Link>
-              );
-            })}
-          </nav>
+      {/* Keyed on the task count, so the input clears after each add. */}
+      <Form method="post" intent="add" key={stats.total} className="grid gap-2">
+        <label htmlFor="title" className="text-sm font-semibold">
+          New task
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="title"
+            name="title"
+            type="text"
+            maxLength={120}
+            required
+            placeholder="What needs doing?"
+            className={input}
+          />
+          <Button type="submit" tone="primary" icon={busy ? LoaderCircle : Plus} spin={busy} disabled={busy}>
+            {busy ? "Adding…" : "Add task"}
+          </Button>
         </div>
-
-        <Form method="post" intent="add" style={{ display: "grid", gap: ".65rem" }}>
-          <label htmlFor="title" style={{ fontWeight: 600 }}>
-            New task
-          </label>
-          <div style={{ display: "flex", gap: ".55rem", flexWrap: "wrap" }}>
-            <input
-              id="title"
-              name="title"
-              type="text"
-              maxLength={120}
-              required
-              placeholder="What should we ship today?"
-              style={{ ...input, flex: "1 1 260px", width: "auto" }}
-            />
-            <button type="submit" disabled={busy} style={primaryButton}>
-              {busy ? "Adding…" : "Add Task"}
-            </button>
-          </div>
-        </Form>
-
         {actionData?.error ? <ErrorNote>{actionData.error}</ErrorNote> : null}
-      </section>
+      </Form>
 
-      <section style={{ ...card, paddingTop: ".6rem" }}>
-        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: ".55rem" }}>
-          {todos.length === 0 ? (
-            <li
-              style={{
-                textAlign: "center",
-                color: "var(--muted)",
-                padding: "1rem",
-                border: "1px dashed var(--line)",
-                borderRadius: "10px",
-              }}
-            >
-              {filter === "all" ? "No tasks yet. Add your first one above." : `No ${filter} tasks.`}
-            </li>
-          ) : null}
-
-          {todos.map((todo) => (
-            <li
-              key={todo.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr auto auto",
-                alignItems: "center",
-                gap: ".45rem",
-                border: "1px solid var(--line)",
-                background: todo.completed ? "#f1faf5" : "#fff",
-                borderRadius: "10px",
-                padding: ".6rem .7rem",
-              }}
-            >
+      <section aria-label="Tasks" className={`${panel} overflow-hidden`}>
+        <nav aria-label="Filter tasks" className="flex border-b border-line bg-sunken">
+          {FILTERS.map(({ value, label }) => {
+            const active = value === filter;
+            return (
               <Link
-                to={`/${todo.id}`}
-                prefetch="hover"
-                style={{
-                  textDecoration: todo.completed ? "line-through" : "none",
-                  opacity: todo.completed ? 0.66 : 1,
-                  overflowWrap: "anywhere",
-                  color: "inherit",
-                }}
+                key={value}
+                to="/"
+                search={value === "all" ? {} : { filter: value }}
+                aria-current={active ? "page" : undefined}
+                className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${
+                  active ? "bg-surface text-ink" : "text-muted hover:text-ink"
+                }`}
               >
-                {todo.title}
-              </Link>
-
-              <Form method="post" intent="toggle" style={{ margin: 0 }}>
-                <input type="hidden" name="id" value={todo.id} />
-                <button
-                  type="submit"
-                  aria-label={todo.completed ? "Mark as active" : "Mark as completed"}
-                  style={ghostButton}
+                {label}
+                <span
+                  className={`min-w-6 rounded px-1.5 text-center tabular-nums ${
+                    value === "completed"
+                      ? "bg-teal text-teal-ink"
+                      : value === "active"
+                        ? "bg-marigold text-[#17262b]"
+                        : "bg-ink text-canvas"
+                  }`}
                 >
-                  {todo.completed ? "Undo" : "Done"}
-                </button>
-              </Form>
+                  {counts[value]}
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
 
-              <Form method="post" intent="delete" style={{ margin: 0 }}>
-                <input type="hidden" name="id" value={todo.id} />
-                <button type="submit" aria-label="Delete task" style={dangerButton}>
-                  Delete
-                </button>
-              </Form>
-            </li>
-          ))}
-        </ul>
-
-        {stats.completed > 0 ? (
-          <Form method="post" intent="clear-completed" style={{ marginTop: ".9rem" }}>
-            <button
-              type="submit"
-              style={{
-                border: "1px solid #d8be95",
-                background: "#fff6e9",
-                color: "#705323",
-                borderRadius: "9px",
-                padding: ".48rem .72rem",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Clear Completed
-            </button>
-          </Form>
-        ) : null}
+        {todos.length === 0 ? (
+          <p className="px-5 py-10 text-center text-muted">
+            {filter === "all"
+              ? "Nothing on the board. Add a task above."
+              : filter === "active"
+                ? "No open tasks."
+                : "No done tasks yet."}
+          </p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {todos.map((todo) => (
+              <li
+                key={todo.id}
+                className={`flex items-center gap-2 border-l-4 py-2 pr-2 pl-2 ${
+                  todo.completed ? "border-l-teal" : "border-l-marigold"
+                }`}
+              >
+                <Form method="post" intent="toggle" className="contents">
+                  <input type="hidden" name="id" value={todo.id} />
+                  <IconButton
+                    type="submit"
+                    icon={todo.completed ? CircleCheck : Circle}
+                    label={todo.completed ? "Mark as open" : "Mark as done"}
+                    className={todo.completed ? "text-teal" : ""}
+                  />
+                </Form>
+                <Link
+                  to={`/${todo.id}`}
+                  prefetch="hover"
+                  className={`min-w-0 flex-1 py-1 [overflow-wrap:anywhere] hover:underline ${
+                    todo.completed ? "text-muted line-through" : ""
+                  }`}
+                >
+                  {todo.title}
+                </Link>
+                <Form method="post" intent="delete" className="contents">
+                  <input type="hidden" name="id" value={todo.id} />
+                  <IconButton type="submit" icon={Trash2} label="Delete task" tone="danger" />
+                </Form>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
+
+      {stats.completed > 0 ? (
+        <Form method="post" intent="clear-completed" className="justify-self-end">
+          <Button type="submit" icon={Eraser}>
+            Clear {stats.completed} done {stats.completed === 1 ? "task" : "tasks"}
+          </Button>
+        </Form>
+      ) : null}
     </main>
   );
 }

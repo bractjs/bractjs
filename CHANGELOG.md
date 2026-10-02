@@ -6,7 +6,34 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- **Root and layout loader errors render an `ErrorBoundary` instead of a JSON body.** Before, only route loaders did: `throw new HttpError(403, "…")` in a `layout.tsx` loader answered a page load with `{"error":"…"}`, and client navigation to it silently stayed on the old page while the URL changed. Now:
+  - A failed **layout** loader renders the nearest `ErrorBoundary` in that layout's place, so root and the layouts above it still render. The boundary is the layout's own `ErrorBoundary` export (newly supported on layouts), else the next enclosing layout's, else root's, else the built-in fallback. The HTTP status is the error's. This works on document loads and client navigation, and hydrates cleanly.
+  - A failed **root** loader gets a minimal framework-rendered document with root's `ErrorBoundary` (or the fallback), the app-wide stylesheets and the error's status. It isn't hydrated. Client navigation that hits it falls back to a full page load.
+  - A **route** loader error without its own boundary now uses the nearest layout's `ErrorBoundary` before root's.
+  - A redirect from any loader now always wins over an `HttpError` from another, whichever settles first.
+  - Unexpected (non-`HttpError`) errors from root or layout loaders used to hand the component `{ __error }` as its data. They now render the same boundaries with a 500.
+- **CSS Modules now render the same class names on the server as in the browser.** `bractjs dev` and `bractjs start` import route modules from source, and Bun's runtime resolved `import styles from "./x.module.css"` to a file path instead of the class-name map. The server rendered no class where the browser rendered the scoped one: unstyled server HTML and a hydration mismatch. A runtime plugin now gives server imports the bundler's own map, so the names match in dev, `start`, prerendering and the SPA shell (the compiled binary already bundled the map; a smoke test now checks it). In dev, editing a CSS Module's rules hot-swaps the stylesheet as before, and adding or removing a class restarts the server so both sides pick up the new map. The README §28 limitation is gone.
+- **Dev: editing a file with `sed -i` (or any tool that writes a hidden temp file first) updates the right module.** The watcher reports the last file of each change burst, which was often the temp file (`.!1234!_index.tsx`). The dev server then broadcast a module swap for a file that doesn't exist and the browser logged a 404. Hidden files are now ignored.
+- **Client navigation no longer stalls on a failed `/_data` request.** A non-2xx response (an unmatched path, a failed root loader, a search-validation 400, a 5xx) used to log to the console and push the new URL while leaving the old page on screen. The router now hands off to a full document load so the server's real response renders; revalidation does the same.
+
+### Changed
+
+- **`examples/todo` has a new look**: flat colors, Tailwind v4 (`tailwind: true`), lucide icons, dark mode, and a CSS Module on the About page. It also uses `<NavLink>`. Every feature it demonstrated before still works the same way.
+
+### Docs
+
+- **[Benchmarks](docs/benchmarks.md) rerun with BractJS 0.6.0 against React Router 8.4.0** (was 7.18.4) and Next.js 16.3.6. The results are unchanged in shape: 4,502 req/s vs 1,747 and 1,083, and 58.7 KB of first-load JavaScript over the wire vs 102.6 KB and 134.2 KB.
+
+### Internal
+
+- **Browser end-to-end tests** (`pnpm e2e`, `e2e/`) run a production build of `examples/todo` in Chrome and check hydration, soft navigation, forms, error pages and styles. Every test fails on a browser console error. CI runs them in a new `e2e` job and runs the `examples/cms` suite too.
+- The Tailwind examples no longer run on a second, older Bun: pnpm had auto-installed `bun@1.3.14` as a peer of `bun-plugin-tailwind`, and `pnpm` scripts picked it up. A root `pnpm.overrides` entry removes it.
+
+### Removed
+
+- **`StreamFetcherResult.events`.** Deprecated since 0.2 and never emitted anything; `useFetcher({ stream: true })` returns `{ connect(actionId) }`, as the README has always documented. Code that still reads `.events` gets a type error instead of `null`.
 
 ---
 

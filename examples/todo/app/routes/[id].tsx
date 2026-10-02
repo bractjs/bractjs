@@ -19,9 +19,20 @@ import {
   useParams,
   useRevalidator,
 } from "@bractjs/bractjs";
+import {
+  ArrowLeft,
+  Check,
+  Circle,
+  CircleCheck,
+  Link2,
+  Pencil,
+  RefreshCw,
+  SearchX,
+  Trash2,
+} from "lucide-react";
 
 import { deleteTodo, getTodo, renameTodo, toggleTodo } from "../todos.server.ts";
-import { card, dangerButton, ErrorNote, ghostButton, input, primaryButton, useActionToast } from "../ui.tsx";
+import { Button, ErrorNote, input, panel, useActionToast } from "../ui.tsx";
 import { type TodoInput, TodoTitleSchema } from "../validation.ts";
 
 export async function loader({ params }: LoaderArgs) {
@@ -56,14 +67,20 @@ export const action = defineActions({
   },
 });
 
+const backLink = "inline-flex items-center gap-1.5 text-sm font-semibold text-teal hover:text-ink";
+
 export function ErrorBoundary({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : "Something went wrong.";
   return (
-    <main style={{ ...card, display: "grid", gap: ".8rem" }}>
-      <h1 style={{ margin: 0 }}>Task not found</h1>
-      <p style={{ margin: 0, color: "var(--muted)" }}>{message}</p>
-      <Link to="/" style={{ color: "var(--accent)", fontWeight: 600 }}>
-        ← Back to the board
+    <main className={`${panel} grid justify-items-start gap-3 p-6`}>
+      <span className="grid size-11 place-items-center rounded-md bg-marigold text-[#17262b]">
+        <SearchX aria-hidden size={22} strokeWidth={2.25} />
+      </span>
+      <h1 className="text-2xl font-bold tracking-tight">Task not found</h1>
+      <p className="text-muted">{message} It may have been deleted.</p>
+      <Link to="/" className={backLink}>
+        <ArrowLeft aria-hidden size={16} strokeWidth={2.5} />
+        Back to the board
       </Link>
     </main>
   );
@@ -86,72 +103,67 @@ export default function TodoDetail() {
   const { revalidate, state: revalidating } = useRevalidator();
 
   return (
-    <main style={{ display: "grid", gap: "1rem" }}>
-      <p style={{ margin: 0, display: "flex", gap: "1rem", alignItems: "baseline", flexWrap: "wrap" }}>
+    <main className="grid gap-6">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {/* Plain-string `to` — still valid (backwards compatible). */}
-        <Link
-          to="/"
-          prefetch="hover"
-          style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}
-        >
-          ← Back to the board
+        <Link to="/" prefetch="hover" className={backLink}>
+          <ArrowLeft aria-hidden size={16} strokeWidth={2.5} />
+          Board
         </Link>
         {/* Typed dynamic `to` with checked `params` — autocompletes "/:id". */}
         <Link
           to="/:id"
           params={{ id }}
-          style={{ color: "var(--muted)", fontSize: ".82rem", textDecoration: "none" }}
+          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink"
         >
+          <Link2 aria-hidden size={15} />
           Permalink
         </Link>
-        {/* Manual revalidation via useRevalidator. */}
-        <button
-          type="button"
-          onClick={() => {
-            void revalidate();
-          }}
-          disabled={revalidating === "loading"}
-          style={{ ...ghostButton, padding: ".3rem .7rem", fontSize: ".82rem", marginLeft: "auto" }}
-        >
-          {revalidating === "loading" ? "Refreshing…" : "↻ Refresh"}
-        </button>
-        {/* Imperative typed navigation via useNavigate. */}
-        <button
-          type="button"
-          onClick={() => {
-            void navigate("/");
-          }}
-          style={{ ...ghostButton, padding: ".3rem .7rem", fontSize: ".82rem" }}
-        >
-          Done editing →
-        </button>
-      </p>
-
-      <section style={{ ...card, display: "grid", gap: ".9rem" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: ".6rem", flexWrap: "wrap" }}>
-          <span
-            style={{
-              fontSize: ".74rem",
-              fontWeight: 700,
-              letterSpacing: ".06em",
-              textTransform: "uppercase",
-              color: todo.completed ? "#2f7d32" : "#0f8b8d",
+        <div className="ml-auto flex gap-2">
+          {/* Manual revalidation via useRevalidator. */}
+          <Button
+            icon={RefreshCw}
+            spin={revalidating === "loading"}
+            disabled={revalidating === "loading"}
+            onClick={() => {
+              void revalidate();
             }}
           >
-            {todo.completed ? "Completed" : "Active"}
+            {revalidating === "loading" ? "Refreshing…" : "Refresh"}
+          </Button>
+          {/* Imperative typed navigation via useNavigate. */}
+          <Button
+            icon={Check}
+            onClick={() => {
+              void navigate("/");
+            }}
+          >
+            Done editing
+          </Button>
+        </div>
+      </div>
+
+      <section
+        className={`${panel} grid gap-5 border-l-4 p-6 ${todo.completed ? "border-l-teal" : "border-l-marigold"}`}
+      >
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span
+            className={`rounded px-2 py-0.5 font-semibold ${
+              todo.completed ? "bg-teal text-teal-ink" : "bg-marigold text-[#17262b]"
+            }`}
+          >
+            {todo.completed ? "Done" : "Open"}
           </span>
-          <span style={{ color: "var(--muted)", fontSize: ".82rem" }}>
-            Created {new Date(todo.createdAt).toLocaleString()}
-          </span>
+          <span className="text-muted">Created {new Date(todo.createdAt).toLocaleString()}</span>
         </div>
 
-        <h1 style={{ margin: 0, overflowWrap: "anywhere" }}>{todo.title}</h1>
+        <h1 className="text-3xl font-bold tracking-tight [overflow-wrap:anywhere]">{todo.title}</h1>
 
-        <Form method="post" intent="rename" key={todo.title} style={{ display: "grid", gap: ".6rem" }}>
-          <label htmlFor="title" style={{ fontWeight: 600 }}>
+        <Form method="post" intent="rename" key={todo.title} className="grid gap-2">
+          <label htmlFor="title" className="text-sm font-semibold">
             Rename task
           </label>
-          <div style={{ display: "flex", gap: ".55rem", flexWrap: "wrap" }}>
+          <div className="flex gap-2">
             <input
               id="title"
               name="title"
@@ -159,27 +171,25 @@ export default function TodoDetail() {
               maxLength={120}
               required
               defaultValue={todo.title}
-              style={{ ...input, flex: "1 1 260px", width: "auto" }}
+              className={input}
             />
-            <button type="submit" disabled={busy} style={primaryButton}>
+            <Button type="submit" tone="primary" icon={Pencil} disabled={busy}>
               {busy ? "Saving…" : "Save"}
-            </button>
+            </Button>
           </div>
+          {actionData?.error ? <ErrorNote>{actionData.error}</ErrorNote> : null}
         </Form>
 
-        {actionData?.error ? <ErrorNote>{actionData.error}</ErrorNote> : null}
-
-        <div style={{ display: "flex", gap: ".55rem", flexWrap: "wrap" }}>
-          <Form method="post" intent="toggle" style={{ margin: 0 }}>
-            <button type="submit" style={{ ...ghostButton, padding: ".5rem .85rem" }}>
-              {todo.completed ? "Mark as active" : "Mark as completed"}
-            </button>
+        <div className="flex flex-wrap gap-2 border-t border-line pt-5">
+          <Form method="post" intent="toggle">
+            <Button type="submit" icon={todo.completed ? Circle : CircleCheck}>
+              {todo.completed ? "Mark as open" : "Mark as done"}
+            </Button>
           </Form>
-
-          <Form method="post" intent="delete" style={{ margin: 0 }}>
-            <button type="submit" style={{ ...dangerButton, padding: ".5rem .85rem" }}>
+          <Form method="post" intent="delete">
+            <Button type="submit" tone="danger" icon={Trash2}>
               Delete task
-            </button>
+            </Button>
           </Form>
         </div>
       </section>

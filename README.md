@@ -218,8 +218,8 @@ export function beforeLoad({ context, params, location }) {
 
 // 5) ErrorBoundary — renders in the route's place when its loader throws
 //    (an HttpError keeps its status: 404 → a 404 page) or its component
-//    throws while rendering. Without one, root.tsx's ErrorBoundary is used,
-//    else a minimal built-in fallback.
+//    throws while rendering. Without one, the nearest layout's ErrorBoundary
+//    is used, then root.tsx's, else a minimal built-in fallback.
 export function ErrorBoundary({ error }: { error: unknown }) {
   return <p>Something broke: {error instanceof Error ? error.message : String(error)}</p>;
 }
@@ -304,7 +304,11 @@ global pipeline → searchSchema → route middleware (root → layout → route
 
 - **Route middleware** wraps everything after search validation: it runs in chain order with a shared `context`, can short-circuit with a `Response`, and (being outermost-first) can also post-process the final response. It runs inside the app-wide `pipeline` (§14).
 - **Loaders run concurrently** (root, every layout, and the route loader all in one `Promise.all`).
-- A loader that throws a redirect `Response` redirects. A **route** loader that throws an `HttpError` renders the nearest `ErrorBoundary` (the route's, else root's, else a built-in fallback) in the route's place, with that status code — on full page loads and client navigation alike; `error` is the `HttpError`, so `error.status` works. Any _other_ thrown error does the same with status 500 and a sanitized message (generic in production, the real message only when `NODE_ENV=development`), and is reported to `onError`. An `HttpError` thrown by a **root or layout** loader still ends the request with a JSON error body of that status, since no boundary can render without the root's data.
+- A loader that throws a redirect `Response` redirects, and a redirect from any loader wins over an error from another.
+- A loader that throws an `HttpError` renders the nearest `ErrorBoundary` with that status code, on full page loads and client navigation alike. `error` is the `HttpError`, so `error.status` works. Any _other_ thrown error does the same with status 500 and a sanitized message (generic in production, the real message only when `NODE_ENV=development`), and is reported to `onError`. Where the boundary renders depends on which loader failed:
+  - **Route loader:** in the route's place. The boundary is the route's own `ErrorBoundary`, else the nearest enclosing layout's, else root's, else a built-in fallback.
+  - **Layout loader:** in that layout's place, so root and the layouts above it still render. The boundary is the layout's own, else the next enclosing layout's, else root's. A guard-only `layout.ts` (no component) renders it one level down.
+  - **Root loader:** root.tsx can't render without its data, so BractJS serves a minimal document containing root's `ErrorBoundary` (or the built-in fallback) and the app-wide stylesheets, with no client scripts. A client navigation that hits this falls back to a full page load.
 
 > **Security:** put auth checks in `beforeLoad` (per route) or middleware (cross-cutting) — never in a component. `/_data` (used by `<Link>` soft-nav) runs `beforeLoad` and the loader, so a component-only check would still leak loader JSON. See §14.
 
@@ -1678,7 +1682,7 @@ That's the whole setup. Tailwind compiles as part of the bundle and its output f
 
 `import styles from "./x.module.css"` is scoped by Bun at build time and extracted like any other stylesheet, and `bractjs codegen:seed` generates the ambient types so the import typechecks.
 
-> **Known limitation — CSS Modules do not have server/client class-name parity.** `bractjs dev` and `bractjs start` import route modules from source, and Bun's _runtime_ resolves a `.module.css` import to a file path rather than the bundler's class-name map. The server therefore renders no class where the browser renders the scoped one, producing a hydration mismatch and unstyled SSR output for those elements. Plain `.css` imports are unaffected and work correctly in every run mode — **prefer them for anything server-rendered**, and reserve CSS Modules for client-only components.
+Server rendering uses the same scoped class names as the browser in every run mode, so CSS Modules are safe in server-rendered components. `bractjs dev` and `bractjs start` import route modules from source, and a runtime plugin gives those imports the bundler's own class-name map; the compiled binary bundles the map in. Names are derived from the stylesheet's path relative to the working directory, so run `bractjs build` and `bractjs start` from the same directory (the app root, as usual). In dev, editing rules hot-swaps the stylesheet; adding or removing a class restarts the server so both sides pick up the new map.
 
 ---
 

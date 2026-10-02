@@ -4,7 +4,7 @@
 // use them as `className={input}` etc. The editorial public chrome (SiteFrame,
 // PostCard) and the admin chrome (AdminSidebar) live here too; the chrome's
 // layout classes (.admin-*, .site, .prose) are defined in app/styles.css, which
-// Tailwind compiles to public/styles.css.
+// the framework compiles (`tailwind: true`) and links into every document.
 
 import { Form, Image, Link, toast, useLocation, useMatches } from "@bractjs/bractjs";
 import {

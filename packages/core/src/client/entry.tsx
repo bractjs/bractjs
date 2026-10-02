@@ -45,9 +45,12 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
       ...((data.loaderData?.layouts as unknown[]) ?? []),
     ];
     for (const slot of slots) {
-      const e = (slot as { __error?: { message?: string; stack?: string; routeFile?: string } } | null)
-        ?.__error;
-      if (e) {
+      const e = (
+        slot as { __error?: { message?: string; stack?: string; routeFile?: string; status?: number } } | null
+      )?.__error;
+      // A status means a deliberate HttpError (a 404 etc.): the page's
+      // ErrorBoundary is the intended UI, not a bug to overlay.
+      if (e && e.status === undefined) {
         const where = e.routeFile ? ` in ${e.routeFile}` : "";
         (window as unknown as { __BRACTJS_ERROR__?: unknown }).__BRACTJS_ERROR__ = {
           message: `Loader error${where}: ${e.message ?? "unknown error"}`,

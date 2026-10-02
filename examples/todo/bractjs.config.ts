@@ -6,4 +6,6 @@ import { defineConfig } from "@bractjs/bractjs";
 export default defineConfig({
   port: 3000,
   clientEnv: [],
+  // Compile app/styles.css with Tailwind v4 (needs bun-plugin-tailwind + tailwindcss).
+  tailwind: true,
 });

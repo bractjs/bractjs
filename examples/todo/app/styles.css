@@ -1,0 +1,62 @@
+/* app/styles.css — the app-wide stylesheet, imported by root.tsx.
+ *
+ * `tailwind: true` in bractjs.config.ts compiles it with Tailwind v4 as part of
+ * the normal build: BractJS extracts it to a hashed file and links it during
+ * SSR, so pages are styled on first paint. No CLI step, no <style> tags.
+ *
+ * The look is flat: solid fills, 1px lines, no gradients or shadows. Two state
+ * colors carry meaning everywhere — marigold for open tasks, teal for done. */
+
+@import "tailwindcss";
+
+/* Scan the app for class names. Paths are relative to this file (app/). */
+@source "./**/*.{ts,tsx}";
+
+@theme {
+  --font-sans: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif;
+
+  --color-canvas: #eef2f0;
+  --color-surface: #ffffff;
+  --color-sunken: #e3e9e7;
+  --color-ink: #17262b;
+  --color-muted: #5a6b70;
+  --color-line: #d3ddda;
+  --color-teal: #0f8b8d;
+  --color-teal-ink: #ffffff;
+  --color-marigold: #f2b233;
+  --color-danger: #b83227;
+}
+
+/* Dark mode swaps the tokens, so every utility built on them follows. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #0f1a1d;
+    --color-surface: #16242a;
+    --color-sunken: #1d2e34;
+    --color-ink: #e3ecea;
+    --color-muted: #93a5a9;
+    --color-line: #27383e;
+    --color-teal: #26a7a5;
+    --color-teal-ink: #0f1a1d;
+    --color-marigold: #f2b233;
+    --color-danger: #ea6a5e;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-teal;
+  }
+
+  code {
+    @apply rounded bg-sunken px-1 py-px text-[0.9em];
+  }
+}

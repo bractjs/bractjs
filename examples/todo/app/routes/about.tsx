@@ -4,12 +4,25 @@
 // over the "/:id" dynamic route. No loader needed — it's a plain page.
 
 import { Link } from "@bractjs/bractjs";
-import { card } from "../ui.tsx";
+import {
+  ArrowLeft,
+  Braces,
+  Clock,
+  Database,
+  FolderTree,
+  type LucideIcon,
+  Package,
+  Palette,
+  Repeat,
+  SearchX,
+  ShieldCheck,
+} from "lucide-react";
+import { panel } from "../ui.tsx";
 
-// Route-scoped styles: because only this route imports the file, the build
-// extracts it into THIS route's CSS bundle — "/" never downloads it — and
-// BractJS emits the <link> during SSR, so the page is styled on first paint.
-import "./about.css";
+// Route-scoped CSS Module: only this route imports it, so the build extracts it
+// into THIS route's CSS bundle ("/" never downloads it), and the server renders
+// the same scoped class names as the browser.
+import styles from "./about.module.css";
 
 export function meta() {
   return [
@@ -26,8 +39,9 @@ export function headers(): HeadersInit {
   return { "Cache-Control": "public, max-age=3600" };
 }
 
-const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
+const FEATURES: Array<{ icon: LucideIcon; title: string; body: React.ReactNode }> = [
   {
+    icon: FolderTree,
     title: "File-based routing",
     body: (
       <>
@@ -37,6 +51,7 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     ),
   },
   {
+    icon: Repeat,
     title: "Loaders & actions",
     body: (
       <>
@@ -46,24 +61,28 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     ),
   },
   {
+    icon: Database,
     title: "Server-only data",
     body: (
       <>
         The <code>bun:sqlite</code> store lives in <code>todos.server.ts</code>. The <code>.server.ts</code>{" "}
-        suffix makes importing it from client code a hard build error.
+        suffix keeps it on the server: client bundles get an inert stub instead of the module.
       </>
     ),
   },
   {
+    icon: ShieldCheck,
     title: "Validation",
     body: (
       <>
-        The add/rename forms run through BractJS's <code>validate()</code> helper, which accepts any{" "}
-        <code>.safeParse()</code> schema (here a tiny dependency-free one; swap in Zod for real apps).
+        The add and rename forms run through <code>safeValidate()</code>, which accepts any{" "}
+        <code>.safeParse()</code> schema (here a tiny dependency-free one; swap in Zod for real apps) and
+        returns the first error for the toast.
       </>
     ),
   },
   {
+    icon: SearchX,
     title: "404 via HttpError",
     body: (
       <>
@@ -73,6 +92,7 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     ),
   },
   {
+    icon: Braces,
     title: "Typed API routes",
     body: (
       <>
@@ -83,6 +103,7 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     ),
   },
   {
+    icon: Clock,
     title: "Response headers",
     body: (
       <>
@@ -92,6 +113,18 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
     ),
   },
   {
+    icon: Palette,
+    title: "Styling",
+    body: (
+      <>
+        <code>app/styles.css</code> is Tailwind v4 (<code>tailwind: true</code> in the config), and this page
+        adds a CSS Module. BractJS extracts both to hashed files and links them during SSR, so nothing flashes
+        unstyled.
+      </>
+    ),
+  },
+  {
+    icon: Package,
     title: "Single-binary deploy",
     body: (
       <>
@@ -104,35 +137,34 @@ const FEATURES: Array<{ title: string; body: React.ReactNode }> = [
 
 export default function About() {
   return (
-    <main style={{ display: "grid", gap: "1rem" }}>
-      <p style={{ margin: 0 }}>
-        <Link
-          to="/"
-          prefetch="hover"
-          style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}
-        >
-          ← Back to the board
-        </Link>
-      </p>
+    <main className="grid gap-6">
+      <Link
+        to="/"
+        prefetch="hover"
+        className="inline-flex items-center gap-1.5 justify-self-start text-sm font-semibold text-teal hover:text-ink"
+      >
+        <ArrowLeft aria-hidden size={16} strokeWidth={2.5} />
+        Board
+      </Link>
 
-      <section style={card}>
-        <h1 style={{ margin: "0 0 .5rem", fontSize: "clamp(1.5rem, 3vw, 2rem)" }}>About this demo</h1>
-        <p style={{ margin: 0, color: "var(--muted)" }}>
-          A small tour of the BractJS features this todo app exercises.
-        </p>
-      </section>
+      <header className="grid gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">About this demo</h1>
+        <p className="text-muted">The BractJS features this todo app uses, and where to find them.</p>
+      </header>
 
-      <section style={{ ...card, display: "grid", gap: ".9rem" }}>
-        {FEATURES.map((f, i) => (
-          <div key={f.title}>
-            <h2 className="about-feature-title">
-              <span className="about-badge">{i + 1}</span>
-              {f.title}
-            </h2>
-            <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.5 }}>{f.body}</p>
-          </div>
+      <ul className={`${panel} divide-y divide-line`}>
+        {FEATURES.map(({ icon: Icon, title, body }) => (
+          <li key={title} className={`${styles.feature} flex gap-4 p-5`}>
+            <span className={styles.icon}>
+              <Icon aria-hidden size={18} strokeWidth={2.25} />
+            </span>
+            <div className="grid gap-1">
+              <h2 className="font-bold">{title}</h2>
+              <p className="leading-relaxed text-muted">{body}</p>
+            </div>
+          </li>
         ))}
-      </section>
+      </ul>
     </main>
   );
 }

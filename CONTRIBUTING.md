@@ -25,6 +25,7 @@ pnpm install        # installs the whole workspace and links examples to package
 packages/core/      # the @bractjs/bractjs framework (src, bin, types, templates) — the only published package
 examples/todo/      # demo apps; workspace packages, dep "@bractjs/bractjs": "workspace:*"
 examples/cms/
+e2e/                # browser end-to-end tests (Playwright) against examples/todo
 app/                # the framework's default app-dir stub (app/root.tsx)
 ```
 
@@ -34,6 +35,7 @@ Run from the repo root:
 
 ```sh
 pnpm test                                   # run the core test suite (bun test, via --filter)
+pnpm e2e                                    # browser end-to-end tests (needs Google Chrome installed)
 pnpm --filter @bractjs/bractjs typecheck    # tsc --noEmit on the framework
 pnpm --filter @bractjs/bractjs build        # bundle the framework
 ```
@@ -60,6 +62,24 @@ the single-binary path and must keep passing:
 `packages/core/src/__tests__/compile-smoke.test.ts` (compiles and boots a real
 binary). See the contributor note in the README's single-binary section for the
 constraints these enforce.
+
+`pnpm e2e` runs the Playwright suite in `e2e/` against a production build of
+`examples/todo` (`pnpm build && pnpm start` on port 3000) in your installed
+Google Chrome — no browser download. It covers what unit tests can't see:
+hydration, soft navigation, forms, error pages and styles. Every test fails on
+a browser console error. Locally it reuses a todo server already running on
+:3000, so stop `pnpm dev` there first if you want the production build tested.
+
+## The `bun-plugin-tailwind>bun` override
+
+`bun-plugin-tailwind` declares the npm `bun` package as a peer dependency, and
+pnpm auto-installs peers — which put a second, older Bun (`bun@1.3.14`) into
+each Tailwind example's `node_modules/.bin`. `pnpm dev` / `build` / `start` then
+ran the examples on that Bun instead of the pinned one. The root
+`pnpm.overrides` entry `"bun-plugin-tailwind>bun": "-"` removes it; the plugin
+only needs the Bun it's running in. If an example ever reports the wrong
+version (`cd examples/cms && pnpm exec bun --version`), delete `node_modules`
+and reinstall — pnpm doesn't prune an existing `.bin/bun` link.
 
 ## TypeScript versions (why there are two)
 

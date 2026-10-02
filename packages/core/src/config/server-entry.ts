@@ -1,13 +1,27 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { seedGeneratedIfMissing } from "../codegen/seed.ts";
+import { installCssModulesRuntime } from "../server/css-modules-runtime.ts";
 import type { LifecycleHooks } from "../server/lifecycle.ts";
 import { setCreateServerSuppressed } from "../server/serve.ts";
+import { installUseClientServerStub } from "../server/use-client-runtime.ts";
 
 // Deliberately NOT in src/server/: this module does a variable `import()` of a
 // user file, which the compile-safety scan forbids on the compiled-binary
 // graph. It is only ever imported by bin/cli.ts and src/dev/server.ts — never
 // by app/server.ts (the binary entry) — so it stays out of that graph.
+
+/**
+ * The runtime plugins source-imported app code needs on the server (CSS
+ * Module class maps, `"use client"` stubs). They only apply to modules loaded
+ * AFTER registration, and server.ts / lifecycle.ts import route modules
+ * transitively — so install them before either is imported. createServer()
+ * installs them too, as a backstop for programmatic callers.
+ */
+function installSourceImportRuntime(appDir: string): void {
+  installCssModulesRuntime();
+  installUseClientServerStub(appDir);
+}
 
 export interface ServerEntryResult {
   /** True when `<appDir>/server.ts` existed and evaluated without throwing. */
@@ -28,6 +42,7 @@ export interface ServerEntryResult {
 export async function loadServerEntry(appDir: string): Promise<ServerEntryResult> {
   const entryPath = resolve(process.cwd(), appDir, "server.ts");
   if (!existsSync(entryPath)) return { loaded: false };
+  installSourceImportRuntime(appDir);
 
   // server.ts statically imports `_generated/*`; on a fresh clone those
   // gitignored files don't exist yet and the import would throw.
@@ -58,6 +73,7 @@ export async function loadServerEntry(appDir: string): Promise<ServerEntryResult
 export async function loadLifecycleModule(appDir: string): Promise<LifecycleHooks> {
   const lifecyclePath = resolve(process.cwd(), appDir, "lifecycle.ts");
   if (!existsSync(lifecyclePath)) return {};
+  installSourceImportRuntime(appDir);
   try {
     const mod = (await import(lifecyclePath)) as { default?: LifecycleHooks };
     return mod.default ?? {};

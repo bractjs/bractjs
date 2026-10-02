@@ -3,12 +3,13 @@
   "version": "0.6.0",
   "private": true,
   "packageManager": "pnpm@9.15.9",
-  "description": "BractJS monorepo — pnpm workspace for the @bractjs/bractjs framework and example apps.",
+  "description": "BractJS monorepo \u2014 pnpm workspace for the @bractjs/bractjs framework and example apps.",
   "license": "MIT",
   "scripts": {
     "dev": "bun run packages/core/src/dev/server.ts",
     "build": "pnpm --filter @bractjs/bractjs build",
     "test": "pnpm --filter @bractjs/bractjs test",
+    "e2e": "pnpm --filter @bractjs/e2e test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -35,7 +36,8 @@
   "pnpm": {
     "overrides": {
       "react": "19.2.6",
-      "react-dom": "19.2.6"
+      "react-dom": "19.2.6",
+      "bun-plugin-tailwind>bun": "-"
     }
   }
 }

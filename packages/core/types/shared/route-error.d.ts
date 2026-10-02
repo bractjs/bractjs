@@ -4,6 +4,27 @@ type ErrorBoundaryComponent = ComponentType<{
 }>;
 /** The error a failed route loader left in its slot, or null. */
 export declare function routeLoaderError(slot: unknown): Error | null;
+/** Where the outermost failed loader sits, and its error. */
+export type LoaderFailure = {
+    scope: "root";
+    error: Error;
+} | {
+    scope: "layout";
+    index: number;
+    error: Error;
+} | {
+    scope: "route";
+    error: Error;
+};
+/**
+ * The outermost loader slot that failed — root, then layouts (outermost
+ * first), then the route — or null when every loader succeeded.
+ */
+export declare function firstLoaderFailure(loaderData: {
+    root?: unknown;
+    layouts?: readonly unknown[];
+    route?: unknown;
+} | null | undefined): LoaderFailure | null;
 /** The HTTP status a route-loader error should produce. */
 export declare function routeErrorStatus(error: Error): number;
 /**
@@ -14,8 +35,19 @@ export declare function routeErrorStatus(error: Error): number;
 export declare function RouteErrorFallback({ error }: {
     error: unknown;
 }): ReactElement;
-/** Nearest ErrorBoundary: the route's, else root's, else the built-in fallback. */
-export declare function pickErrorBoundary(route: ErrorBoundaryComponent | undefined, root: ErrorBoundaryComponent | undefined): ErrorBoundaryComponent;
+/**
+ * Nearest ErrorBoundary, innermost first: the failed module's own, then each
+ * enclosing layout's (innermost first), then root's — else the built-in fallback.
+ */
+export declare function pickErrorBoundary(...candidates: Array<ErrorBoundaryComponent | undefined>): ErrorBoundaryComponent;
+/**
+ * The ErrorBoundary for a failure at `failedIndex` in `layouts` (or at the
+ * route when `failedIndex === layouts.length`): the failed module's own
+ * boundary, then enclosing layouts' innermost first, then root's.
+ */
+export declare function pickBoundaryForFailure(own: ErrorBoundaryComponent | undefined, layouts: ReadonlyArray<{
+    ErrorBoundary?: unknown;
+} | null | undefined>, failedIndex: number, root: ErrorBoundaryComponent | undefined): ErrorBoundaryComponent;
 /** The error the nearest rendering ErrorBoundary is showing (null outside one). */
 export declare const RouteErrorContext: import("react").Context<unknown>;
 /**

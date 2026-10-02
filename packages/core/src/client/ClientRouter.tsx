@@ -164,9 +164,13 @@ export function ClientRouter({
     }
   }, []);
 
-  /** Load route data + module without touching history. */
+  /**
+   * Load route data + module without touching history. Resolves `false` when
+   * it handed the navigation to the browser instead (a document load), so the
+   * caller must not push a history entry for it.
+   */
   const loadRoute = useCallback(
-    async (to: string, locInit?: LocationInit) => {
+    async (to: string, locInit?: LocationInit): Promise<false | void> => {
       setNavState("loading");
       setNavDetail((prev) => ({ ...prev, location: toLocation(to, locInit) }));
       // Follow a redirect Location from client-side beforeLoad. Same-origin
@@ -277,7 +281,16 @@ export function ClientRouter({
           if (!allowRefetch) return;
           // Revalidate in background.
           void fetch(`/_data?path=${encodeURIComponent(dataPath)}`)
-            .then((r) => (r.ok ? r.json() : null))
+            .then((r) => {
+              if (r.ok) return r.json();
+              // The page no longer loads (e.g. a root loader now fails): drop
+              // the stale entry and let the server render it, if still here.
+              loaderCache.delete(key);
+              if (window.location.pathname + window.location.search === dataPath) {
+                window.location.assign(dataPath);
+              }
+              return null;
+            })
             .then((fresh) => {
               if (!fresh) return;
               const freshData = reviveDeferred(fresh as Record<string, unknown>);
@@ -292,10 +305,14 @@ export function ClientRouter({
         // Guard: always parse JSON, but only when the server signals success.
         // Without res.ok check, a Bun 500 plain-text response causes
         // SyntaxError: JSON.parse: unexpected character — an unhandled rejection.
+        // Layout and route loader errors arrive as a 200 with the error in
+        // their slot. Anything else (a failed root loader, an unmatched path, a
+        // search-validation 400, a 5xx) has no client-side rendering: hand the
+        // navigation to the browser so the server renders the real response.
         if (!res.ok) {
           console.error(`[bractjs] /_data ${res.status} for ${to}`);
-          setNavState("idle");
-          return;
+          window.location.assign(to);
+          return false;
         }
         const data = reviveDeferred((await res.json()) as Record<string, unknown>);
 
@@ -366,11 +383,12 @@ export function ClientRouter({
           return;
         }
       }
-      await loadRoute(to, {
+      const loaded = await loadRoute(to, {
         key,
         state: options?.state ?? null,
         defaultShouldRevalidate: options?.defaultShouldRevalidate,
       });
+      if (loaded === false) return;
       const entry = { __bractKey: key, __bractState: options?.state ?? null };
       if (options?.replace) history.replaceState(entry, "", to);
       else history.pushState(entry, "", to);
@@ -415,7 +433,9 @@ export function ClientRouter({
       try {
         const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
         if (!res.ok) {
+          // The current page no longer renders client-side (see loadRoute).
           console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
+          window.location.assign(path);
           return;
         }
         const data = reviveDeferred((await res.json()) as Record<string, unknown>);

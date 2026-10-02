@@ -43,6 +43,11 @@ export function watchApp(
 
     const ext = path.extname(filename);
     if (!WATCHED_EXTENSIONS.has(ext)) return;
+    // Hidden files are editor/tool temporaries (sed -i's `.!1234!x.tsx`, vim's
+    // `.x.tsx.swp`), never app modules. They arrive in the same burst as the
+    // real file, and since a burst reports its LAST file, one would otherwise
+    // be reported in place of the file actually edited.
+    if (path.basename(filename).startsWith(".")) return;
 
     pendingFile = filename;
     lastEvent = eventType === "rename" ? "rename" : "change";

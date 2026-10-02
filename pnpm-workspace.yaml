@@ -2,3 +2,4 @@ packages:
   - "packages/*"
   - "examples/*"
   - "bench/apps/bractjs"
+  - "e2e"

@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ComponentType, type ReactNode } from "react";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 export interface ServerManifest {
     clientEntry: string;
@@ -60,3 +60,21 @@ export interface RenderOptions {
     streamTimeout?: number;
 }
 export declare function renderRoute(options: RenderOptions): Promise<Response>;
+export interface RootErrorDocumentOptions {
+    /** root.tsx's ErrorBoundary, else the built-in fallback. */
+    Boundary: ComponentType<{
+        error: unknown;
+    }>;
+    error: Error;
+    params: Record<string, string>;
+    manifest: ServerManifest;
+    nonce?: string;
+    status: number;
+}
+/**
+ * The document for a failed root loader. root.tsx renders `<html>` itself and
+ * needs its loader data to do so, so the framework owns this document: the
+ * app-wide stylesheets plus root's ErrorBoundary. No client scripts — there is
+ * no app to hydrate, and links on the page are plain document navigations.
+ */
+export declare function renderRootErrorDocument(options: RootErrorDocumentOptions): Promise<Response>;
