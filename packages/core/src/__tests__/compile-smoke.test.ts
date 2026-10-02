@@ -24,8 +24,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { runBuild } from "../build/bundler.ts";
-import { writeManifestModule, writeModuleRegistries } from "../codegen/module-registry.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../..");
 // Inside the repo tree so the app's `@bractjs/bractjs` import resolves to the
@@ -34,6 +32,8 @@ const REPO_ROOT = resolve(import.meta.dir, "../..");
 const TMP = resolve(import.meta.dir, `.tmp-compile-${Date.now()}`);
 const APP = join(TMP, "app");
 const BIN = join(TMP, "bin", "app");
+const ELSEWHERE = join(TMP, "elsewhere");
+const CLI = join(REPO_ROOT, "bin", "cli.ts");
 const PORT = 3987;
 
 let serverProc: Bun.Subprocess | null = null;
@@ -155,6 +155,19 @@ createServer({
   );
 
   await mkdir(join(TMP, "public"), { recursive: true });
+  await writeFile(join(TMP, "public", "robots.txt"), "User-agent: *\nAllow: /\n");
+  // Prerendered at compile time; its loader stamp proves the page came from
+  // the embedded _prerender output rather than a fresh render.
+  await writeFile(
+    join(APP, "routes", "static-page.tsx"),
+    `export function loader() { return { stamp: "prerendered-" + Date.now() }; }\n` +
+      `import { useLoaderData } from "@bractjs/bractjs";\n` +
+      `export default function StaticPage() {\n` +
+      `  const { stamp } = useLoaderData<typeof loader>();\n` +
+      `  return <p id="stamp">{stamp}</p>;\n` +
+      `}\n`,
+  );
+  await writeFile(join(TMP, "bractjs.config.ts"), `export default { prerender: ["/static-page"] };\n`);
 }
 
 // `stdout`/`stderr` are typed as `number | ReadableStream` on a Bun
@@ -188,34 +201,27 @@ beforeAll(async () => {
   // `build/` paths, matching how the CLI runs).
   process.chdir(TMP);
   try {
-    // A) static registries for routes + actions
-    await writeModuleRegistries(resolve(TMP, "app"));
-    // B) client + server bundle (writes build/client + route-manifest.json)
-    await runBuild({ appDir: "./app", buildDir: "./build" });
-    // C) snapshot manifest → app/_generated/manifest.ts
-    await writeManifestModule(resolve(TMP, "app"), resolve(TMP, "build"));
-
-    // D) bun build --compile (mirror bin/cli.ts: dev NODE_ENV avoids the React
-    // TSX jsxDEV miscompile; --compile-autoload-tsconfig keeps JSX settings).
-    const compile = Bun.spawn(
-      ["bun", "build", "--compile", "--compile-autoload-tsconfig", "app/server.ts", "--outfile", BIN],
-      {
-        cwd: TMP,
-        env: { ...process.env, NODE_ENV: "development" },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
+    // The real pipeline, through the CLI: registries → client build →
+    // prerender (bractjs.config.ts) → manifest → bun build --compile with
+    // build/client and public/ embedded.
+    const compile = Bun.spawn(["bun", CLI, "compile", BIN, "app/server.ts"], {
+      cwd: TMP,
+      env: { ...process.env, NODE_ENV: "production" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const code = await compile.exited;
     if (code !== 0) {
-      const err = await readStream(compile.stderr);
-      throw new Error(`bun build --compile failed (${code}):\n${err}`);
+      const err = (await readStream(compile.stdout)) + (await readStream(compile.stderr));
+      throw new Error(`bractjs compile failed (${code}):\n${err}`);
     }
 
-    // Boot the binary (NODE_ENV=production so dev gates stay off — the real
-    // single-binary deployment mode).
+    // Boot the binary from an EMPTY directory (NODE_ENV=production so dev
+    // gates stay off): no build/, no public/, no app/ — everything it serves
+    // must come from inside the executable.
+    await mkdir(ELSEWHERE, { recursive: true });
     serverProc = Bun.spawn([BIN], {
-      cwd: TMP,
+      cwd: ELSEWHERE,
       env: { ...process.env, NODE_ENV: "production", PORT: String(PORT) },
       stdout: "ignore",
       stderr: "pipe",
@@ -241,6 +247,30 @@ afterAll(async () => {
 });
 
 describe.skipIf(!compileAvailable)("bun build --compile single-binary", () => {
+  test("serves its client build and public files from inside the executable", async () => {
+    const html = await (await fetch(`http://localhost:${PORT}/`)).text();
+    const js = html.match(/src="(\/build\/client\/[^"]+\.js)"/)?.[1];
+    expect(js).toBeDefined();
+    const jsRes = await fetch(`http://localhost:${PORT}${js}`);
+    expect(jsRes.status).toBe(200);
+    expect(jsRes.headers.get("content-type")).toContain("javascript");
+    const css = html.match(/href="(\/build\/client\/[^"]+\.css)"/)?.[1];
+    expect(css).toBeDefined();
+    expect((await fetch(`http://localhost:${PORT}${css}`)).status).toBe(200);
+    const robots = await fetch(`http://localhost:${PORT}/public/robots.txt`);
+    expect(robots.status).toBe(200);
+    expect(await robots.text()).toContain("User-agent");
+  });
+
+  test("serves prerendered pages from inside the executable", async () => {
+    const first = await (await fetch(`http://localhost:${PORT}/static-page`)).text();
+    const stamp = first.match(/<p id="stamp">(prerendered-\d+)<\/p>/)?.[1];
+    expect(stamp).toBeDefined();
+    // The same stamp again: a file, not a fresh render (which would re-stamp).
+    await Bun.sleep(5);
+    expect(await (await fetch(`http://localhost:${PORT}/static-page`)).text()).toContain(stamp!);
+  });
+
   test("CSS Module class names match the client bundle's", async () => {
     const html = await (await fetch(`http://localhost:${PORT}/`)).text();
     const cls = html.match(/<main class="([^"]+)">index<\/main>/)?.[1];

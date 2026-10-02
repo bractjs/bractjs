@@ -54,7 +54,8 @@ export function routeCssHrefs(
   manifest: Pick<ServerManifest, "routes">,
   pattern: string | null | undefined,
 ): string[] {
-  if (!pattern) return [];
+  // `""` is a real key — the index route's — so test for absence, not falsiness.
+  if (pattern === null || pattern === undefined) return [];
   return dedupe(manifest.routes?.[pattern]?.css ?? []);
 }
 

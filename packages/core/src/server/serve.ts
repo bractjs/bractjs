@@ -18,6 +18,7 @@ import { type HandlerConfig, handleRequest } from "./request-handler.ts";
 import { error } from "./response.ts";
 import { type RouteFile, scanRoutes } from "./scanner.ts";
 import { renderSpaShell } from "./spa.ts";
+import { embeddedFile } from "./embedded.ts";
 import { serveStatic } from "./static.ts";
 import { installCssModulesRuntime } from "./css-modules-runtime.ts";
 import { installUseClientServerStub } from "./use-client-runtime.ts";
@@ -240,7 +241,10 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   let spaShellCache: { key: string; html: string } | null = null;
   async function getSpaShell(manifest: ServerManifest): Promise<string> {
     if (!isDevRuntime()) {
-      const file = Bun.file(join(buildDir, "client", "__spa.html"));
+      const shellPath = join(buildDir, "client", "__spa.html");
+      const embedded = embeddedFile(join(buildDir, "client"), "__spa.html");
+      if (embedded) return embedded.text();
+      const file = Bun.file(shellPath);
       if (await file.exists()) return file.text();
       const key = manifest.clientEntry;
       if (spaShellCache?.key === key) return spaShellCache.html;
@@ -251,10 +255,14 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     return renderSpaShell(appDir, manifest, moduleRegistry);
   }
 
-  /** Prerendered file for a clean (query-free, dot-free) document path, or null. */
-  function prerenderFile(relHtmlOrJson: string): ReturnType<typeof Bun.file> | null {
+  /** Prerendered file for a clean (query-free, dot-free) document path — embedded in a binary, or on disk — or null. */
+  async function prerenderFile(relHtmlOrJson: string): Promise<Blob | null> {
     if (relHtmlOrJson.split("/").some((s) => s === ".." || s === ".")) return null;
-    return Bun.file(join(buildDir, "client", "_prerender", relHtmlOrJson));
+    const path = join(buildDir, "client", "_prerender", relHtmlOrJson);
+    const embedded = embeddedFile(join(buildDir, "client"), `_prerender/${relHtmlOrJson}`);
+    if (embedded) return embedded;
+    const file = Bun.file(path);
+    return (await file.exists()) ? file : null;
   }
 
   // The full per-request dispatch: special endpoints (API, actions, stream,
@@ -355,8 +363,8 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
         const [targetPathname, targetSearch] = target.split("?");
         if (!targetSearch) {
           const rel = targetPathname === "/" ? "_data.json" : targetPathname.slice(1) + "/_data.json";
-          const f = prerenderFile(rel);
-          if (f && (await f.exists())) {
+          const f = await prerenderFile(rel);
+          if (f) {
             return new Response(f, {
               headers: {
                 "Content-Type": "application/json",
@@ -367,8 +375,8 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
         }
       } else if (!url.search) {
         const rel = pathname === "/" ? "index.html" : pathname.slice(1) + "/index.html";
-        const f = prerenderFile(rel);
-        if (f && (await f.exists())) {
+        const f = await prerenderFile(rel);
+        if (f) {
           return new Response(f, {
             headers: {
               "Content-Type": "text/html; charset=utf-8",
@@ -517,7 +525,9 @@ export function createServer(config?: Partial<BractJSConfig>): {
   // An explicit `port` wins; otherwise the platform's PORT, then 3000.
   const port = parsePort(config?.port, "the `port` option") ?? envPort() ?? 3000;
 
-  if (!isDevRuntime()) {
+  // A compiled binary carries its manifest (and usually its client build), so
+  // there's no build/ directory to check.
+  if (!isDevRuntime() && !config?.manifest) {
     void warnIfStaleBuild(resolve(config?.buildDir ?? "./build"));
   }
 

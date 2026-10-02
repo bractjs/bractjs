@@ -116,14 +116,12 @@ RUN bun run compile ./server
 FROM gcr.io/distroless/cc-debian12
 WORKDIR /app
 COPY --from=build /app/server ./server
-COPY --from=build /app/build/client ./build/client
-COPY --from=build /app/public ./public
 ENV NODE_ENV=production PORT=3000
 EXPOSE 3000
 CMD ["./server"]
 ```
 
 - The binary listens on `PORT`, which Fly, Render, Railway and Kubernetes set. Point their health check at `/healthz`.
-- `build/client` and `public/` ship next to the binary (see [Deployment](deployment.md) for embedding them).
+- The client build and `public/` are embedded in the binary, so the image needs nothing else.
 - On Fly.io, `fly launch` detects the Dockerfile. Set `internal_port = 3000` and add an `[[http_service.checks]]` entry for `GET /healthz`.
 - Behind Fly's or any platform's proxy, the socket address is the proxy's: set `TRUST_PROXY=1` and pass `trustProxy` to `rateLimit` / `getClientAddress`.

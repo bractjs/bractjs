@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { embeddedFile } from "./embedded.ts";
 import { join, resolve, sep } from "node:path";
 import { isDevRuntime } from "./env.ts";
 
@@ -77,6 +78,13 @@ export async function serveStatic(
   if (pathname.startsWith("/build/client/")) {
     const rel = pathname.slice("/build/client/".length);
     const root = resolve(join(buildDir, "client"));
+    // Compiled binary: the client build travels inside the executable.
+    const embedded = embeddedFile(root, rel);
+    if (embedded) {
+      return new Response(embedded, {
+        headers: { "Cache-Control": clientAssetCacheControl(), "X-Content-Type-Options": NOSNIFF },
+      });
+    }
     const full = await safeRealpath(root, rel);
     if (!full) return null;
     const file = Bun.file(full);
@@ -89,6 +97,12 @@ export async function serveStatic(
   if (pathname.startsWith("/public/")) {
     const rel = pathname.slice("/public/".length);
     const root = resolve(publicDir);
+    const embedded = embeddedFile(root, rel);
+    if (embedded) {
+      return new Response(embedded, {
+        headers: { "Cache-Control": NO_CACHE, "X-Content-Type-Options": NOSNIFF },
+      });
+    }
     const full = await safeRealpath(root, rel);
     if (!full) return null;
     const file = Bun.file(full);
