@@ -3,7 +3,13 @@
 // A static route. Because match priority is static > dynamic, "/about" wins
 // over the "/:id" dynamic route. No loader needed — it's a plain page.
 
-import { Link } from "@bractjs/bractjs";
+import {
+  type ClientLoaderFunctionArgs,
+  type ClientMiddlewareFunction,
+  createContext,
+  Link,
+  useLoaderData,
+} from "@bractjs/bractjs";
 import {
   ArrowLeft,
   Braces,
@@ -135,7 +141,25 @@ const FEATURES: Array<{ icon: LucideIcon; title: string; body: React.ReactNode }
   },
 ];
 
+// Client middleware + client loader (React Router 8): when you navigate here
+// in the browser, the middleware puts the navigation's start time on the
+// shared context and the client loader reads it back. A full page load runs
+// neither (no `clientLoader.hydrate`), so the note only appears after a click.
+const navigationStart = createContext<number>(0);
+
+export const clientMiddleware: ClientMiddlewareFunction[] = [
+  async ({ context }, next) => {
+    context.set(navigationStart, performance.now());
+    await next();
+  },
+];
+
+export async function clientLoader({ context }: ClientLoaderFunctionArgs) {
+  return { loadedInMs: Math.round(performance.now() - context.get(navigationStart)) };
+}
+
 export default function About() {
+  const clientData = useLoaderData<typeof clientLoader>();
   return (
     <main className="grid gap-6">
       <Link
@@ -150,6 +174,11 @@ export default function About() {
       <header className="grid gap-1">
         <h1 className="text-3xl font-bold tracking-tight">About this demo</h1>
         <p className="text-muted">The BractJS features this todo app uses, and where to find them.</p>
+        {clientData?.loadedInMs !== undefined ? (
+          <p className="text-sm text-muted" data-testid="client-loaded">
+            Loaded in the browser in {clientData.loadedInMs} ms (clientMiddleware + clientLoader).
+          </p>
+        ) : null}
       </header>
 
       <ul className={`${panel} divide-y divide-line`}>

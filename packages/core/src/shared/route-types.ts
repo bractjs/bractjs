@@ -1,5 +1,5 @@
 import type { DataWithResponseInit } from "./data.ts";
-import type { RouteContext } from "./router-context.ts";
+import type { RouteContext, RouterContextProvider } from "./router-context.ts";
 
 /**
  * A parsed navigation location. `key` is the stable identity of the history
@@ -222,6 +222,8 @@ export interface ClientLoaderFunction<T = unknown> {
     request: Request;
     params: Record<string, string>;
     search: Record<string, unknown>;
+    /** Per-navigation context, shared with `clientMiddleware` (`context.get(key)`). */
+    context: RouterContextProvider;
     /** Fetch this route's server loader data (the `/_data` route slice). */
     serverLoader: () => Promise<unknown>;
   }): Promise<T> | T;
@@ -239,9 +241,24 @@ export type ClientActionFunction<T = unknown> = (args: {
   request: Request;
   params: Record<string, string>;
   formData: FormData;
+  /** Per-submission context, shared with `clientMiddleware`. */
+  context: RouterContextProvider;
   /** Invoke this route's server action and get its returned data. */
   serverAction: () => Promise<unknown>;
 }) => Promise<T> | T;
+
+/**
+ * Browser-side middleware (React Router 8 `clientMiddleware`): runs root →
+ * layouts → route around the client data work of a navigation, revalidation,
+ * submission or fetcher call — the `/_data` fetch plus `clientLoader`s, or the
+ * `clientAction` / server submit. Use it for client-side auth checks, timing,
+ * or putting values on `context` for client loaders. `next()` runs the rest;
+ * `throw redirect("/login")` navigates there instead.
+ */
+export type ClientMiddlewareFunction = (
+  args: { request: Request; params: Record<string, string>; context: RouterContextProvider },
+  next: () => Promise<unknown>,
+) => Promise<unknown> | unknown;
 
 /**
  * Props every route component receives (React Router 7 `Route.ComponentProps`):
@@ -270,6 +287,8 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
   clientLoader?: ClientLoaderFunction<TLoader>;
   /** Browser-side action; see {@link ClientActionFunction}. */
   clientAction?: ClientActionFunction<TAction>;
+  /** Browser-side middleware (React Router 8) — see {@link ClientMiddlewareFunction}. */
+  clientMiddleware?: ClientMiddlewareFunction[];
   meta?: MetaFunction<TLoader>;
   /** `<link>` tags for this route (React Router `links`), hoisted into `<head>`. */
   links?: LinksFunction;
@@ -320,6 +339,13 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
   clientLoaderHydrate?: boolean;
   handle?: Record<string, unknown>;
   ErrorBoundary?: React.ComponentType<{ error: unknown }>;
+  /**
+   * root.tsx only (React Router's root `Layout`): the document shell —
+   * `<html>`, `<head>`, `<body>` — wrapping whatever renders inside it: the
+   * root component normally, or root's `ErrorBoundary` when the root loader
+   * fails. Without it, root's default export renders the document itself.
+   */
+  Layout?: React.ComponentType<{ children?: React.ReactNode }>;
   /** The route component. Receives {@link RouteComponentProps} (optional to declare). */
   default?: React.ComponentType;
 }

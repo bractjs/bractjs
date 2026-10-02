@@ -41,7 +41,7 @@ Delete `vite.config.ts`, `react-router.config.ts`, and (RR7) `app/routes.ts`. Co
 
 | Remix / RR7                                  | BractJS                                                                                                                                                                                 |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/root.tsx` with `Layout` + `App` exports | `app/root.tsx` — one `default` export that returns the whole `<html>` document ([§3](../README.md#3-the-root-layout-approotsx)).                                                        |
+| `app/root.tsx` with `Layout` + `App` exports | Same: `Layout` wraps the `default` export (or root's `ErrorBoundary`), or a single `default` can return the whole document ([§3](../README.md#3-the-root-layout-approotsx)).            |
 | `<Meta />`, `<Links />` in root              | Optional. BractJS puts `meta()` / `links()` output and imported CSS into `<head>` itself; both components render nothing.                                                               |
 | `<Scripts />`, `<ScrollRestoration />`       | Same components, imported from `@bractjs/bractjs`. Add `<LiveReload />` (dev HMR; renders nothing in production).                                                                       |
 | `entry.server.tsx`, `server.js` / Express    | `app/server.ts` (global middleware via `pipeline.use(...)`) plus `app/lifecycle.ts` (`onStart` / `onShutdown` / `onError` / `instrumentations`). `streamTimeout` → `bractjs.config.ts`. |
@@ -92,6 +92,7 @@ Type names: `LoaderFunctionArgs`, `ActionFunctionArgs`, `ClientLoaderFunctionArg
 | `meta({ loaderData, data, params, matches, location })` | Same arguments and descriptors (including `script:ld+json`, `tagName: "link"` and `charSet`). **Difference:** BractJS _merges_ meta root → route (the last `title` / `name` / `property` wins); React Router replaces the whole array. |
 | `links()`                                               | Same. Rendered into `<head>` on SSR and soft navigation. Importing a stylesheet (`import "./route.css"`) still works and is split per route.                                                                                           |
 | `headers()`, `handle`, `shouldRevalidate`               | Same names and roles.                                                                                                                                                                                                                  |
+| `clientMiddleware` / `unstable_clientMiddleware`        | Same: `({ request, params, context }, next)`, root → layouts → route around client loaders/actions; `context` is shared with them.                                                                                                     |
 | `clientLoader`, `clientAction`, `.hydrate = true`       | Same, including `serverLoader()` / `serverAction()`.                                                                                                                                                                                   |
 | `HydrateFallback` + `clientLoader.hydrate = true`       | Same: the fallback is server-rendered, then the client loader runs. (BractJS's own form is `export const ssr = "data-only"` with `Fallback`.)                                                                                          |
 | `middleware` / `unstable_middleware`                    | Same signature (`({ request, params, context }, next)`); returning nothing continues the chain. Runs root → layouts → route. **Scope differs; read [Middleware](#middleware-and-auth).** `clientMiddleware` is not supported.          |
@@ -188,8 +189,7 @@ Plain CSS imports (`import "./styles.css"`) and CSS Modules (`import styles from
 
 As of the current release, these have no clean equivalent. Plan around them:
 
-- **A failed root loader** renders root's `ErrorBoundary` inside a minimal framework document (BractJS has no `Layout` export for root to supply its own), and the page isn't hydrated.
-- **`clientMiddleware`** isn't supported. Use `clientLoader`, or server `middleware`.
+- **A failed root loader's** page isn't hydrated: root's `ErrorBoundary` renders inside `Layout` (or a minimal framework document), with no client scripts.
 - **`meta` merges** root → route instead of the leaf replacing the whole array.
 - **`<Form>` defaults to `post`**, not `get`.
 - **Route middleware doesn't cover `/api` or `"use server"`**: see [Middleware and auth](#middleware-and-auth).
@@ -206,4 +206,4 @@ As of the current release, these have no clean equivalent. Plan around them:
 7. Move `getLoadContext` values into an `app/server.ts` middleware (`ctx.context.set(key, value)`).
 8. Re-check every auth guard against [Middleware and auth](#middleware-and-auth), especially `/api` and `"use server"`.
 9. Convert resource routes to typed `/api` routes or `app/server.ts` middleware.
-10. Run `bractjs dev` and read the boot output: it warns about unregistered `/api` endpoints, miscased route exports, and React Router exports BractJS ignores (such as `clientMiddleware`).
+10. Run `bractjs dev` and read the boot output: it warns about unregistered `/api` endpoints, and miscased route exports.

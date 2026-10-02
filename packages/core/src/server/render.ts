@@ -11,6 +11,7 @@ import {
   routeCssHrefs,
   StyleLinks,
 } from "../shared/style-links.tsx";
+import { BractJSContext, type RouteManifest } from "../shared/context.ts";
 import { RequestIdContext } from "../shared/request-id.ts";
 import { renderErrorBoundary } from "../shared/route-error.ts";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
@@ -192,8 +193,12 @@ function baselineDocumentHeaders(): Headers {
 export interface RootErrorDocumentOptions {
   /** root.tsx's ErrorBoundary, else the built-in fallback. */
   Boundary: ComponentType<{ error: unknown }>;
+  /** root.tsx's `Layout` export: when present, it renders the document around the boundary. */
+  Layout?: ComponentType<{ children?: ReactNode }>;
   error: Error;
   params: Record<string, string>;
+  pathname?: string;
+  search?: string;
   manifest: ServerManifest;
   nonce?: string;
   status: number;
@@ -206,33 +211,59 @@ export interface RootErrorDocumentOptions {
  * no app to hydrate, and links on the page are plain document navigations.
  */
 export async function renderRootErrorDocument(options: RootErrorDocumentOptions): Promise<Response> {
-  const { Boundary, error, params, manifest, status } = options;
+  const { Boundary, Layout, error, params, manifest, status } = options;
   const title = `${status} ${error.message}`.trim();
-  const tree = createElement(
-    CspNonceContext.Provider,
-    { value: options.nonce },
-    createElement(
-      "html",
-      { lang: "en" },
-      createElement(
-        "head",
-        null,
-        createElement("meta", { charSet: "utf-8" }),
-        createElement("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }),
-        createElement("title", null, title),
-        createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
-      ),
-      createElement(
-        "body",
-        null,
-        createElement(
-          RequestIdContext.Provider,
-          { value: getRequestId() },
-          renderErrorBoundary(Boundary, error, { params }),
-        ),
-      ),
-    ),
+  const boundary = createElement(
+    RequestIdContext.Provider,
+    { value: getRequestId() },
+    renderErrorBoundary(Boundary, error, { params }),
   );
+  const document = Layout
+    ? // The app's own document. Hooks inside Layout see an empty route state —
+      // like React Router, Layout must cope with missing loader data here.
+      createElement(
+        BractJSContext.Provider,
+        {
+          value: {
+            loaderData: { root: undefined, layouts: [], route: undefined },
+            actionData: null,
+            params,
+            pathname: options.pathname ?? "/",
+            manifest: manifest as unknown as RouteManifest,
+            location: {
+              pathname: options.pathname ?? "/",
+              search: options.search ?? "",
+              hash: "",
+              state: null,
+              key: "default",
+            },
+            search: {},
+            matches: [],
+          },
+        },
+        createElement(
+          Layout,
+          null,
+          // React hoists <title> and precedence stylesheets into <head>.
+          createElement("title", null, title),
+          createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
+          boundary,
+        ),
+      )
+    : createElement(
+        "html",
+        { lang: "en" },
+        createElement(
+          "head",
+          null,
+          createElement("meta", { charSet: "utf-8" }),
+          createElement("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }),
+          createElement("title", null, title),
+          createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
+        ),
+        createElement("body", null, boundary),
+      );
+  const tree = createElement(CspNonceContext.Provider, { value: options.nonce }, document);
   let renderError: unknown;
   let stream: ReadableStream;
   try {

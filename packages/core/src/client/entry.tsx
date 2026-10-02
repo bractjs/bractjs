@@ -1,4 +1,4 @@
-import { type ComponentType, type ReactElement, useContext } from "react";
+import { type ComponentType, type ReactElement, type ReactNode, useContext } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { ClientRouter, loadLayoutModules } from "./ClientRouter.tsx";
 import { reviveDeferred } from "./deferred-revive.ts";
@@ -65,10 +65,15 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
   //    the server-rendered shell (html, head, body, header, nav, etc.).
   let RootComponent: ComponentType = FallbackApp;
   let rootErrorBoundary: ComponentType<{ error: unknown }> | undefined;
+  // root.tsx's `Layout` (the document shell), wrapping the root component.
+  let RootLayout: ComponentType<{ children?: ReactNode }> | undefined;
+  let rootModule: RouteModuleClient | null = null;
   if (data.manifest.rootChunk) {
     const rootMod = await import(data.manifest.rootChunk);
+    rootModule = rootMod as RouteModuleClient;
     if (rootMod.default) RootComponent = rootMod.default;
     rootErrorBoundary = rootMod.ErrorBoundary;
+    RootLayout = rootMod.Layout;
   }
 
   // The SPA shell is built once for "/" and served for every document path —
@@ -120,8 +125,15 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
       initialModule={initialModule}
       initialLayouts={initialLayouts}
       rootErrorBoundary={rootErrorBoundary}
+      rootModule={rootModule}
     >
-      <RootWithProps Root={RootComponent as ComponentType<Record<string, unknown>>} />
+      {RootLayout ? (
+        <RootLayout>
+          <RootWithProps Root={RootComponent as ComponentType<Record<string, unknown>>} />
+        </RootLayout>
+      ) : (
+        <RootWithProps Root={RootComponent as ComponentType<Record<string, unknown>>} />
+      )}
     </ClientRouter>,
   );
 })();

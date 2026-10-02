@@ -8,6 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  applyClientLoaders,
+  type ClientChain,
+  createClientContext,
+  registerClientChainResolver,
+  runClientMiddleware,
+} from "./client-data.ts";
 import { RequestIdContext } from "../shared/request-id.ts";
 import type { ServerManifest } from "../server/render.ts";
 import { LinkTags } from "../shared/link-tags.tsx";
@@ -59,6 +66,8 @@ interface ClientRouterProps {
   initialLayouts?: Array<RouteModuleClient | null>;
   /** root.tsx's ErrorBoundary export, if any. */
   rootErrorBoundary?: ComponentType<{ error: unknown }>;
+  /** root.tsx's client module (its clientLoader / clientMiddleware run on every navigation). */
+  rootModule?: RouteModuleClient | null;
 }
 
 /** History-entry init carried into loadRoute by navigate/popstate. */
@@ -97,6 +106,7 @@ export function ClientRouter({
   initialModule = null,
   initialLayouts = [],
   rootErrorBoundary,
+  rootModule = null,
 }: ClientRouterProps): ReactElement {
   const [loaderData, setLoaderData] = useState(initialData.loaderData);
   const [actionData, setActionData] = useState<unknown>(initialData.actionData);
@@ -131,6 +141,10 @@ export function ClientRouter({
     paramsRef.current = params;
   }, [params]);
   const currentModuleRef = useRef(currentModule);
+  const currentLayoutsRef = useRef(currentLayouts);
+  useEffect(() => {
+    currentLayoutsRef.current = currentLayouts;
+  }, [currentLayouts]);
   useEffect(() => {
     currentModuleRef.current = currentModule;
   }, [currentModule]);
@@ -214,6 +228,11 @@ export function ClientRouter({
           loadLayoutModules(pattern !== null ? manifest.routes[pattern]?.layouts : undefined),
         ]);
         const view = moduleView(routeModule);
+        // One context per navigation: clientMiddleware, beforeLoad and the
+        // client loaders share it (context.set in middleware → .get in loaders).
+        const chain: ClientChain = { root: rootModule, layouts: layoutModules, route: routeModule };
+        const clientContext = createClientContext();
+        const dataRequest = new Request(new URL(dataPath, window.location.origin));
 
         // Run client-side beforeLoad if exported from the route module.
         if (view && typeof view.beforeLoad === "function") {
@@ -221,7 +240,7 @@ export function ClientRouter({
           try {
             const result = await view.beforeLoad({
               params: {},
-              context: {},
+              context: clientContext,
               location: { pathname: url.pathname, search: url.search },
             });
             if (result instanceof Response) {
@@ -306,40 +325,36 @@ export function ClientRouter({
           return;
         }
 
-        // Cache miss — fetch from server.
-        const res = await fetch(`/_data?path=${encodeURIComponent(dataPath)}`);
-        // Guard: always parse JSON, but only when the server signals success.
-        // Without res.ok check, a Bun 500 plain-text response causes
-        // SyntaxError: JSON.parse: unexpected character — an unhandled rejection.
-        // Layout and route loader errors arrive as a 200 with the error in
-        // their slot. Anything else (a failed root loader, an unmatched path, a
-        // search-validation 400, a 5xx) has no client-side rendering: hand the
-        // navigation to the browser so the server renders the real response.
-        if (!res.ok) {
-          console.error(`[bractjs] /_data ${res.status} for ${to}`);
-          window.location.assign(to);
-          return false;
-        }
-        const data = reviveDeferred((await res.json()) as Record<string, unknown>);
-
-        // clientLoader (RR7-style): when the route exports one, it runs in the
-        // browser and its result replaces the route's loader slice. It receives a
-        // `serverLoader()` that resolves to the freshly-fetched server data, so a
-        // clientLoader can wrap/augment/cache it. Other slices (root/layouts) and
-        // the meta/matches payload are untouched.
-        const clientLoader = view?.clientLoader;
-        if (typeof clientLoader === "function") {
-          try {
-            data.route = await clientLoader({
-              request: new Request(new URL(dataPath, window.location.origin)),
-              params: (data.params as Record<string, string>) ?? {},
-              search: (data.search as Record<string, unknown>) ?? {},
-              serverLoader: () => Promise.resolve(data.route),
+        // Cache miss — fetch from server, inside the chain's clientMiddleware.
+        const data = await runClientMiddleware(
+          chain,
+          { request: dataRequest, params: {}, context: clientContext },
+          async () => {
+            const res = await fetch(`/_data?path=${encodeURIComponent(dataPath)}`);
+            // Layout and route loader errors arrive as a 200 with the error in
+            // their slot. Anything else (a failed root loader, an unmatched
+            // path, a search-validation 400, a 5xx) has no client-side
+            // rendering: hand the navigation to the browser so the server
+            // renders the real response. (Never parse a non-ok body as JSON.)
+            if (!res.ok) {
+              console.error(`[bractjs] /_data ${res.status} for ${to}`);
+              window.location.assign(to);
+              return null;
+            }
+            const payload = reviveDeferred((await res.json()) as Record<string, unknown>);
+            // clientLoader (RR7-style) for root, each layout and the route: each
+            // replaces its own slice, with serverLoader() resolving to the server
+            // data. meta/matches stay as the server sent them.
+            await applyClientLoaders(chain, payload, {
+              request: dataRequest,
+              params: (payload.params as Record<string, string>) ?? {},
+              search: (payload.search as Record<string, unknown>) ?? {},
+              context: clientContext,
             });
-          } catch (err) {
-            console.error("[bractjs] clientLoader error:", err);
-          }
-        }
+            return payload;
+          },
+        );
+        if (!data) return false;
 
         if (staleTime > 0) loaderCache.set(key, data, staleTime, gcTime);
 
@@ -367,13 +382,19 @@ export function ClientRouter({
         }
         commit(data, routeModule);
       } catch (err) {
+        // `throw redirect(...)` from clientMiddleware or a clientLoader.
+        const loc = err instanceof Response ? err.headers.get("Location") : null;
+        if (loc) {
+          followRedirect(loc);
+          return false;
+        }
         console.error("[bractjs] loadRoute error:", err);
       } finally {
         setNavState("idle");
         setNavDetail({});
       }
     },
-    [manifest, applyPayload],
+    [manifest, applyPayload, rootModule],
   );
 
   const navigate = useCallback(
@@ -437,22 +458,50 @@ export function ClientRouter({
       if (info?.formMethod) loaderCache.clear();
       setRevalidationState("loading");
       try {
-        const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
-        if (!res.ok) {
-          // The current page no longer renders client-side (see loadRoute).
-          console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
-          window.location.assign(path);
+        const chain: ClientChain = {
+          root: rootModule,
+          layouts: currentLayoutsRef.current,
+          route: currentModuleRef.current,
+        };
+        const request = new Request(url);
+        const context = createClientContext();
+        const data = await runClientMiddleware(
+          chain,
+          { request, params: paramsRef.current, context },
+          async () => {
+            const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+            if (!res.ok) {
+              // The current page no longer renders client-side (see loadRoute).
+              console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
+              window.location.assign(path);
+              return null;
+            }
+            const payload = reviveDeferred((await res.json()) as Record<string, unknown>);
+            // Client loaders re-run too, so a revalidated page matches a navigation.
+            await applyClientLoaders(chain, payload, {
+              request,
+              params: (payload.params as Record<string, string>) ?? {},
+              search: (payload.search as Record<string, unknown>) ?? {},
+              context,
+            });
+            return payload;
+          },
+        );
+        if (data) startTransition(() => applyPayload(data));
+      } catch (err) {
+        const loc = err instanceof Response ? err.headers.get("Location") : null;
+        if (loc) {
+          const safe = toSamePath(loc);
+          if (safe) void navigateRef.current(safe);
+          else assignExternal(loc);
           return;
         }
-        const data = reviveDeferred((await res.json()) as Record<string, unknown>);
-        startTransition(() => applyPayload(data));
-      } catch (err) {
         console.error("[bractjs] revalidate error:", err);
       } finally {
         setRevalidationState("idle");
       }
     },
-    [applyPayload],
+    [applyPayload, rootModule],
   );
 
   // Let fetchers trigger revalidation without importing this component.
@@ -485,6 +534,7 @@ export function ClientRouter({
           request: new Request(new URL(path, window.location.origin)),
           params: initialData.params,
           search: initialData.search ?? {},
+          context: createClientContext(),
           serverLoader: async () => serverSlice,
         });
         if (cancelled) return;
@@ -520,6 +570,7 @@ export function ClientRouter({
               request: new Request(new URL(path, window.location.origin)),
               params: initialData.params,
               search: initialData.search ?? {},
+              context: createClientContext(),
               serverLoader: async () => serverSlice,
             });
             startTransition(() => {
@@ -628,6 +679,29 @@ export function ClientRouter({
    * mutation, and a redirected response becomes a real navigation — via
    * toSamePath so an attacker-controlled Location can never soft-nav the SPA.
    */
+  /** The client modules (root, layouts, route) for a URL — submissions and fetchers. */
+  const resolveChainFor = useCallback(
+    async (path: string): Promise<{ chain: ClientChain; params: Record<string, string> }> => {
+      const [pathname] = path.split("?");
+      const pattern = matchPatternForPath(pathname, manifest);
+      const entry = pattern !== null ? manifest.routes[pattern] : undefined;
+      const [route, layouts] = await Promise.all([
+        entry?.chunk
+          ? (import(/* @vite-ignore */ entry.chunk) as Promise<RouteModuleClient>).catch(() => null)
+          : null,
+        loadLayoutModules(entry?.layouts),
+      ]);
+      return { chain: { root: rootModule, layouts, route }, params: {} };
+    },
+    [manifest, rootModule],
+  );
+
+  // Fetchers run the target route's client middleware/loaders/actions too.
+  useEffect(() => {
+    registerClientChainResolver(resolveChainFor);
+    return () => registerClientChainResolver(null);
+  }, [resolveChainFor]);
+
   const submit = useCallback(
     async (to: string, opts: RouterSubmitOptions) => {
       const body =
@@ -710,39 +784,40 @@ export function ClientRouter({
 
         // clientAction (RR7-style): if the target route exports one, it runs in
         // the browser and decides whether/how to hit the server via serverAction().
-        const [toPath] = to.split("?");
-        const pattern = matchPatternForPath(toPath, manifest);
-        const chunkUrl = pattern !== null ? manifest.routes[pattern]?.chunk : undefined;
-        let clientAction: import("../shared/route-types.ts").ClientActionFunction | undefined;
-        if (chunkUrl) {
-          try {
-            const mod = moduleView(await import(/* @vite-ignore */ chunkUrl));
-            if (typeof mod?.clientAction === "function") {
-              clientAction = mod.clientAction;
-            }
-          } catch {
-            /* fall back to a plain server submit */
-          }
-        }
+        const { chain } = await resolveChainFor(to);
+        const clientAction = chain.route?.clientAction;
+        const request = new Request(new URL(to, window.location.origin), {
+          method: opts.method.toUpperCase(),
+        });
+        const context = createClientContext();
 
         let data: unknown;
-        if (clientAction) {
-          let calledServer = false;
-          data = await clientAction({
-            request: new Request(new URL(to, window.location.origin), { method: opts.method.toUpperCase() }),
-            params: paramsRef.current,
-            formData: formData ?? new FormData(),
-            serverAction: () => {
-              calledServer = true;
-              return doServerPost();
+        try {
+          data = await runClientMiddleware(
+            chain,
+            { request, params: paramsRef.current, context },
+            async () => {
+              if (typeof clientAction !== "function") return doServerPost();
+              return clientAction({
+                request,
+                params: paramsRef.current,
+                formData: formData ?? new FormData(),
+                context,
+                serverAction: doServerPost,
+              });
             },
-          });
-          // If the clientAction triggered a redirect via serverAction(), stop.
-          if (calledServer && data === REDIRECTED) return;
-        } else {
-          data = await doServerPost();
-          if (data === REDIRECTED) return;
+          );
+        } catch (err) {
+          // `throw redirect(...)` from clientMiddleware or the clientAction.
+          const loc = err instanceof Response ? err.headers.get("Location") : null;
+          if (!loc) throw err;
+          const safe = toSamePath(loc);
+          if (safe) await navigateRef.current(safe);
+          else assignExternal(loc);
+          return;
         }
+        // A redirect from the server action (directly or via serverAction()).
+        if (data === REDIRECTED) return;
 
         setActionData(data);
         setNavState("loading");
@@ -759,7 +834,7 @@ export function ClientRouter({
         setNavDetail({});
       }
     },
-    [revalidate, manifest],
+    [revalidate, resolveChainFor],
   );
 
   return (

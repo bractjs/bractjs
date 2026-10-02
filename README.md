@@ -144,6 +144,40 @@ export default function Root() {
 
 > `<title>`/`<meta>` tags from any route's `meta()` are rendered into `<head>` via React 19 document-metadata hoisting — you do not place them manually.
 
+**Or split the document out with `Layout`** (React Router's root `Layout`). `Layout` owns `<html>`/`<head>`/`<body>` and wraps whatever renders inside it. Normally that is the default export; when the root loader fails, it is root's `ErrorBoundary`. Either way the page keeps the app's document, styles and chrome:
+
+```tsx
+export function Layout({ children }: { children?: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+      </head>
+      <body>
+        <SiteHeader />
+        {children}
+        <Scripts />
+        <LiveReload />
+      </body>
+    </html>
+  );
+}
+
+export default function Root() {
+  return <Outlet />;
+}
+
+export function ErrorBoundary({ error }: { error: unknown }) {
+  return (
+    <h1>{isRouteErrorResponse(error) && error.status === 404 ? "Page not found" : "Something went wrong"}</h1>
+  );
+}
+```
+
+`Layout` renders without loader data when the root loader has failed, so read data defensively there (`useRouteLoaderData("root")` may be `undefined`).
+
+**404s.** A browser request for a URL no route matches gets the app's own page with status 404: root's middleware and loader run, and root's `ErrorBoundary` (or a built-in fallback) renders in the `<Outlet>` with a 404 `HttpError`. Requests that don't ask for HTML (assets, `fetch` calls) get a plain 404.
+
 ---
 
 ## 4. File-based routing
@@ -272,9 +306,11 @@ export const middleware = [
 ];
 
 // 11) clientLoader / clientAction — RR7-style browser-side data. clientLoader
-//     runs on navigation and its result becomes useLoaderData(); call
-//     serverLoader() for this route's server data. Set clientLoader.hydrate =
-//     true to also run on the first hydration of an SSR'd document.
+//     runs on navigation and revalidation (and for fetcher.load) and its
+//     result becomes useLoaderData(); call serverLoader() for this route's
+//     server data. Root and layout modules can export one too (each replaces
+//     its own slice). Set clientLoader.hydrate = true to also run on the first
+//     hydration of an SSR'd document.
 export async function clientLoader({ serverLoader }) {
   const server = await serverLoader(); // the normal /_data route slice
   return { ...server, fetchedAt: Date.now() };
@@ -284,6 +320,17 @@ export async function clientAction({ formData, serverAction }) {
   // optimistic local work, then defer to the server action:
   return serverAction();
 }
+// clientMiddleware (React Router 8) — runs root → layouts → route around the
+// client data work of a navigation, revalidation, submission or fetcher call.
+// Put values on the per-navigation `context` for clientLoader/clientAction to
+// read with context.get(key); `throw redirect("/login")` navigates instead.
+const startedAt = createContext<number>(0); // typed context key
+export const clientMiddleware = [
+  async ({ context }, next) => {
+    context.set(startedAt, performance.now());
+    await next();
+  },
+];
 
 // 12) default — the page component (required for a renderable route).
 export default function BlogPost() {
@@ -1825,7 +1872,6 @@ Known differences:
 
 - `meta` merges root → route instead of the leaf replacing it.
 - `<Form>` defaults to `method="post"`.
-- There's no `clientMiddleware`.
 - Route middleware covers pages and `/_data`, not `/api` or `"use server"` ([§14](#14-middleware)).
 
 ---

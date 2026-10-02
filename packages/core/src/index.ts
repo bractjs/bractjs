@@ -224,6 +224,7 @@ export type {
   ClientActionFunction,
   ClientActionFunctionArgs,
   ClientLoaderFunction,
+  ClientMiddlewareFunction,
   ClientLoaderFunctionArgs,
   ErrorBoundaryProps,
   HeadersArgs,

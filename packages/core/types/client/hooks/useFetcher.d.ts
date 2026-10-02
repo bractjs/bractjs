@@ -77,7 +77,10 @@ export declare function useFetcher(opts?: {
 export declare function useFetcher<T>(opts: {
     stream: true;
 }): StreamFetcherResult<T>;
-/** Load a route's loader data into the fetcher `key`. */
+/**
+ * Load a route's loader data into the fetcher `key` — through the route's
+ * clientMiddleware and clientLoader, as a navigation would.
+ */
 export declare function fetcherLoad(key: string, path: string): Promise<void>;
 /** Run a submission through the fetcher `key` (a GET becomes a load). */
 export declare function fetcherSubmit(key: string, req: FetcherRequest): Promise<void>;

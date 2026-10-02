@@ -47,3 +47,9 @@ export declare function importRouteModule(filePath: string): Promise<RouteModule
  *   codegen rerun.
  */
 export declare function resolveRouteChain(routeFile: RouteFile, appDir: string, registry?: ModuleRegistry): Promise<LayoutChain>;
+/**
+ * The chain for a URL no route matches: root alone, with an empty route
+ * module. Root's middleware, loader and chrome still run, so the 404 page
+ * renders inside the app's own document.
+ */
+export declare function resolveRootChain(appDir: string, registry?: ModuleRegistry): Promise<LayoutChain>;

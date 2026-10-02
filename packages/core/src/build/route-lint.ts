@@ -8,15 +8,13 @@ export const ROUTE_EXPORT_NAMES = [
   "middleware", "beforeLoad", "shouldRevalidate", "searchSchema", "ssr", "Fallback",
   "handle", "ErrorBoundary", "config", "loaderDeps", "context",
   // React Router route exports BractJS reads too.
-  "links", "HydrateFallback", "unstable_middleware",
+  "links", "HydrateFallback", "unstable_middleware", "clientMiddleware", "unstable_clientMiddleware",
 ] as const;
 
 // Remix / React Router route exports BractJS does not read — a ported route
-// keeps compiling but the export silently does nothing. Name → what to do instead.
-const PORTED_EXPORT_ADVICE: Record<string, string> = {
-  clientMiddleware: "BractJS has no client middleware — use `clientLoader`, or server `middleware`.",
-  unstable_clientMiddleware: "BractJS has no client middleware — use `clientLoader`, or server `middleware`.",
-};
+// keeps compiling but the export silently does nothing. Name → what to do
+// instead. (Empty since clientMiddleware landed; kept for the next one.)
+const PORTED_EXPORT_ADVICE: Record<string, string> = {};
 
 const CANONICAL_LOWER = new Map(ROUTE_EXPORT_NAMES.map((n) => [n.toLowerCase(), n]));
 const CANONICAL_SET = new Set<string>(ROUTE_EXPORT_NAMES);

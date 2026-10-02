@@ -65,8 +65,14 @@ export interface RootErrorDocumentOptions {
     Boundary: ComponentType<{
         error: unknown;
     }>;
+    /** root.tsx's `Layout` export: when present, it renders the document around the boundary. */
+    Layout?: ComponentType<{
+        children?: ReactNode;
+    }>;
     error: Error;
     params: Record<string, string>;
+    pathname?: string;
+    search?: string;
     manifest: ServerManifest;
     nonce?: string;
     status: number;

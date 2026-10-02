@@ -109,19 +109,10 @@ describe("extractApiRouteDefs", () => {
 describe("lintRouteModuleSource — Remix / React Router exports", () => {
   test("React Router exports BractJS now reads produce no warnings", () => {
     const w = lintRouteModuleSource(
-      `export default () => null;\nexport const links = () => [];\nexport function HydrateFallback() { return null; }\nexport const unstable_middleware = [];\n`,
+      `export default () => null;\nexport const links = () => [];\nexport function HydrateFallback() { return null; }\nexport const unstable_middleware = [];\nexport const clientMiddleware = [];\n`,
       "routes/ported.tsx",
     );
     expect(w).toEqual([]);
-  });
-
-  test("client middleware is still flagged", () => {
-    const w = lintRouteModuleSource(
-      `export default () => null;\nexport const clientMiddleware = [];\n`,
-      "routes/ported.tsx",
-    );
-    expect(w).toHaveLength(1);
-    expect(w[0]).toContain('export "clientMiddleware" is ignored');
   });
 
   test("native BractJS exports produce no porting warnings", () => {

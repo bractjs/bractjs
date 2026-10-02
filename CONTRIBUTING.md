@@ -68,7 +68,8 @@ constraints these enforce.
 Google Chrome — no browser download. It covers what unit tests can't see:
 hydration, soft navigation, forms, error pages and styles. Every test fails on
 a browser console error. Locally it reuses a todo server already running on
-:3000, so stop `pnpm dev` there first if you want the production build tested.
+:3000, so stop `pnpm dev` there first if you want the production build tested,
+or run on another port with `E2E_PORT=3456 pnpm e2e`.
 
 ## The `bun-plugin-tailwind>bun` override
 

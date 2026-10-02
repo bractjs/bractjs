@@ -215,3 +215,27 @@ test("the About page's CSS Module class matches between server and browser", asy
   // Styled by the module: a filled 36px tile.
   await expect(icon).toHaveCSS("width", "36px");
 });
+
+test.describe("unmatched URLs", () => {
+  test.use({ allowErrors: ["404"] });
+
+  test("render a 404 inside the app's own chrome, hydrated", async ({ page }) => {
+    const res = await page.goto("/no/such/page");
+    expect(res?.status()).toBe(404);
+    await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Bract Todo" })).toBeVisible();
+    await hydrated(page);
+    await markDocument(page);
+    await page.getByRole("link", { name: "Back to the board" }).click();
+    await expect(page.getByRole("heading", { name: "Todo board" })).toBeVisible();
+    await expectSameDocument(page);
+  });
+});
+
+test("clientMiddleware + clientLoader run on client navigation", async ({ page }) => {
+  await page.goto("/");
+  await hydrated(page);
+  await page.getByRole("link", { name: "About" }).first().click();
+  await expect(page.getByRole("heading", { name: "About this demo" })).toBeVisible();
+  await expect(page.getByTestId("client-loaded")).toContainText("Loaded in the browser in");
+});

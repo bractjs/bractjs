@@ -6,6 +6,9 @@ import { defineConfig } from "@playwright/test";
 //
 // `channel: "chrome"` drives the installed Google Chrome, so no browser
 // download is needed (GitHub's ubuntu-latest runners ship Chrome).
+// E2E_PORT moves the app off :3000 when something else is listening there.
+const port = Number(process.env.E2E_PORT ?? 3000);
+
 export default defineConfig({
   testDir: "./tests",
   // The todo app keeps its tasks in one in-memory SQLite database, so tests
@@ -16,15 +19,16 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: `http://localhost:${port}`,
     channel: "chrome",
     trace: "retain-on-failure",
   },
   webServer: {
     command: "pnpm build && pnpm start",
     cwd: "../examples/todo",
-    url: "http://localhost:3000/",
-    // Locally, reuse a todo server you already have running on :3000.
+    env: { PORT: String(port) },
+    url: `http://localhost:${port}/`,
+    // Locally, reuse a todo server you already have running on the port.
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     stdout: "pipe",

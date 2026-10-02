@@ -10,6 +10,12 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
+import {
+  applyClientLoaders,
+  createClientContext,
+  resolveClientChain,
+  runClientMiddleware,
+} from "../client-data.ts";
 import { reviveDeferred } from "../deferred-revive.ts";
 import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
 import { assignExternal, toSamePath } from "../nav-utils.ts";
@@ -261,16 +267,56 @@ function toFetcherRequest(
   };
 }
 
-/** Load a route's loader data into the fetcher `key`. */
+/**
+ * Load a route's loader data into the fetcher `key` — through the route's
+ * clientMiddleware and clientLoader, as a navigation would.
+ */
 export async function fetcherLoad(key: string, path: string): Promise<void> {
   fetcherStore.update(key, { state: "loading" });
   try {
-    const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
-    const json = reviveDeferred((await res.json()) as { route?: unknown });
-    fetcherStore.update(key, { data: json.route });
+    const { chain } = await resolveClientChain(path);
+    const request = new Request(new URL(path, window.location.origin));
+    const context = createClientContext();
+    const data = await runClientMiddleware(chain, { request, params: {}, context }, async () => {
+      const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+      const json = reviveDeferred((await res.json()) as Record<string, unknown>);
+      // Only the route's own clientLoader applies — a fetcher reads one route.
+      await applyClientLoaders({ root: null, layouts: [], route: chain.route }, json, {
+        request,
+        params: (json.params as Record<string, string>) ?? {},
+        search: (json.search as Record<string, unknown>) ?? {},
+        context,
+      });
+      return json.route;
+    });
+    fetcherStore.update(key, { data });
   } finally {
     fetcherStore.update(key, { state: "idle" });
   }
+}
+
+/**
+ * Follow a submission's redirect, if it has one: the enveloped form (204 +
+ * X-BractJS-Redirect — the server converts the action's 3xx so no throwaway
+ * document GET consumes one-shot cookies like flash toasts), or a 3xx fetch()
+ * followed. Off-origin targets get a full-page navigation so an
+ * attacker-controlled Location is never followed inside the SPA.
+ */
+function followRedirectResponse(res: Response): boolean {
+  const envelope = res.headers.get("X-BractJS-Redirect");
+  if (envelope !== null) {
+    const to = toSamePath(envelope);
+    if (to) {
+      if (res.headers.get("X-BractJS-Replace") !== null) window.location.replace(to);
+      else window.location.assign(to);
+    } else assignExternal(envelope);
+    return true;
+  }
+  if (res.redirected) {
+    window.location.assign(toSamePath(res.url) ?? res.url);
+    return true;
+  }
+  return false;
 }
 
 /** Run a submission through the fetcher `key` (a GET becomes a load). */
@@ -286,35 +332,48 @@ export async function fetcherSubmit(key: string, req: FetcherRequest): Promise<v
     // preflight). Without it every fetcher submit 403s.
     const headers: Record<string, string> = { "X-BractJS-Action": "1" };
     if (req.contentType) headers["Content-Type"] = req.contentType;
-    const res = await fetch(req.url, { method: formMethod, body: req.body, headers });
-    // Enveloped redirect (204 + X-BractJS-Redirect): the server converted
-    // the action's 3xx so no throwaway document GET consumed one-shot
-    // cookies (flash toasts). Navigate to the target directly.
-    const envelope = res.headers.get("X-BractJS-Redirect");
-    if (envelope !== null) {
-      const to = toSamePath(envelope);
-      if (to) {
-        if (res.headers.get("X-BractJS-Replace") !== null) window.location.replace(to);
-        else window.location.assign(to);
-      } else assignExternal(envelope);
+    // The target route's clientMiddleware wraps the submission; its
+    // clientAction (when it has one) decides whether to call the server.
+    const { chain } = await resolveClientChain(req.url);
+    const clientAction = chain.route?.clientAction;
+    const request = new Request(new URL(req.url, window.location.origin), { method: formMethod });
+    const context = createClientContext();
+    const REDIRECTED = Symbol("redirected");
+    let actionStatus = 200;
+    const serverAction = async (): Promise<unknown> => {
+      const res = await fetch(req.url, { method: formMethod, body: req.body, headers });
+      actionStatus = res.status;
+      if (followRedirectResponse(res)) return REDIRECTED;
+      return res.json();
+    };
+    let data: unknown;
+    try {
+      data = await runClientMiddleware(chain, { request, params: {}, context }, async () =>
+        typeof clientAction === "function"
+          ? clientAction({
+              request,
+              params: {},
+              formData: req.formData ?? new FormData(),
+              context,
+              serverAction,
+            })
+          : serverAction(),
+      );
+    } catch (err) {
+      // `throw redirect(...)` from clientMiddleware or a clientAction.
+      const loc = err instanceof Response ? err.headers.get("Location") : null;
+      if (!loc) throw err;
+      window.location.assign(toSamePath(loc) ?? loc);
       return;
     }
-    // If the action redirected, do a real navigation rather than parsing the
-    // redirect target as JSON. Off-origin targets get a full-page nav so we
-    // never follow an attacker-controlled Location inside the SPA.
-    if (res.redirected) {
-      const to = toSamePath(res.url);
-      window.location.assign(to ?? res.url);
-      return;
-    }
-    const data = await res.json();
+    if (data === REDIRECTED) return;
     fetcherStore.update(key, { data });
     // Mutations invalidate loader data — re-run the active route's loaders
     // (gated by its shouldRevalidate) so the page reflects the change.
     fetcherStore.update(key, { state: "loading" });
     await triggerRevalidation({
       formMethod,
-      actionStatus: res.status,
+      actionStatus,
       formAction: req.url,
       formData: req.formData,
       actionResult: data,

@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { type ComponentType, createElement } from "react";
+import { type ComponentType, createElement, type ReactNode } from "react";
 import { BractJSProvider, type RouteManifest } from "../shared/context.ts";
 import { devBustedSpecifier } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
@@ -22,16 +22,20 @@ export async function renderSpaShell(
   registry?: ModuleRegistry,
 ): Promise<string> {
   let RootComponent: ComponentType = () => null;
+  let RootLayout: ComponentType<{ children?: ReactNode }> | undefined;
+  type RootExports = { default?: ComponentType; Layout?: ComponentType<{ children?: ReactNode }> };
   if (registry) {
-    const rootMod = (registry["root.tsx"] ?? registry["root.ts"]) as { default?: ComponentType } | undefined;
+    const rootMod = (registry["root.tsx"] ?? registry["root.ts"]) as RootExports | undefined;
     if (rootMod?.default) RootComponent = rootMod.default;
+    RootLayout = rootMod?.Layout;
   } else {
     const rootPath = resolve(join(appDir, "root.tsx"));
     if (await Bun.file(rootPath).exists()) {
       // Dev: cache-busted so an edited root shell is live without a restart.
       const spec = devBustedSpecifier(rootPath);
-      const mod = (await import(spec)) as { default?: ComponentType };
+      const mod = (await import(spec)) as RootExports;
       if (mod.default) RootComponent = mod.default;
+      RootLayout = mod.Layout;
     }
   }
 
@@ -48,7 +52,9 @@ export async function renderSpaShell(
       location: { pathname: "/", search: "", hash: "", state: null, key: "default" },
       search: {},
     },
-    children: createElement(RootComponent),
+    children: RootLayout
+      ? createElement(RootLayout, null, createElement(RootComponent))
+      : createElement(RootComponent),
   });
 
   const res = await renderRoute({
