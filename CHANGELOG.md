@@ -6,6 +6,12 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.7.1] — 2026-10-02
+
 ### Fixed
 
 - **`/_image` works on Node.js and Deno servers.** The image endpoint still called `Bun.file`/`Bun.write`/`Bun.spawn`, so on a `bractjs build --target node` server every `/_image` request (every `<Image>`) failed with a 500 (`Bun is not defined`). It now uses `node:fs` and `node:child_process`, which work on all three runtimes. A transformed image larger than 128 MiB is now refused.
