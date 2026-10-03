@@ -112,9 +112,15 @@ function compressStream(body: ReadableStream<Uint8Array>, encoding: Encoding): R
         })
       : zlib.createGzip({ level: 6, flush: zlib.constants.Z_SYNC_FLUSH });
   const reader = body.getReader();
+  // Backpressure end to end: the encoder pauses while the consumer's queue is
+  // full (resumed by pull), and the source is read only as the encoder drains —
+  // so a slow client never makes the server buffer a whole body in memory.
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      encoder.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
+      encoder.on("data", (chunk: Buffer) => {
+        controller.enqueue(new Uint8Array(chunk));
+        if ((controller.desiredSize ?? 1) <= 0) encoder.pause();
+      });
       encoder.on("end", () => controller.close());
       encoder.on("error", (err) => controller.error(err));
       void (async () => {
@@ -122,13 +128,28 @@ function compressStream(body: ReadableStream<Uint8Array>, encoding: Encoding): R
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
-            encoder.write(value);
+            if (!encoder.write(value)) {
+              // `close` too: a cancelled response destroys the encoder, which never drains.
+              await new Promise<void>((resolve) => {
+                const done = () => {
+                  encoder.off("drain", done);
+                  encoder.off("close", done);
+                  resolve();
+                };
+                encoder.on("drain", done);
+                encoder.on("close", done);
+              });
+              if (encoder.destroyed) return;
+            }
           }
           encoder.end();
         } catch (err) {
           encoder.destroy(err as Error);
         }
       })();
+    },
+    pull() {
+      encoder.resume();
     },
     cancel(reason) {
       void reader.cancel(reason);

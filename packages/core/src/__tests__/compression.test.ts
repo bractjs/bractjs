@@ -102,6 +102,29 @@ describe("compressResponse", () => {
     expect(gunzipSync(Buffer.concat(rest)).toString()).toBe("<p>shell</p><p>deferred</p>");
   });
 
+  test("backpressure: a slow client doesn't make the whole body buffer in memory", async () => {
+    const CHUNKS = 200;
+    let pulled = 0;
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled === CHUNKS) return controller.close();
+        pulled++;
+        // Incompressible, so the encoder's output is as large as its input.
+        controller.enqueue(crypto.getRandomValues(new Uint8Array(65536)));
+      },
+    });
+    const res = await compressResponse(req("/", "gzip"), html(source));
+    const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+    await reader.read();
+    await Bun.sleep(50);
+    expect(pulled).toBeLessThan(CHUNKS);
+    // Draining still delivers the whole body.
+    const parts: Uint8Array[] = [];
+    for (let r = await reader.read(); !r.done; r = await reader.read()) parts.push(r.value);
+    expect(pulled).toBe(CHUNKS);
+    expect(parts.length).toBeGreaterThan(0);
+  });
+
   test("hashed client assets are compressed once and served from cache", async () => {
     const js = "export const x = 1;\n".repeat(500);
     const asset = () =>

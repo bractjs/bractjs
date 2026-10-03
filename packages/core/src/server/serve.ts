@@ -633,6 +633,7 @@ if (import.meta.main) {
 function defaultAdapter(config: Partial<BractJSConfig> | undefined): BractAdapter {
   const g = globalThis as { Bun?: unknown; Deno?: unknown };
   if (g.Bun) return new BunAdapter(config?.maxRequestBodySize, config?.hostname);
-  if (g.Deno) return new DenoAdapter({ hostname: config?.hostname });
+  if (g.Deno)
+    return new DenoAdapter({ hostname: config?.hostname, maxRequestBodySize: config?.maxRequestBodySize });
   return new NodeAdapter({ hostname: config?.hostname, maxRequestBodySize: config?.maxRequestBodySize });
 }

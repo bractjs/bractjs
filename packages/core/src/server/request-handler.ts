@@ -42,7 +42,14 @@ import {
 } from "./middleware.ts";
 import { renderRootErrorDocument, renderRoute, type ServerManifest } from "./render.ts";
 import { getRequestId } from "./request-context.ts";
-import { error, json, redirect, redirectEnvelope, sanitizeRedirect } from "./response.ts";
+import {
+  error,
+  isSafeInternalRedirect,
+  json,
+  redirect,
+  redirectEnvelope,
+  sanitizeRedirect,
+} from "./response.ts";
 import { validateSearch } from "./search.ts";
 
 export interface HandlerConfig {
@@ -350,7 +357,9 @@ async function route(
     const found = splitLocale(pathname, i18n);
     const isRead = request.method === "GET" || request.method === "HEAD";
     // One canonical URL per page: /en/about (the default locale) → /about.
-    if (found.prefix === i18n.defaultLocale && isRead) {
+    // Not for "/en//host": redirect() would refuse that Location and throw, so
+    // let it fall through to matching (and 404) instead of a 500.
+    if (found.prefix === i18n.defaultLocale && isRead && isSafeInternalRedirect(found.pathname)) {
       return redirect(found.pathname + url.search, 308);
     }
     // First visit to an unprefixed page: send the visitor to the locale their

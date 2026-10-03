@@ -13,6 +13,11 @@ export interface BractAdapter {
     fetch(request: Request): Promise<Response>;
     listen?(port: number): void;
 }
+export declare const DEFAULT_MAX_REQUEST_BODY_BYTES: number;
+/**
+ * Default adapter — wraps `Bun.serve()`.
+ * Created internally by `createServer()` when no adapter is provided.
+ */
 export declare class BunAdapter implements BractAdapter {
     private server;
     private handler;

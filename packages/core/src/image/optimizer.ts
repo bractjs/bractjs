@@ -1,3 +1,8 @@
+// Namespace import, as in server/runtime.ts: this file is reachable from the
+// package barrel, and node:child_process has no browser polyfill. node:* APIs
+// (not Bun.spawn/Bun.file) so /_image works on Node and Deno servers too.
+import * as cp from "node:child_process";
+import { readFile } from "node:fs/promises";
 import type { ImageFormat, ImageTransformParams, TransformResult } from "./types.ts";
 import { MIME } from "./types.ts";
 
@@ -7,6 +12,8 @@ const MAX_CONCURRENT = 4;
 // Per-spawn timeout (ms). A pathological input must not hold a slot forever;
 // without this, four hung spawns wedge the whole image pipeline.
 const SPAWN_TIMEOUT_MS = 15_000;
+// Cap on a transformed image held in memory (execFile's default is 1 MiB).
+const MAX_OUTPUT_BYTES = 128 * 1024 * 1024;
 let inFlight = 0;
 const waiters: Array<() => void> = [];
 
@@ -31,13 +38,25 @@ let _binary: string | null | undefined;
 async function detectBinary(): Promise<string | null> {
   for (const bin of ["magick", "convert"]) {
     try {
-      const proc = Bun.spawn([bin, "-version"], { stdout: "ignore", stderr: "ignore" });
-      if ((await proc.exited) === 0) return bin;
+      await run(bin, ["-version"]);
+      return bin;
     } catch {
       /* not found */
     }
   }
   return null;
+}
+
+/** Run `file args…` and resolve with its stdout; rejects on spawn failure, non-zero exit, or timeout. */
+function run(file: string, args: string[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    cp.execFile(
+      file,
+      args,
+      { encoding: "buffer", timeout: SPAWN_TIMEOUT_MS, killSignal: "SIGKILL", maxBuffer: MAX_OUTPUT_BYTES },
+      (err, stdout) => (err ? reject(err) : resolve(stdout)),
+    );
+  });
 }
 
 async function getBinary(): Promise<string | null> {
@@ -98,7 +117,8 @@ export async function transformImage(
 
   // No ImageMagick available — serve the original file as-is.
   if (!binary) {
-    const data = await Bun.file(filePath).arrayBuffer();
+    const bytes = await readFile(filePath);
+    const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const ext = filePath.split(".").pop()?.toLowerCase() ?? "jpeg";
     const fmt = (ext === "jpg" ? "jpeg" : ext) as ImageFormat;
     return { data, contentType: MIME[fmt] ?? "image/jpeg", format: fmt };
@@ -106,21 +126,18 @@ export async function transformImage(
 
   await acquireSlot();
   try {
-    const proc = Bun.spawn(buildArgs(binary, filePath, params), {
-      stdout: "pipe",
-      stderr: "ignore",
-      timeout: SPAWN_TIMEOUT_MS,
-      killSignal: "SIGKILL",
-    });
-
-    const [data, exitCode] = await Promise.all([new Response(proc.stdout!).arrayBuffer(), proc.exited]);
-
-    if (exitCode !== 0) {
-      // Non-zero exit covers normal failures AND timeout-induced SIGKILL,
-      // since Bun reports the signal as a non-zero exit code.
-      throw new Error(`[bractjs] ImageMagick exited ${exitCode} for ${filePath}`);
+    const [file, ...args] = buildArgs(binary, filePath, params);
+    let out: Buffer;
+    try {
+      out = await run(file, args);
+    } catch (err) {
+      // Covers non-zero exits, timeout-induced SIGKILL, and oversized output.
+      const { code, signal } = err as { code?: unknown; signal?: unknown };
+      throw new Error(`[bractjs] ImageMagick exited ${String(signal ?? code)} for ${filePath}`, {
+        cause: err,
+      });
     }
-
+    const data = out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
     return { data, contentType: MIME[params.format], format: params.format };
   } finally {
     releaseSlot();
