@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
+import { fileExists } from "../server/runtime.ts";
 import { getFromDisk, getFromMemory, setInMemory, setOnDisk } from "./cache.ts";
 import { transformImage } from "./optimizer.ts";
 import type { ImageFit, ImageFormat, ImageTransformParams } from "./types.ts";
@@ -42,7 +43,7 @@ async function parseParams(
     if (!real.startsWith(root + sep) && real !== root) return null;
     filePath = real;
   } catch {
-    // missing file: defer to Bun.file(...).exists() below
+    // missing file: defer to fileExists() below
   }
 
   const wRaw = sp.get("w");
@@ -96,7 +97,7 @@ export async function handleImageRequest(
   if (!parsed) return new Response("Bad Request", { status: 400 });
 
   const { src, filePath, params } = parsed;
-  if (!(await Bun.file(filePath).exists())) {
+  if (!(await fileExists(filePath))) {
     return new Response("Not Found", { status: 404 });
   }
 

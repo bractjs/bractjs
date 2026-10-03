@@ -99,6 +99,12 @@ describe("server routing with i18n", () => {
     expect(res.headers.get("Location")).toBe("/about?x=1");
   });
 
+  test("a default-locale prefix before an authority-like path 404s instead of throwing", async () => {
+    const res = await get("/en//evil.example");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("Location")).toBeNull();
+  });
+
   test("an unknown prefix is just a path (no match → 404)", async () => {
     expect((await get("/de/about")).status).toBe(404);
   });

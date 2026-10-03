@@ -131,6 +131,41 @@ describe("DenoAdapter (Deno.serve)", () => {
     expect(shutDown).toBe(true);
   });
 
+  test("caps request bodies: 413 on a declared oversize, read error on a streamed one", async () => {
+    let served: ((req: Request, info: { remoteAddr: { hostname: string } }) => Promise<Response>) | null =
+      null;
+    (globalThis as { Deno?: unknown }).Deno = {
+      serve(_opts: unknown, handler: typeof served) {
+        served = handler;
+        return { shutdown: async () => {} };
+      },
+    };
+    const adapter = new DenoAdapter({ maxRequestBodySize: 10 });
+    adapter.setHandler(async (req) => {
+      try {
+        return new Response(`${await req.text()} ${getClientAddress(req)}`);
+      } catch {
+        return new Response("body rejected", { status: 400 });
+      }
+    });
+    adapter.listen(8124);
+    const info = { remoteAddr: { hostname: "203.0.113.5" } };
+    const declared = await served!(
+      new Request("http://x/", {
+        method: "POST",
+        body: "x".repeat(100),
+        headers: { "Content-Length": "100" },
+      }),
+      info,
+    );
+    expect(declared.status).toBe(413);
+    // No Content-Length: the bytes are counted as they stream.
+    const streamed = await served!(new Request("http://x/", { method: "POST", body: "x".repeat(100) }), info);
+    expect(streamed.status).toBe(400);
+    const small = await served!(new Request("http://x/", { method: "POST", body: "ok" }), info);
+    expect(await small.text()).toBe("ok 203.0.113.5");
+  });
+
   test("refuses to listen outside Deno", () => {
     const adapter = new DenoAdapter();
     adapter.setHandler(async () => new Response());

@@ -1,4 +1,4 @@
-import { mkdir, rename, unlink } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ImageFormat, ImageTransformParams, TransformResult } from "./types.ts";
 
@@ -51,16 +51,15 @@ export async function getFromDisk(
   params: ImageTransformParams,
 ): Promise<TransformResult | null> {
   const key = await cacheKey(src, params);
-  const metaFile = Bun.file(join(dir, `${key}.json`));
-  const dataFile = Bun.file(join(dir, `${key}.bin`));
+  const metaFile = join(dir, `${key}.json`);
+  const dataFile = join(dir, `${key}.bin`);
   // No existence pre-check: it would create a TOCTOU race where the file is
   // deleted between exists() and read(). Just attempt the reads and let either
   // a missing file or invalid JSON fall through to MISS.
   try {
-    const [meta, data] = await Promise.all([
-      metaFile.json() as Promise<{ contentType: string; format: ImageFormat }>,
-      dataFile.arrayBuffer(),
-    ]);
+    const [metaText, bytes] = await Promise.all([readFile(metaFile, "utf8"), readFile(dataFile)]);
+    const meta = JSON.parse(metaText) as { contentType: string; format: ImageFormat };
+    const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     return { data, contentType: meta.contentType, format: meta.format };
   } catch {
     return null;
@@ -83,8 +82,8 @@ export async function setOnDisk(
   // files present or neither — never a half-written pair.
   try {
     await Promise.all([
-      Bun.write(jsonTmp, JSON.stringify({ contentType: result.contentType, format: result.format })),
-      Bun.write(binTmp, result.data),
+      writeFile(jsonTmp, JSON.stringify({ contentType: result.contentType, format: result.format })),
+      writeFile(binTmp, new Uint8Array(result.data)),
     ]);
     await Promise.all([rename(jsonTmp, jsonFinal), rename(binTmp, binFinal)]);
   } catch (err) {

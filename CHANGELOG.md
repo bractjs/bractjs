@@ -10,6 +10,17 @@ _Nothing yet._
 
 ---
 
+## [0.7.1] — 2026-10-02
+
+### Fixed
+
+- **`/_image` works on Node.js and Deno servers.** The image endpoint still called `Bun.file`/`Bun.write`/`Bun.spawn`, so on a `bractjs build --target node` server every `/_image` request (every `<Image>`) failed with a 500 (`Bun is not defined`). It now uses `node:fs` and `node:child_process`, which work on all three runtimes. A transformed image larger than 128 MiB is now refused.
+- **Security: `DenoAdapter` caps request bodies.** `Deno.serve` has no body limit, so on Deno nothing enforced the 16 MiB backstop that Bun and Node apply — a chunked body to `/_action` or an `/api` handler was buffered without bound. The adapter now returns 413 for an oversized `Content-Length` and fails reads past the cap; set it with the new `maxRequestBodySize` option (or the `maxRequestBodySize` config, which `createServer()` now passes to Deno too).
+- **Response compression respects backpressure.** Streamed compression read and compressed the whole body regardless of how fast the client read it, so a slow client fetching a large compressible file held all of it in server memory. The encoder now pauses while the client's queue is full; per-chunk flushing for streamed SSR is unchanged.
+- **i18n: `/<defaultLocale>//…` returns 404, not 500.** The canonical-URL redirect handed `//host` to `redirect()`, which refuses it and threw, so the request errored and fired `onError`. Such paths now fall through to route matching.
+
+---
+
 ## [0.7.0] — 2026-10-02
 
 ### Added
