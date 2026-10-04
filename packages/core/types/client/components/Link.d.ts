@@ -21,7 +21,10 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<AnchorHTM
     /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
     search?: Partial<SearchOutputFor<TTo>>;
     prefetch?: PrefetchMode;
-    /** Opt in to View Transitions API for this navigation (E1). */
+    /**
+     * Animate this navigation with the View Transitions API: the new page is
+     * committed inside `document.startViewTransition`. Ignored where unsupported.
+     */
     viewTransition?: boolean;
     /** Replace the current history entry instead of pushing. */
     replace?: boolean;

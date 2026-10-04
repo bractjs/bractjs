@@ -190,9 +190,11 @@ export default function IndexPage() {
                     className={todo.completed ? "text-teal" : ""}
                   />
                 </Form>
+                {/* viewTransition: the browser cross-fades to the task page. */}
                 <Link
                   to={`/${todo.id}`}
                   prefetch="hover"
+                  viewTransition
                   className={`min-w-0 flex-1 py-1 [overflow-wrap:anywhere] hover:underline ${
                     todo.completed ? "text-muted line-through" : ""
                   }`}

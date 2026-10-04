@@ -20,7 +20,7 @@ export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes
     relative?: "route" | "path";
     /** Accepted for React Router compatibility; no effect. */
     flushSync?: boolean;
-    /** Accepted for React Router compatibility; no effect. */
+    /** Animate this navigation with the View Transitions API (ignored where unsupported). */
     viewTransition?: boolean;
 }
 export interface NavigateFn {

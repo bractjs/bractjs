@@ -47,6 +47,7 @@ export function useSubmit(): SubmitFunction {
           replace: options.replace,
           state: options.state,
           defaultShouldRevalidate: options.defaultShouldRevalidate,
+          viewTransition: options.viewTransition,
         });
         return;
       }
@@ -57,6 +58,7 @@ export function useSubmit(): SubmitFunction {
         json: n.json,
         text: n.text,
         defaultShouldRevalidate: options.defaultShouldRevalidate,
+        viewTransition: options.viewTransition,
       });
     },
     [navCtx, autoKey],

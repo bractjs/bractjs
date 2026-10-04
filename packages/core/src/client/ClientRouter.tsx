@@ -33,6 +33,7 @@ import { moduleView, parseDataPayload } from "./data-payload.ts";
 import { reviveDeferred } from "./deferred-revive.ts";
 import { assignExternal, createLocationKey, matchPatternForPath, parseTo, toSamePath } from "./nav-utils.ts";
 import { type RevalidationInfo, registerNavigator, registerRevalidator } from "./revalidation.ts";
+import { commitWithTransition } from "./view-transition.ts";
 import {
   type HydrationPending,
   type NavigateOptions,
@@ -79,6 +80,8 @@ interface LocationInit {
   state?: unknown;
   /** From `<Link defaultShouldRevalidate>` / `navigate(to, { defaultShouldRevalidate })`. */
   defaultShouldRevalidate?: boolean;
+  /** Commit inside a View Transition (`viewTransition` on Link / navigate / Form). */
+  viewTransition?: boolean;
 }
 
 /** `to` as a location object, for blocker checks and `useNavigation().location`. */
@@ -270,7 +273,7 @@ export function ClientRouter({
 
         // Commit a /_data payload + the new location in one transition.
         const commit = (data: Record<string, unknown>, module: RouteModuleClient | null) => {
-          startTransition(() => {
+          commitWithTransition(locInit?.viewTransition, () => {
             applyPayload(data);
             setLocation(nextLocation);
             setCurrentModule(module);
@@ -420,6 +423,7 @@ export function ClientRouter({
         key,
         state: options?.state ?? null,
         defaultShouldRevalidate: options?.defaultShouldRevalidate,
+        viewTransition: options?.viewTransition,
       });
       if (loaded === false) return;
       const entry = { __bractKey: key, __bractState: options?.state ?? null };
@@ -493,7 +497,7 @@ export function ClientRouter({
             return payload;
           },
         );
-        if (data) startTransition(() => applyPayload(data));
+        if (data) commitWithTransition(info?.viewTransition, () => applyPayload(data));
       } catch (err) {
         const loc = err instanceof Response ? err.headers.get("Location") : null;
         if (loc) {
@@ -770,6 +774,7 @@ export function ClientRouter({
               // replace(): swap the history entry instead of pushing.
               await navigateRef.current(safe, {
                 replace: res.headers.get("X-BractJS-Replace") !== null,
+                viewTransition: opts.viewTransition,
               });
               return REDIRECTED;
             }
@@ -779,7 +784,7 @@ export function ClientRouter({
           if (res.redirected) {
             const safe = toSamePath(res.url);
             if (safe) {
-              await navigateRef.current(safe);
+              await navigateRef.current(safe, { viewTransition: opts.viewTransition });
               return REDIRECTED;
             }
             window.location.assign(res.url);
@@ -818,7 +823,7 @@ export function ClientRouter({
           const loc = err instanceof Response ? err.headers.get("Location") : null;
           if (!loc) throw err;
           const safe = toSamePath(loc);
-          if (safe) await navigateRef.current(safe);
+          if (safe) await navigateRef.current(safe, { viewTransition: opts.viewTransition });
           else assignExternal(loc);
           return;
         }
@@ -834,6 +839,7 @@ export function ClientRouter({
           formData,
           actionResult: data,
           defaultShouldRevalidate: opts.defaultShouldRevalidate,
+          viewTransition: opts.viewTransition,
         });
       } finally {
         setNavState("idle");

@@ -27,7 +27,7 @@ export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes
   relative?: "route" | "path";
   /** Accepted for React Router compatibility; no effect. */
   flushSync?: boolean;
-  /** Accepted for React Router compatibility; no effect. */
+  /** Animate this navigation with the View Transitions API (ignored where unsupported). */
   viewTransition?: boolean;
 }
 
@@ -68,6 +68,7 @@ export function useNavigate(): NavigateFn {
         replace: options?.replace,
         state: options?.state,
         defaultShouldRevalidate: options?.defaultShouldRevalidate,
+        viewTransition: options?.viewTransition,
       });
     },
     [navCtx],
