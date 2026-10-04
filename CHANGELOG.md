@@ -6,7 +6,9 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- **`createDevServer` moved to `@bractjs/bractjs/dev`.** The root import is shared with browser code, so the dev server now has its own entry. Change `import { createDevServer } from "@bractjs/bractjs"` to `from "@bractjs/bractjs/dev"`. The root re-export keeps working, marked deprecated, until 0.9. A test now checks that no dev-server or build-pipeline code reaches the browser bundle and that the client bundle stays within a gzip size budget.
 
 ---
 

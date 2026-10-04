@@ -8,6 +8,9 @@
  * the repository README: https://github.com/bractjs/bractjs#readme
  */
 
+import type { DevServer as _DevServer, DevServerOptions as _DevServerOptions } from "./dev/server.ts";
+import { createDevServer as _createDevServer } from "./dev/server.ts";
+
 // Adapters
 export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloudflare.ts";
 export type { DenoAdapterOptions } from "./adapters/deno.ts";
@@ -110,9 +113,14 @@ export type { SubmitEncType, SubmitOptions, SubmitTarget } from "./client/submis
 export type { Toast, ToastAction, ToastEntry, ToastOptions, ToastType } from "./client/toast-store.ts";
 export { toast } from "./client/toast-store.ts";
 export { defineConfig, loadUserConfig } from "./config/load.ts";
-export type { DevServer, DevServerOptions } from "./dev/server.ts";
-// Programmatic API — importable alternatives to the CLI commands
-export { createDevServer } from "./dev/server.ts";
+// Programmatic API — importable alternatives to the CLI commands. The dev
+// server moved to the `./dev` subpath; these root aliases go away in 0.9.
+/** @deprecated Import from `@bractjs/bractjs/dev`. Removed from the root import in 0.9. */
+export type DevServer = _DevServer;
+/** @deprecated Import from `@bractjs/bractjs/dev`. Removed from the root import in 0.9. */
+export type DevServerOptions = _DevServerOptions;
+/** @deprecated Import from `@bractjs/bractjs/dev`. Removed from the root import in 0.9. */
+export const createDevServer: typeof _createDevServer = _createDevServer;
 export type { AuthGuardOptions, SessionLike, SessionStorageLike } from "./middleware/authGuard.ts";
 export { authGuard } from "./middleware/authGuard.ts";
 export type { CorsOptions } from "./middleware/cors.ts";

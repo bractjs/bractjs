@@ -7,6 +7,8 @@
  * result (CI fails on a stale tree). Section-by-section usage docs live in
  * the repository README: https://github.com/bractjs/bractjs#readme
  */
+import type { DevServer as _DevServer, DevServerOptions as _DevServerOptions } from "./dev/server.ts";
+import { createDevServer as _createDevServer } from "./dev/server.ts";
 export { createCloudflareAdapter, makeCloudflareHandler } from "./adapters/cloudflare.ts";
 export type { DenoAdapterOptions } from "./adapters/deno.ts";
 export { createDenoAdapter, DenoAdapter } from "./adapters/deno.ts";
@@ -67,8 +69,12 @@ export type { SubmitEncType, SubmitOptions, SubmitTarget } from "./client/submis
 export type { Toast, ToastAction, ToastEntry, ToastOptions, ToastType } from "./client/toast-store.ts";
 export { toast } from "./client/toast-store.ts";
 export { defineConfig, loadUserConfig } from "./config/load.ts";
-export type { DevServer, DevServerOptions } from "./dev/server.ts";
-export { createDevServer } from "./dev/server.ts";
+/** @deprecated Import from `@bractjs/bractjs/dev`. Removed from the root import in 0.9. */
+export type DevServer = _DevServer;
+/** @deprecated Import from `@bractjs/bractjs/dev`. Removed from the root import in 0.9. */
+export type DevServerOptions = _DevServerOptions;
+/** @deprecated Import from `@bractjs/bractjs/dev`. Removed from the root import in 0.9. */
+export declare const createDevServer: typeof _createDevServer;
 export type { AuthGuardOptions, SessionLike, SessionStorageLike } from "./middleware/authGuard.ts";
 export { authGuard } from "./middleware/authGuard.ts";
 export type { CorsOptions } from "./middleware/cors.ts";

@@ -139,6 +139,12 @@ test("createDevServer and loadUserConfig are re-exported from src/index.ts", asy
   expect(typeof mod.loadUserConfig).toBe("function");
 });
 
+test("createDevServer is exported from src/dev-entry.ts (the ./dev subpath)", async () => {
+  const mod = await import("../dev-entry.ts");
+  expect(typeof mod.createDevServer).toBe("function");
+  expect(typeof mod.DevServerError).toBe("function");
+});
+
 test("runBuild is re-exported from src/build-entry.ts (the ./build subpath)", async () => {
   const mod = await import("../build-entry.ts");
   expect(typeof mod.runBuild).toBe("function");
