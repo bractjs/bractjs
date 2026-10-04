@@ -1,3 +1,4 @@
+import { type ActionGateOptions } from "./action-handler.ts";
 /**
  * Handles `GET /_stream?id=<actionId>` requests.
  *
@@ -7,4 +8,4 @@
  *
  * Security: only IDs present in the registry are resolved — no path traversal.
  */
-export declare function handleStreamRequest(request: Request): Promise<Response | null>;
+export declare function handleStreamRequest(request: Request, gate?: ActionGateOptions): Promise<Response | null>;

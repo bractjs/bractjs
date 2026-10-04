@@ -48,13 +48,13 @@ Two properties of this pipeline are worth internalizing:
 
 This is the framework's sharpest edge — the place to slow down and read carefully:
 
-| Surface                             | Covers                                                                                         | Register in                             |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Global `pipeline.use(...)`          | **Everything** — documents, `/_data`, `/api`, `/_action`, `/_stream`, `/_image`, static assets | `app/server.ts`                         |
-| Nested route `middleware` exports   | The **document + `/_data`** path of that route subtree — **not** `/api`, **not** `/_action`    | `root.tsx` / `layout.tsx` / route files |
-| `route(..., { middleware: [...] })` | That one typed `/api` endpoint                                                                 | The `route()` definition                |
+| Surface                             | Covers                                                                                                                                   | Register in                             |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Global `pipeline.use(...)`          | **Everything** — documents, `/_data`, `/api`, `/_action`, `/_stream`, `/_image`, static assets                                           | `app/server.ts`                         |
+| Nested route `middleware` exports   | The **document + `/_data`** path of that route subtree, and `"use server"` actions defined in it (root's: every action) — **not** `/api` | `root.tsx` / `layout.tsx` / route files |
+| `route(..., { middleware: [...] })` | That one typed `/api` endpoint                                                                                                           | The `route()` definition                |
 
-The consequence: a `middleware` export on `routes/admin/layout.tsx` protects every `/admin` _page_ — but an `/api/admin/...` endpoint or a server action is **not** covered by it. Guard `/api` endpoints with their own `{ middleware }` option, and authorize server actions inside the function body. The [auth guide](authentication.md) walks through getting this right end to end.
+The consequence: a `middleware` export on `routes/admin/layout.tsx` protects every `/admin` _page_ and every server action defined under `routes/admin/` — but an `/api/admin/...` endpoint, or an action in `app/admin.server.ts`, is **not** covered by it. Guard `/api` endpoints with their own `{ middleware }` option, and actions outside `routes/` with `withMiddleware` or a check in the body. The [auth guide](authentication.md) walks through getting this right end to end.
 
 ## Server boot and death: lifecycle hooks
 

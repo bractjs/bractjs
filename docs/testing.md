@@ -72,7 +72,7 @@ test("the dashboard requires a session", async () => {
 });
 ```
 
-Remember that route middleware doesn't cover `/api` or server actions ([Authentication](authentication.md)). Test those endpoints directly with `app.fetch`.
+Remember that route middleware doesn't cover `/api`, and covers a server action by where it is defined ([Authentication](authentication.md)). Test those endpoints directly with `app.fetch`.
 
 ## One function: `callLoader()` / `callAction()`
 

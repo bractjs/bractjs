@@ -99,6 +99,14 @@ export interface BractJSConfig {
      */
     streamTimeout?: number;
     /**
+     * Run route middleware for `"use server"` actions (`/_action`, `/_stream`).
+     * An action defined under `routes/` runs root → layouts → its own module's
+     * `middleware`, the chain guarding a page at the same place; one defined
+     * elsewhere (`app/*.server.ts`) runs root's. Default `true`. `false` restores
+     * the pre-0.8 behavior (global middleware only); it goes away in 0.9.
+     */
+    actionMiddleware?: boolean;
+    /**
      * Pre-scanned route list (typically exported from `app/_generated/routes.ts`).
      * When provided, skips the startup `Bun.Glob` scan of `appDir`. Required for
      * `bun build --compile` binaries where the embedded filesystem has no

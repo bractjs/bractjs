@@ -68,6 +68,7 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
   check("onShutdown", typeof c.onShutdown === "function", "a function");
   check("onError", typeof c.onError === "function", "a function");
   check("ssr", typeof c.ssr === "boolean", "a boolean");
+  check("actionMiddleware", typeof c.actionMiddleware === "boolean", "a boolean");
   check(
     "prerender",
     typeof c.prerender === "function" ||

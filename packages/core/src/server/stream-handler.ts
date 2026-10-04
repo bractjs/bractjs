@@ -1,4 +1,5 @@
-import { resolveAction } from "./action-registry.ts";
+import { type ActionGateOptions, runActionGate } from "./action-handler.ts";
+import { resolveActionEntry } from "./action-registry.ts";
 import { csrfHint } from "./csrf.ts";
 import { isExplicitDev } from "./env.ts";
 
@@ -19,7 +20,10 @@ function sseChunk(event: string, data: unknown): string {
  *
  * Security: only IDs present in the registry are resolved — no path traversal.
  */
-export async function handleStreamRequest(request: Request): Promise<Response | null> {
+export async function handleStreamRequest(
+  request: Request,
+  gate?: ActionGateOptions,
+): Promise<Response | null> {
   const url = new URL(request.url);
   // SECURITY(medium): exact-match prevents URL confusion.
   if (url.pathname !== "/_stream") return null;
@@ -55,8 +59,8 @@ export async function handleStreamRequest(request: Request): Promise<Response | 
     });
   }
 
-  const action = resolveAction(actionId);
-  if (!action) {
+  const entry = resolveActionEntry(actionId);
+  if (!entry) {
     return new Response(sseChunk("error", { message: "Action not found" }), {
       status: 404,
       headers: {
@@ -67,6 +71,12 @@ export async function handleStreamRequest(request: Request): Promise<Response | 
     });
   }
 
+  // SECURITY(high): same route middleware as /_action (see action-middleware.ts).
+  // It runs before the stream opens; a middleware rejection is the response.
+  return runActionGate(request, entry, gate, async () => streamAction(entry.fn));
+}
+
+function streamAction(action: () => Promise<unknown>): Response {
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();

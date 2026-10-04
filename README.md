@@ -1146,13 +1146,24 @@ It protects the **document and the `/_data` soft-nav endpoint** alike, so it's a
 
 Three middleware surfaces, three scopes — pick by what you need to cover:
 
-| Surface                                     | Covers                                                                                            | Register in                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| Global `pipeline.use(...)`                  | **Everything**: SSR documents, `/_data`, `/api`, `/_action`, `/_stream`, `/_image`, static assets | `app/server.ts`                    |
-| Nested route `middleware` exports           | The **document + `/_data`** path of that route subtree only — **not** `/api` or `/_action`        | `root.tsx` / `layout.tsx` / routes |
-| `route(..., { middleware })` (per-endpoint) | That one typed **`/api` endpoint**                                                                | The `route()` definition (§12)     |
+| Surface                                     | Covers                                                                                                            | Register in                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Global `pipeline.use(...)`                  | **Everything**: SSR documents, `/_data`, `/api`, `/_action`, `/_stream`, `/_image`, static assets                 | `app/server.ts`                    |
+| Nested route `middleware` exports           | The **document + `/_data`** path of that route subtree, and `"use server"` actions defined in it — **not** `/api` | `root.tsx` / `layout.tsx` / routes |
+| `route(..., { middleware })` (per-endpoint) | That one typed **`/api` endpoint**                                                                                | The `route()` definition (§12)     |
 
-Server actions (`/_action`, `/_stream`) have no per-action middleware — guard inside the action body, or globally.
+Server actions (`/_action`, `/_stream`) run route middleware by **where they are defined**, never by the calling page: an action in a module under `routes/` gets root → the layouts above it → its module's own `middleware` export; an action elsewhere (`app/*.server.ts`) gets root's. `withMiddleware([guard], fn)` adds middleware to a single action. Only `middleware` exports apply (not `beforeLoad`), and the chain runs after the CSRF gate, before the body is parsed. `actionMiddleware: false` in the config turns it off (until 0.9).
+
+```ts
+// app/posts.server.ts
+"use server";
+import { withMiddleware } from "@bractjs/bractjs";
+import { requireAdmin } from "./auth.server.ts";
+
+export const deletePost = withMiddleware([requireAdmin], async (id: string) => {
+  /* … */
+});
+```
 
 ---
 
@@ -1762,7 +1773,7 @@ From `@bractjs/bractjs/testing` ([packages/core/src/testing-entry.ts](packages/c
 
 BractJS ships secure defaults, but a few behaviors are worth understanding so you don't accidentally widen your attack surface.
 
-- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any _other_ exported function is. Treat each exported action as a public endpoint: **do your own authorization inside the function body** — an action receives only the caller's arguments, so read the session via `getRequest()` and check the user; never trust a user ID passed as an argument. The CSRF gate only proves the call is same-origin; it does not authenticate the user.
+- **What `"use server"` publishes.** Every exported **function** of a `"use server"` module becomes an unauthenticated RPC endpoint reachable via `POST /_action` and `GET /_stream`. In files under `routes/`, framework exports (`loader`, `action`, `default`, `meta`, `beforeLoad`, `context`, `ErrorBoundary`, `Fallback`, `config`, `searchSchema`, `ssr`) are **not** registered as actions — but any _other_ exported function is. Treat each exported action as a public endpoint. The route middleware above its defining file (or root's, outside `routes/`) and any `withMiddleware` guard run first ([§14](#14-middleware)); per-object checks still belong in the body — an action receives only the caller's arguments, so read the session via `getRequest()` and check the user; never trust a user ID passed as an argument. The CSRF gate only proves the call is same-origin; it does not authenticate the user.
 - **`/_stream` calls actions with no arguments.** A streaming action invoked over `GET /_stream` receives no caller input. It must be safe to call with none and must authorize itself.
 - **Typed `/api` routes are CSRF-protected by default.** Mutating routes (`POST`/`PUT`/`PATCH`/`DELETE`) require a same-origin proof just like server actions; cross-site requests get `403`. Opt out with `route(..., { csrf: false })` **only** for endpoints that don't trust ambient credentials (webhooks, token-authenticated/public APIs). As with actions, the CSRF gate is not authentication — authorize inside the handler.
 - **Global middleware covers every endpoint.** Anything attached to `pipeline.use(...)` — `cors()`, `csp()`, `authGuard()`, a rate limiter, custom logging — runs for typed `/api` routes, `/_action`, `/_stream`, `/_image`, static assets, and SSR documents alike. (This was previously SSR-only; a cross-cutting guard you register globally now actually applies to your API surface.)
@@ -1887,7 +1898,7 @@ Known differences:
 
 - `meta` merges root → route instead of the leaf replacing it.
 - `<Form>` defaults to `method="post"`.
-- Route middleware covers pages and `/_data`, not `/api` or `"use server"` ([§14](#14-middleware)).
+- Route middleware covers pages, `/_data` and the `"use server"` actions defined beside them, not `/api` ([§14](#14-middleware)).
 
 ---
 
