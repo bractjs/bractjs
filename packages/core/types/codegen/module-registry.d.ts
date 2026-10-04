@@ -12,6 +12,8 @@ export interface RouteRegistryInput {
     routes: RouteFile[];
     layoutRelPaths: string[];
     hasRoot: boolean;
+    /** appDir/env.ts exists: imported first, so its defineEnv() validates at startup. */
+    hasEnv?: boolean;
 }
 export declare function generateRouteRegistry(input: RouteRegistryInput): string;
 export interface ActionRegistryInput {

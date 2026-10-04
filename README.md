@@ -1268,6 +1268,38 @@ export default defineLifecycle({
 
 ## 17. Environment variables
 
+### Typed and validated: `defineEnv`
+
+Declare the app's variables once in `app/env.ts`:
+
+```ts
+// app/env.ts
+import { defineEnv, env } from "@bractjs/bractjs";
+
+export default defineEnv({
+  server: {
+    DATABASE_URL: env.url({ protocols: ["postgres:"] }),
+    SESSION_SECRET: env.string({ minLength: 32 }),
+    PORT: env.number({ integer: true }).optional(),
+    LOG_LEVEL: env.enum(["debug", "info", "warn"]).default("info"),
+  },
+  client: {
+    PUBLIC_API_URL: env.url(),
+  },
+});
+```
+
+```ts
+import env from "./env.ts";
+env.DATABASE_URL; // string — typed from the schema
+```
+
+- **Validated at startup in every run mode.** `bractjs dev` and `bractjs start` import `app/env.ts` before anything else, and the compiled binary and the Node build import it first through the generated registry. A missing or malformed variable stops the server with **one error listing every problem**.
+- **Validators:** `env.string({ minLength, pattern })`, `env.number({ min, max, integer })`, `env.boolean()` (`true/1/yes/on`, `false/0/no/off`), `env.url({ protocols })`, `env.enum([...])`, each with `.optional()` or `.default(value)`. An empty variable counts as unset. Any Standard Schema or Zod-style schema works too (it must be synchronous).
+- **`client` variables reach the browser at runtime.** The server sends their values in each page's payload and `defineEnv` reads them there, so server and browser render the same value and one build runs in every environment. Reading a `server` variable in the browser throws. Never put a secret under `client`.
+
+### Server modules and `clientEnv`
+
 | Convention                     | Behavior                                                                                                                                                                                                                                                                                |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `*.server.ts` / `*.server.tsx` | **Stubbed out of the client bundle.** Import it freely from a route's `loader`/`action`; every export is replaced by an inert stub in the browser build, so the real source (DB drivers, secrets, `bun:sqlite`) never ships. The stub throws if you accidentally call it on the client. |

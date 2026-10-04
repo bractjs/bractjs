@@ -101,6 +101,8 @@ export interface RouteRegistryInput {
   routes: RouteFile[];
   layoutRelPaths: string[]; // e.g. ["routes/blog/layout.tsx"]
   hasRoot: boolean; // true if appDir/root.tsx exists
+  /** appDir/env.ts exists: imported first, so its defineEnv() validates at startup. */
+  hasEnv?: boolean;
 }
 
 export function generateRouteRegistry(input: RouteRegistryInput): string {
@@ -109,6 +111,10 @@ export function generateRouteRegistry(input: RouteRegistryInput): string {
   // ── Build the import statements ──
   const imports: string[] = [];
   const entries: string[] = [];
+
+  // First, so a missing or invalid environment variable stops the compiled
+  // binary / Node build before any route module runs (see defineEnv).
+  if (input.hasEnv) imports.push(`import "../env.ts";`);
 
   if (hasRoot) {
     assertSafeFilePath("root.tsx");
@@ -296,8 +302,9 @@ export async function writeModuleRegistries(appDir: string): Promise<CodegenResu
     (await Bun.file(resolve(join(absAppDir, "root.tsx"))).exists()) ||
     (await Bun.file(resolve(join(absAppDir, "root.ts"))).exists());
   const actionRelPaths = await collectActionFiles(absAppDir);
+  const hasEnv = await Bun.file(resolve(join(absAppDir, "env.ts"))).exists();
 
-  const routesSrc = generateRouteRegistry({ appDir: absAppDir, routes, layoutRelPaths, hasRoot });
+  const routesSrc = generateRouteRegistry({ appDir: absAppDir, routes, layoutRelPaths, hasRoot, hasEnv });
   const actionsSrc = generateActionRegistry({ appDir: absAppDir, actionRelPaths });
 
   const outDir = resolve(join(absAppDir, "_generated"));

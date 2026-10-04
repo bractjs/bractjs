@@ -2,7 +2,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { extractApiRouteDefs, lintRouteModuleSource } from "../build/route-lint.ts";
 import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
 import { loadUserConfig } from "../config/load.ts";
-import { loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts";
+import { loadEnvModule, loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts";
 import { clearActionRegistry, loadServerActions } from "../server/action-registry.ts";
 import { cssModuleClassesChanged, installCssModulesRuntime } from "../server/css-modules-runtime.ts";
 import { listApiRoutes } from "../server/api-route.ts";
@@ -229,6 +229,15 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
   // add/remove restarts the process, so the set can't go stale while it
   // matters; the no-supervisor fallback re-syncs it in the watcher.
   const knownRouteFiles = new Set(routeRows.map((r) => r.file));
+
+  // app/env.ts first: invalid environment variables stop the dev server with
+  // the full list instead of surfacing later as a failed import.
+  try {
+    await loadEnvModule(appDir);
+  } catch (err) {
+    hmr.stop();
+    throw new DevServerError(err instanceof Error ? err.message : String(err));
+  }
 
   // Load user lifecycle hooks if defined (<appDir>/lifecycle.ts)
   const lifecycle: LifecycleHooks = await loadLifecycleModule(appDir);

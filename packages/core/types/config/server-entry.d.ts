@@ -21,3 +21,9 @@ export declare function loadServerEntry(appDir: string): Promise<ServerEntryResu
  * swallowed — a broken lifecycle.ts should not look like "no lifecycle.ts".
  */
 export declare function loadLifecycleModule(appDir: string): Promise<LifecycleHooks>;
+/**
+ * Import `<appDir>/env.ts` (see `defineEnv`) so missing or invalid environment
+ * variables stop startup with the full list, before anything else runs. No
+ * env.ts → no-op. Errors propagate: callers report them and exit.
+ */
+export declare function loadEnvModule(appDir: string): Promise<void>;

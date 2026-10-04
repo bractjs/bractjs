@@ -1,5 +1,6 @@
 import { createServer } from "@bractjs/bractjs";
 import config from "../bractjs.config.ts";
+import env from "./env.ts";
 import { actionModules } from "./_generated/actions.ts";
 import { manifest } from "./_generated/manifest.ts";
 import { moduleRegistry, routeFiles } from "./_generated/routes.ts";
@@ -9,7 +10,7 @@ createServer({
   // is the entry of the compiled binary and the Node.js build, which don't
   // read the config file at runtime. PORT still wins over the config's port.
   ...config,
-  port: Number(process.env.PORT ?? config.port ?? 3000),
+  port: env.PORT ?? config.port ?? 3000,
   appDir: "./app",
   publicDir: "./public",
   manifest,

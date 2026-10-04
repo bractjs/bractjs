@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 import "./api/stats.ts";
 // App-wide styles (Tailwind). BractJS extracts and links it — no <style> tag.
 import "./styles.css";
+import env from "./env.ts";
 import { panel } from "./ui.tsx";
 
 // Site-wide default <title> / <meta>. Each route's meta() overrides these
@@ -55,7 +56,7 @@ export function Layout({ children }: { children?: ReactNode }) {
           <div className="mx-auto flex h-14 max-w-3xl items-center gap-4 px-4">
             <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
               <ListChecks aria-hidden size={22} strokeWidth={2.5} />
-              Bract Todo
+              {env.PUBLIC_APP_NAME}
             </Link>
             <nav aria-label="Primary" className="ml-auto flex gap-1">
               <NavLink to={localize("/")} end className={navClass}>
