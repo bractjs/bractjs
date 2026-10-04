@@ -19,5 +19,6 @@ export declare function checkReactCopies(cwd?: string): CheckResult;
 export declare function checkConfig(load: () => Promise<unknown>): Promise<CheckResult>;
 export declare function checkGeneratedTypes(appDir: string): Promise<CheckResult>;
 export declare function checkEnv(appDir: string): Promise<CheckResult>;
+export declare function checkMdx(appDir: string, cwd?: string): CheckResult;
 export declare function checkPort(port: number, host?: string): Promise<CheckResult>;
 export declare function formatDoctor(results: CheckResult[]): string;

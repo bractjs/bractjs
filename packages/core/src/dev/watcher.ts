@@ -1,7 +1,7 @@
 import { watch } from "node:fs";
 import path from "node:path";
 
-const WATCHED_EXTENSIONS = new Set([".tsx", ".ts", ".css"]);
+const WATCHED_EXTENSIONS = new Set([".tsx", ".ts", ".css", ".mdx"]);
 
 /** Extra info about a debounced change burst. */
 export interface WatchChangeInfo {

@@ -21,7 +21,7 @@ Open work for 0.8.0, roughly in priority order.
 - [x] **OpenTelemetry preset** on top of `instrument()`
 - [x] **AWS Lambda adapter**; Vercel and Netlify recipes
 - [x] **WebSockets for app code** (Bun and Deno)
-- [ ] **MDX routes** (opt-in)
+- [x] **MDX routes** (opt-in)
 
 ---
 

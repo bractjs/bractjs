@@ -2,5 +2,7 @@ node_modules/
 build/
 .bract-image-cache/
 app/_generated/
+# MDX routes compile to these (bractjs codegen / dev / build)
+*.mdx.tsx
 app/route-types.gen.ts
 todo-app

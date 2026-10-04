@@ -10,6 +10,7 @@ A multi-route todo app showing the core BractJS workflow end to end:
 - **Typed API route** — `app/api/stats.ts` registers `GET /api/stats` with `route()` (try `curl localhost:3000/api/stats`). It's a GET, so it's CSRF-exempt; a mutating `route("POST", …)` would be CSRF-protected by default, exactly like `<Form>`.
 - **Per-route `headers()`** — `about.tsx` exports `headers()` to send `Cache-Control: public, max-age=3600` on its document/`/_data` responses.
 - **`HttpError(404)` + `ErrorBoundary`** — unknown ids render a not-found page.
+- **An MDX route**: `/guide` is `app/routes/guide.mdx` (Markdown + a React component), styled by `app/mdx-components.tsx`.
 - **A failing root loader** — set the cookie `todo-maintenance=1` and every page answers 503 with root's `ErrorBoundary` inside the `Layout`. The page hydrates, so **Try again** works.
 - **Filters** driven by the URL query string (`/?filter=active`).
 - **Single-binary deploy** via `bun build --compile`.

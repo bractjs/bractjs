@@ -73,10 +73,17 @@
     "prepublishOnly": "bun run typegen && bun run scripts/verify-pack.ts"
   },
   "peerDependencies": {
+    "@mdx-js/mdx": "^3",
     "react": "^19",
     "react-dom": "^19"
   },
+  "peerDependenciesMeta": {
+    "@mdx-js/mdx": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@mdx-js/mdx": "^3.1.1",
     "@types/bun": "1.4.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

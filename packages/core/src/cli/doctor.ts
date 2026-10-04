@@ -163,6 +163,21 @@ export async function checkEnv(appDir: string): Promise<CheckResult> {
   }
 }
 
+export function checkMdx(appDir: string, cwd: string = process.cwd()): CheckResult {
+  const name = "MDX";
+  const routes = resolve(cwd, appDir, "routes");
+  const count = existsSync(routes) ? [...new Bun.Glob("**/*.mdx").scanSync(routes)].length : 0;
+  if (count === 0) return { name, status: "ok", detail: "no .mdx routes" };
+  if (packageJsonFrom("@mdx-js/mdx", cwd))
+    return { name, status: "ok", detail: `${count} .mdx route${count === 1 ? "" : "s"}, compiler installed` };
+  return {
+    name,
+    status: "fail",
+    detail: `${count} .mdx route${count === 1 ? "" : "s"}, but @mdx-js/mdx isn't installed`,
+    fix: "bun add -d @mdx-js/mdx",
+  };
+}
+
 /** Is something accepting connections on `port`? (Connecting is reliable where a trial bind isn't.) */
 function portInUse(port: number, host: string): Promise<boolean> {
   return new Promise((done) => {

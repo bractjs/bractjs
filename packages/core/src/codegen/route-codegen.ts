@@ -1,3 +1,4 @@
+import { compileMdxRoutes } from "./mdx.ts";
 import { join } from "node:path";
 import { hashString } from "../build/hash.ts";
 import type { Segment } from "../server/scanner.ts";
@@ -451,6 +452,8 @@ export async function writeRouteTypes(
   outPath?: string,
 ): Promise<{ dest: string; written: boolean }> {
   const dest = outPath ?? join(appDir, "route-types.gen.ts");
+  // MDX routes become .mdx.tsx route modules first, so they're typed too.
+  await compileMdxRoutes(appDir);
   const next = await generateRouteTypes(appDir);
   // Skip the write (and the log, and the resulting file-watcher event) when the
   // content is unchanged — otherwise auto-codegen in dev would loop the editor.

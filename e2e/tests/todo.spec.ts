@@ -302,3 +302,34 @@ test("<Link viewTransition> commits the new page inside the View Transition", as
   ]);
   await expectSameDocument(page);
 });
+
+test("an MDX route: client navigation in, styled content, meta, hydrated components", async ({ page }) => {
+  await page.goto("/");
+  await hydrated(page);
+  await markDocument(page);
+  await page.getByRole("link", { name: "Guide" }).first().click();
+  await expect(page.getByRole("heading", { name: "Guide", level: 1 })).toBeVisible();
+  await expect(page).toHaveTitle("Guide · BractJS Todo");
+  // Styled by app/mdx-components.tsx.
+  await expect(page.getByRole("heading", { name: "Guide", level: 1 })).toHaveClass(/text-3xl/);
+  // An imported React component, interactive after hydration.
+  const counter = page.getByRole("button", { name: /Clicked 0 times/ });
+  await counter.click();
+  await expect(page.getByRole("button", { name: "Clicked 1 time" })).toBeVisible();
+  // A Markdown link back to the board soft-navigates.
+  await page.getByRole("link", { name: "board", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Todo board" })).toBeVisible();
+  await expectSameDocument(page);
+});
+
+test("an MDX route renders on the server with its frontmatter meta", async ({ page }) => {
+  const res = await page.goto("/guide");
+  expect(res?.status()).toBe(200);
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    "content",
+    "How this demo is built, written in MDX.",
+  );
+  await hydrated(page);
+  await page.getByRole("button", { name: /Clicked 0 times/ }).click();
+  await expect(page.getByRole("button", { name: "Clicked 1 time" })).toBeVisible();
+});

@@ -37,7 +37,7 @@ export function pathToSegments(pattern: string): Segment[] {
 
 export function filePathToPattern(filePath: string): string {
   // Strip "routes/" prefix and file extension
-  let path = filePath.replace(/^routes\//, "").replace(/\.(tsx|ts)$/, "");
+  let path = filePath.replace(/^routes\//, "").replace(/(?:\.mdx)?\.(tsx|ts)$/, "");
 
   // Drop route-group segments — `(marketing)/about` → `about`. They group
   // files (and their layout.tsx) without adding a URL segment.
@@ -66,7 +66,7 @@ export function filePathToPattern(filePath: string): string {
  * `routes/(marketing)/blog/[id].tsx` → `["(marketing)", "(marketing)/blog"]`.
  */
 export function layoutDirsFromFilePath(filePath: string): string[] {
-  const rel = filePath.replace(/^routes\//, "").replace(/\.(tsx|ts)$/, "");
+  const rel = filePath.replace(/^routes\//, "").replace(/(?:\.mdx)?\.(tsx|ts)$/, "");
   const parts = rel.split("/");
   parts.pop(); // drop the file's own basename — only ancestor dirs hold layouts
   const dirs: string[] = [];

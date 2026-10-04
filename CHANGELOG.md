@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **MDX routes.** `app/routes/**/*.mdx` pages are compiled to sibling `.mdx.tsx` route modules by codegen. They get your layouts, client navigation and hydration, and work in every run mode, including the compiled binary and the Node build. Frontmatter `title` / `description` become meta tags, and `app/mdx-components.tsx` styles every MDX page. Needs `@mdx-js/mdx` in the app's devDependencies (an optional peer dependency); production servers don't need it. `examples/todo` has a `/guide` page written in MDX. See README §4.
+
 - **WebSockets: `websocket(path, { upgrade, open, message, close }, { middleware })`** on Bun and Deno servers. Endpoints register like `route()` (`:param` paths too), and handshakes go through global middleware, the endpoint's middleware and `upgrade()`, which authenticates and returns the per-connection `ws.data` (or a `Response` to refuse). A cross-origin handshake gets a 403, against cross-site WebSocket hijacking. A Node.js server refuses to start with endpoints defined. See README §12.
 
 - **Serverless deploys.** `bractjs build --target node` also writes `build/node/handler.js`, the app as a self-contained module. It exports `fetch(request)` (Vercel, Netlify, Deno Deploy) and `handler` for AWS Lambda (API Gateway HTTP and REST APIs, Function URLs). Underneath are `appFetchHandler(() => import("./server.ts"))`, which returns the handler `app/server.ts`'s `createServer({...})` configures without listening, and `createLambdaHandler(fetch)`. [Deployment](docs/deployment.md#serverless-aws-lambda-vercel-netlify) has Lambda steps and Vercel/Netlify recipes; CI runs `handler.js` on Node.
@@ -31,6 +33,7 @@ All notable changes to BractJS are documented here.
 
 ### Fixed
 
+- **Dev: server actions survive a route edit.** After any route change, `bractjs dev` re-scanned `"use server"` modules with the app directory as a relative path. The cache-busted import (`app/actions.server.ts?v=1`) then failed to resolve, so every action 404'd until a restart.
 - **`<Link viewTransition>` animates.** It started the View Transition, but the router committed the new page only after the transition's callback had returned. The browser snapshotted the old page twice, so nothing animated. The router now commits the new page synchronously inside the callback.
 
 ### Changed

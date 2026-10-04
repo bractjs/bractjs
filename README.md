@@ -207,6 +207,30 @@ No registration step — the file IS the route.
 
 ---
 
+### MDX routes
+
+A route can be an `.mdx` file: Markdown with React components. Install the compiler in your app (`bun add -d @mdx-js/mdx`), then write `app/routes/docs/getting-started.mdx`:
+
+```mdx
+---
+title: Getting started
+description: Install and run your first app
+---
+
+import { Callout } from "../../components/Callout.tsx";
+
+# Getting started
+
+Install it with `bun add @bractjs/bractjs`.
+
+<Callout>Run `bractjs doctor` if anything looks off.</Callout>
+```
+
+- It serves `/docs/getting-started` inside your `root.tsx` and layouts, with client navigation and hydration, like a `.tsx` route.
+- Frontmatter `title` and `description` become meta tags, and `frontmatter` is exported. An `export const meta` in the file takes precedence.
+- `app/mdx-components.tsx` exporting `components` styles every MDX page (`h1`, `p`, `code`, `a`, …; a `wrapper` component wraps the whole page). Map `a` to `<Link>` to make in-app Markdown links soft-navigate.
+- **How it works:** codegen (`bractjs dev`, `build`, `codegen`, `compile`) compiles each `.mdx` to a sibling `.mdx.tsx` route module. Gitignore `*.mdx.tsx`; `bractjs new` does. Every run mode then uses that plain module, so the compiled binary and the Node build need no MDX compiler, and production servers don't need `@mdx-js/mdx` either. Only stale files recompile, and a deleted `.mdx` takes its compiled module with it. A `.mdx` and a `.tsx` route for the same URL is an error.
+
 ## 5. Route module API
 
 Every file in `app/routes/` (and `root.tsx`/`layout.tsx`) may export any combination of these. Import the arg types from the package.

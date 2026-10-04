@@ -1,3 +1,4 @@
+import { compileMdxRoutes } from "./mdx.ts";
 import { join, resolve } from "node:path";
 import { layoutDirsFromFilePath, type RouteFile, scanRoutes } from "../server/scanner.ts";
 import { hasServerDirective, isActionModulePath } from "../shared/directives.ts";
@@ -296,6 +297,7 @@ export interface CodegenResult {
 
 export async function writeModuleRegistries(appDir: string): Promise<CodegenResult> {
   const absAppDir = resolve(appDir);
+  await compileMdxRoutes(absAppDir); // .mdx routes → .mdx.tsx route modules
   const routes = await scanRoutes(absAppDir);
   const layoutRelPaths = await collectLayouts(absAppDir, routes);
   const hasRoot =
