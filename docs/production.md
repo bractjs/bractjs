@@ -92,6 +92,10 @@ Declare them with `defineEnv()` in `app/env.ts` (README §17). The server checks
 
 `sitemap({ origin })` in `app/server.ts` serves `/sitemap.xml` and `/robots.txt`. The sitemap lists every route without dynamic segments, every path in `prerender`, and whatever `extra()` returns (the concrete URLs of dynamic routes, e.g. from your database). With `i18n` configured it lists each page in every locale, with `hreflang` alternates. `/api/*` is never listed; `exclude` drops more (`["/admin/*"]`, or a predicate). `robots: { disallow: ["/admin"] }` adds rules, and `robots: false` leaves robots.txt to you. Both are cached for `maxAge` seconds (default 3600). `examples/todo` uses it.
 
+## Tracing
+
+`instrument(otel(api))` in `app/server.ts`, with your `@opentelemetry/api` and SDK, traces every request, with child spans for loaders, actions and route middleware, and continues incoming `traceparent` headers. See README §29 ("OpenTelemetry").
+
 ## Caching
 
 `cache()` builds a `Cache-Control` header for a route's `headers()`, for `data(value, { headers })`, or for any `Response`:

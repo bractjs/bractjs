@@ -41,7 +41,8 @@ import {
   runRouteMiddleware,
 } from "./middleware.ts";
 import { renderRootErrorDocument, renderRoute, type ServerManifest } from "./render.ts";
-import { getRequestId } from "./request-context.ts";
+import { getRequestId, setRoutePattern } from "./request-context.ts";
+import { routePatternOf } from "./scanner.ts";
 import {
   error,
   isSafeInternalRedirect,
@@ -255,6 +256,7 @@ async function route(
     const dataLocale = i18n ? splitLocale(targetPathname, i18n) : null;
     if (dataLocale) context.locale = dataLocale.locale;
     const match = matchRoute(dataLocale?.pathname ?? targetPathname, trie);
+    setRoutePattern(match?.routeFile ? routePatternOf(match.routeFile.segments) : undefined);
     if (!match) return json({ error: "Not Found" }, { status: 404 });
 
     try {
@@ -387,6 +389,7 @@ async function route(
   const matched = matchRoute(matchPathname, trie);
   if (!matched && !isDocumentRequest(request)) return error("Not Found", 404);
   const match = matched ?? { routeFile: undefined, params: {} as Record<string, string> };
+  setRoutePattern(match.routeFile ? routePatternOf(match.routeFile.segments) : undefined);
 
   const chain = match.routeFile
     ? await resolveRouteChain(match.routeFile, appDir, moduleRegistry)

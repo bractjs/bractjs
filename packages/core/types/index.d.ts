@@ -113,6 +113,8 @@ export { withMiddleware } from "./server/action-middleware.ts";
 export type { CacheDuration, CacheOptions } from "./server/cache.ts";
 export { cache, cacheControl, mergeCacheControl } from "./server/cache.ts";
 export { revalidatePath } from "./server/isr.ts";
+export type { OtelApi, OtelOptions } from "./server/otel.ts";
+export { otel } from "./server/otel.ts";
 export type { SitemapEntry, SitemapOptions } from "./server/sitemap.ts";
 export { sitemap } from "./server/sitemap.ts";
 export type { EnvOutput, EnvSchema, EnvSpec, EnvVar } from "./shared/define-env.ts";
