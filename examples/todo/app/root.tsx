@@ -1,6 +1,8 @@
 import {
+  HttpError,
   isRouteErrorResponse,
   Link,
+  type LoaderArgs,
   LiveReload,
   NavLink,
   Outlet,
@@ -11,7 +13,7 @@ import {
   useLocalizedLink,
   useLocation,
 } from "@bractjs/bractjs";
-import { ArrowLeft, CircleAlert, ListChecks } from "lucide-react";
+import { ArrowLeft, CircleAlert, ListChecks, RotateCw } from "lucide-react";
 import type { ReactNode } from "react";
 
 // Side-effect import: registers the typed `/api/stats` route. root.tsx is the
@@ -90,6 +92,16 @@ export function Layout({ children }: { children?: ReactNode }) {
   );
 }
 
+// Maintenance mode, a demo of the page for a failed root loader: with the
+// `todo-maintenance=1` cookie set, every page answers 503 with root's
+// ErrorBoundary inside the Layout. That page hydrates, so "Try again" works.
+export function loader({ request }: LoaderArgs) {
+  if (/(?:^|;\s*)todo-maintenance=1(?:;|$)/.test(request.headers.get("Cookie") ?? "")) {
+    throw new HttpError(503, "Down for maintenance");
+  }
+  return null;
+}
+
 export default function Root() {
   return <Outlet />;
 }
@@ -109,13 +121,25 @@ export function ErrorBoundary({ error }: { error: unknown }) {
       <p className="text-muted">
         {status === 404 ? "There's nothing at this address." : "Please try again in a moment."}
       </p>
-      <Link
-        to="/"
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal hover:text-ink"
-      >
-        <ArrowLeft aria-hidden size={16} strokeWidth={2.5} />
-        Back to the board
-      </Link>
+      <div className="flex items-center gap-4">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal hover:text-ink"
+        >
+          <ArrowLeft aria-hidden size={16} strokeWidth={2.5} />
+          Back to the board
+        </Link>
+        {status >= 500 && (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal hover:text-ink"
+          >
+            <RotateCw aria-hidden size={16} strokeWidth={2.5} />
+            Try again
+          </button>
+        )}
+      </div>
     </main>
   );
 }

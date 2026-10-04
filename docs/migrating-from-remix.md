@@ -189,7 +189,7 @@ Plain CSS imports (`import "./styles.css"`) and CSS Modules (`import styles from
 
 As of the current release, these have no clean equivalent. Plan around them:
 
-- **A failed root loader's** page isn't hydrated: root's `ErrorBoundary` renders inside `Layout` (or a minimal framework document), with no client scripts.
+- **A failed root loader's** page hydrates, but without a client router: its links are full page loads.
 - **`meta` merges** root → route instead of the leaf replacing the whole array.
 - **`<Form>` defaults to `post`**, not `get`.
 - **Route middleware doesn't cover `/api`**, and covers a `"use server"` function by where it's defined: see [Middleware and auth](#middleware-and-auth).

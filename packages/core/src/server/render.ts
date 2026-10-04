@@ -11,10 +11,10 @@ import {
   routeCssHrefs,
   StyleLinks,
 } from "../shared/style-links.tsx";
-import { BractJSContext, type RouteManifest } from "../shared/context.ts";
 import type { I18nConfig } from "../shared/i18n.ts";
 import { RequestIdContext } from "../shared/request-id.ts";
-import { renderErrorBoundary } from "../shared/route-error.ts";
+import { HttpError } from "../shared/errors.ts";
+import { RootErrorDocument } from "../shared/root-error-document.tsx";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
 import { appendDeferredScript, encodeDeferred } from "./deferred-wire.ts";
 import { getDevHmrPort, isDevRuntime, safeStringify } from "./env.ts";
@@ -206,72 +206,60 @@ export interface RootErrorDocumentOptions {
   manifest: ServerManifest;
   nonce?: string;
   status: number;
+  locale?: string;
+  i18n?: I18nConfig;
 }
 
 /**
  * The document for a failed root loader. root.tsx renders `<html>` itself and
- * needs its loader data to do so, so the framework owns this document: the
- * app-wide stylesheets plus root's ErrorBoundary. No client scripts — there is
- * no app to hydrate, and links on the page are plain document navigations.
+ * needs its loader data to do so, so the framework owns this document: root's
+ * `Layout` (or a minimal `<html>`), the app-wide stylesheets and root's
+ * ErrorBoundary (shared/root-error-document.tsx). It ships the client entry,
+ * which hydrates the same tree — the boundary's buttons and effects work, and
+ * links are document loads that retry the app.
  */
 export async function renderRootErrorDocument(options: RootErrorDocumentOptions): Promise<Response> {
-  const { Boundary, Layout, error, params, manifest, status } = options;
-  const title = `${status} ${error.message}`.trim();
-  const boundary = createElement(
-    RequestIdContext.Provider,
-    { value: getRequestId() },
-    renderErrorBoundary(Boundary, error, { params }),
-  );
-  const document = Layout
-    ? // The app's own document. Hooks inside Layout see an empty route state —
-      // like React Router, Layout must cope with missing loader data here.
-      createElement(
-        BractJSContext.Provider,
-        {
-          value: {
-            loaderData: { root: undefined, layouts: [], route: undefined },
-            actionData: null,
-            params,
-            pathname: options.pathname ?? "/",
-            manifest: manifest as unknown as RouteManifest,
-            location: {
-              pathname: options.pathname ?? "/",
-              search: options.search ?? "",
-              hash: "",
-              state: null,
-              key: "default",
-            },
-            search: {},
-            matches: [],
-          },
-        },
-        createElement(
-          Layout,
-          null,
-          // React hoists <title> and precedence stylesheets into <head>.
-          createElement("title", null, title),
-          createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
-          boundary,
-        ),
-      )
-    : createElement(
-        "html",
-        { lang: "en" },
-        createElement(
-          "head",
-          null,
-          createElement("meta", { charSet: "utf-8" }),
-          createElement("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }),
-          createElement("title", null, title),
-          createElement(StyleLinks, { hrefs: baseCssHrefs(manifest), precedence: CSS_PRECEDENCE_BASE }),
-        ),
-        createElement("body", null, boundary),
-      );
+  const { error, status, manifest } = options;
+  const requestId = getRequestId();
+  const pathname = options.pathname ?? "/";
+  const search = options.search ?? "";
+  const document = createElement(RootErrorDocument, {
+    Boundary: options.Boundary,
+    Layout: options.Layout,
+    error,
+    status,
+    params: options.params,
+    pathname,
+    search,
+    manifest,
+    requestId,
+    locale: options.locale,
+    i18n: options.i18n,
+  });
+  // The client entry hydrates the same RootErrorDocument from this payload:
+  // the root slot carries the error exactly as a failed loader leaves it.
+  const rootError = {
+    message: error.message,
+    ...(error instanceof HttpError ? { status: error.status } : {}),
+  };
+  const hmrPort = isDevRuntime() ? getDevHmrPort() : 0;
+  const devOverlay = isDevRuntime()
+    ? "window.__BRACT_DEV__=true;" +
+      (hmrPort ? `window.__BRACTJS_HMR_PORT__=${hmrPort};` : "") +
+      errorOverlayScript +
+      "\n"
+    : "";
+  const bootstrapScriptContent =
+    devOverlay +
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: { root: { __error: rootError }, layouts: [] }, actionData: null, params: options.params, pathname, manifest, requestId, locale: options.locale, i18n: options.i18n, rootError: { status } })};`;
   const tree = createElement(CspNonceContext.Provider, { value: options.nonce }, document);
   let renderError: unknown;
   let stream: ReadableStream;
   try {
     stream = await renderToReadableStream(tree, {
+      bootstrapScriptContent,
+      bootstrapModules: [manifest.clientEntry],
+      nonce: options.nonce,
       onError(err) {
         renderError = err;
         console.error("[bract] root error document render error:", err);

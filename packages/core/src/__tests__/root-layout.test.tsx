@@ -80,7 +80,7 @@ describe("root Layout export", () => {
     expect(body).toContain('<p id="root-boundary">503:maintenance</p>');
     expect(body).toContain("/build/client/root.css");
     expect(body).not.toContain('id="root"');
-    expect(body).not.toContain("__BRACTJS_DATA__");
+    expect(body).toContain('"rootError":{"status":503}');
   });
 
   test("the SPA shell renders inside the Layout too", async () => {
