@@ -8,6 +8,7 @@ import { DenoAdapter } from "../adapters/deno.ts";
 import { NodeAdapter } from "../adapters/node.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
 import { privateWhenSettingCookies } from "./cache.ts";
+import { createIsr, ISR_REGEN_HEADER, registerIsr } from "./isr.ts";
 import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
 import { envPort, isDevRuntime, isExplicitDev, parsePort } from "./env.ts";
@@ -153,6 +154,7 @@ export interface BractJSConfig {
 }
 
 let unregisterConfigInstrumentations: (() => void) | null = null;
+let unregisterIsr: (() => void) | null = null;
 
 const DEFAULT_MANIFEST: ServerManifest = {
   clientEntry: "/build/client/client.js",
@@ -387,11 +389,13 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // Prerendered output (production): serve the build-time HTML / _data
     // payload for clean URLs. A query string opts the request back into
     // dynamic SSR — the static file was rendered without one.
-    if (!isDevRuntime() && isDocGet) {
+    if (!isDevRuntime() && isDocGet && request.headers.get(ISR_REGEN_HEADER) !== isrToken) {
       if (pathname === "/_data") {
         const target = url.searchParams.get("path") ?? "/";
         const [targetPathname, targetSearch] = target.split("?");
         if (!targetSearch) {
+          const fromIsr = await isr.serve(targetPathname, "data");
+          if (fromIsr) return fromIsr;
           const rel = targetPathname === "/" ? "_data.json" : targetPathname.slice(1) + "/_data.json";
           const f = await prerenderFile(rel);
           if (f) {
@@ -404,6 +408,8 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
           }
         }
       } else if (!url.search) {
+        const fromIsr = await isr.serve(pathname, "html");
+        if (fromIsr) return fromIsr;
         const rel = pathname === "/" ? "index.html" : pathname.slice(1) + "/index.html";
         const f = await prerenderFile(rel);
         if (f) {
@@ -430,7 +436,25 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     return handleRequest(request, trie, handlerConfig, context);
   }
 
-  return async function fetch(request: Request): Promise<Response> {
+  // ISR (route `config.revalidate`): prerendered pages regenerate in the
+  // background through this same handler, with a secret header that skips the
+  // prerender cache (server/isr.ts).
+  const isrToken = crypto.randomUUID();
+  const isr = createIsr({
+    load: async (rel) => (await prerenderFile(rel))?.text() ?? null,
+    render: async (path) => {
+      const headers = { [ISR_REGEN_HEADER]: isrToken };
+      const [html, data] = await Promise.all([
+        handler(new Request(`http://isr.local${path}`, { headers })),
+        handler(new Request(`http://isr.local/_data?path=${encodeURIComponent(path)}`, { headers })),
+      ]);
+      return { html, data };
+    },
+  });
+  unregisterIsr?.();
+  unregisterIsr = registerIsr(isr);
+
+  const handler = async function fetch(request: Request): Promise<Response> {
     // DNS-rebinding guard for the dev server (see dev-host.ts). Runs before
     // everything, global middleware included. Production is unaffected.
     if (isDevRuntime() && !isAllowedDevHost(request.headers.get("Host"), allowedHosts)) {
@@ -470,6 +494,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       );
     }
   };
+  return handler;
 }
 
 /**

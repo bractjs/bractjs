@@ -1581,6 +1581,19 @@ export default {
 
 `bractjs build` runs the real loaders in-process (anything they need — DB, env — must be available at build time), writing each path's HTML **and** its `/_data` payload (used by client navigations _into_ a prerendered page) under `build/client/_prerender/`. In production, clean URLs are served from these files before dynamic SSR; **a query string opts the request back into SSR** (the file was rendered without one). Paths must be concrete — expand `"/blog/:slug"` yourself; the build fails on patterns. `runPrerender(options)` is exported from `@bractjs/bractjs/build` for custom pipelines.
 
+**Incremental static regeneration (ISR)** — a prerendered route can refresh itself without a rebuild:
+
+```ts
+// app/routes/news.tsx
+export const config = { revalidate: 60 }; // seconds
+
+// …and after the content changes, from an action:
+import { revalidatePath } from "@bractjs/bractjs";
+await revalidatePath("/news");
+```
+
+The production server serves an ISR page (and its `/_data` payload) from memory. Once it's older than `revalidate`, it keeps serving the old copy while **one** background render, through the full request pipeline, produces a fresh one. A failed render keeps the old copy. `revalidatePath(path)` regenerates immediately and resolves `true` once the fresh copy is in place. Responses carry `Cache-Control: public, max-age=0, s-maxage=<revalidate>, stale-while-revalidate=<revalidate>`. The cache is **per process**: each instance of a scaled-out app regenerates on its own, and `revalidatePath` only reaches the process it runs in. It works in the compiled binary (the embedded files are the starting copies). Not on Cloudflare, where the platform serves the static files.
+
 Deployment notes: `bractjs compile` prerenders too and embeds the output in the binary. On Cloudflare, upload `build/client/` as static assets so the platform serves prerendered files before the worker runs.
 
 ---

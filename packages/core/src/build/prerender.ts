@@ -1,5 +1,6 @@
 import { type I18nConfig, localizePath } from "../shared/i18n.ts";
 import { join } from "node:path";
+import { ISR_MANIFEST, type IsrManifest, parseRevalidate, PRERENDER_HEADER, REVALIDATE_HEADER } from "../server/isr.ts";
 import { buildFetchHandler } from "../server/serve.ts";
 import type { ServerManifest } from "../server/render.ts";
 
@@ -72,13 +73,16 @@ export async function runPrerender(options: PrerenderOptions): Promise<Prerender
   });
 
   const written: string[] = [];
+  const isrRoutes: Record<string, number> = {};
   for (const path of paths) {
     const out = prerenderPaths(path);
 
-    const htmlRes = await handler(new Request("http://prerender.local" + path));
+    const htmlRes = await handler(new Request("http://prerender.local" + path, { headers: { [PRERENDER_HEADER]: "1" } }));
     if (htmlRes.status !== 200) {
       throw new Error(`[bractjs] prerender: GET ${path} returned ${htmlRes.status}`);
     }
+    const revalidate = htmlRes.headers.get(REVALIDATE_HEADER);
+    if (revalidate !== null) isrRoutes[path] = parseRevalidate(revalidate, path);
     const htmlFile = join(buildDir, "client", "_prerender", out.html);
     await Bun.write(htmlFile, await htmlRes.text());
     written.push(htmlFile);
@@ -91,6 +95,13 @@ export async function runPrerender(options: PrerenderOptions): Promise<Prerender
       await Bun.write(dataFile, await dataRes.text());
       written.push(dataFile);
     }
+  }
+  // ISR pages (route `config.revalidate`): the server regenerates these.
+  if (Object.keys(isrRoutes).length) {
+    const manifest: IsrManifest = { generatedAt: Date.now(), routes: isrRoutes };
+    const file = join(buildDir, "client", "_prerender", ISR_MANIFEST);
+    await Bun.write(file, JSON.stringify(manifest, null, 2));
+    written.push(file);
   }
   return { written };
 }
