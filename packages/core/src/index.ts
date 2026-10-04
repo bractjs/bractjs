@@ -178,6 +178,8 @@ export { withMiddleware } from "./server/action-middleware.ts";
 export type { CacheDuration, CacheOptions } from "./server/cache.ts";
 export { cache, cacheControl, mergeCacheControl } from "./server/cache.ts";
 export { revalidatePath } from "./server/isr.ts";
+export type { SitemapEntry, SitemapOptions } from "./server/sitemap.ts";
+export { sitemap } from "./server/sitemap.ts";
 export type { EnvOutput, EnvSchema, EnvSpec, EnvVar } from "./shared/define-env.ts";
 export { defineEnv, env, EnvError } from "./shared/define-env.ts";
 export { getRequest, getRequestId } from "./server/request-context.ts";

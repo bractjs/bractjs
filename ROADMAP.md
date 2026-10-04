@@ -17,7 +17,7 @@ Open work for 0.8.0, roughly in priority order.
 - [x] **`bractjs routes` and `bractjs doctor`**
 - [x] **Dev error overlay**: code frames, open-in-editor, client runtime errors
 - [x] **ISR for prerendered pages** (`revalidate`, `revalidatePath()`)
-- [ ] **Sitemap and robots.txt** from the route table, prerender paths and locales
+- [x] **Sitemap and robots.txt** from the route table, prerender paths and locales
 - [ ] **OpenTelemetry preset** on top of `instrument()`
 - [ ] **AWS Lambda adapter**; Vercel and Netlify recipes
 - [ ] **WebSockets for app code** (Bun and Deno)

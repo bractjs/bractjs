@@ -9,6 +9,7 @@ import { NodeAdapter } from "../adapters/node.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
 import { privateWhenSettingCookies } from "./cache.ts";
 import { createIsr, ISR_REGEN_HEADER, registerIsr } from "./isr.ts";
+import { registerSiteSource } from "./sitemap.ts";
 import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
 import { envPort, isDevRuntime, isExplicitDev, parsePort } from "./env.ts";
@@ -234,9 +235,10 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   // routes, skip the runtime `Bun.Glob` scan that `bun build --compile`
   // can't satisfy (the routes/ directory isn't on the filesystem in a
   // single-binary deployment). Same idea for server actions.
-  const trieReady = config.routeFiles
-    ? Promise.resolve(buildTrie(config.routeFiles))
-    : scanRoutes(appDir).then(buildTrie);
+  const routeFilesReady = config.routeFiles ? Promise.resolve(config.routeFiles) : scanRoutes(appDir);
+  const trieReady = routeFilesReady.then(buildTrie);
+  // What sitemap() lists: this app's routes, prerendered paths and locales.
+  registerSiteSource({ routes: routeFilesReady, prerender: config.prerender, i18n: config.i18n });
   const actionsReady = config.actionModules
     ? loadServerActionsFromRegistry(config.actionModules)
     : loadServerActions(appDir);

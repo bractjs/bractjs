@@ -8,6 +8,8 @@ export default defineEnv({
   server: {
     // Hosting platforms (Fly, Render, Railway) assign it.
     PORT: env.number({ integer: true, min: 1, max: 65535 }).optional(),
+    // The public origin, for absolute URLs in /sitemap.xml.
+    ORIGIN: env.url().default("http://localhost:3000"),
   },
   client: {
     // Try `PUBLIC_APP_NAME="My Todos" bun run dev`.

@@ -163,18 +163,20 @@ The [authentication guide](authentication.md) walks through all of it. Do not po
 A Remix "resource route" (a route with a `loader` and no component, returning a `Response`) has no direct equivalent — a loader's return value is always page data.
 
 - For JSON or other endpoints under `/api`, use typed API routes: `route("GET", "/api/feed", handler)`. The defining module must be imported (directly or indirectly) from `app/root.tsx`, or the endpoint won't exist; `bractjs dev` warns at boot if you forget ([§12](../README.md#12-typed-api-routes)).
-- For fixed files at the root (`/robots.txt`, `/sitemap.xml`, `/favicon.ico`), add a small global middleware in `app/server.ts` that answers those paths:
+- For `/sitemap.xml` and `/robots.txt`, register the built-in `sitemap()` middleware in `app/server.ts`. It lists every static route and prerendered path (plus `extra()` for dynamic ones, with hreflang alternates under i18n):
 
 ```ts
 // app/server.ts
-pipeline.use(async (ctx, next) => {
-  const { pathname } = new URL(ctx.request.url);
-  if (pathname === "/robots.txt") return new Response("User-agent: *\nAllow: /\n");
-  if (pathname === "/sitemap.xml")
-    return new Response(await buildSitemap(), { headers: { "Content-Type": "application/xml" } });
-  return next();
-});
+import { pipeline, sitemap } from "@bractjs/bractjs";
+pipeline.use(
+  sitemap({
+    origin: "https://example.com",
+    extra: async () => (await db.posts()).map((p) => `/blog/${p.slug}`),
+  }),
+);
 ```
+
+- Other fixed files at the root (`/favicon.ico`, `/.well-known/…`) can be answered the same way by a small global middleware.
 
 ## Environment variables and server-only code
 
