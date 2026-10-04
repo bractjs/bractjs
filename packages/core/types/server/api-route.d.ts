@@ -68,6 +68,11 @@ export declare function route<TMethod extends HttpMethod, TPath extends string, 
  * Returns null if no route matches so the caller can fall through.
  */
 export declare function handleApiRequest(request: Request): Promise<Response | null>;
+/**
+ * Match a pathname against a route pattern; returns the `:param` values
+ * (null-prototype object) or null when it doesn't match.
+ */
+export declare function matchPath(pattern: string, pathname: string): Record<string, string> | null;
 export type AppApiRoutes = (typeof routeRegistry)[number] extends ApiRouteDefinition<infer M, infer P, infer I, infer O> ? {
     method: M;
     path: P;

@@ -28,5 +28,7 @@ export declare class BunAdapter implements BractAdapter {
     setHandler(handler: (request: Request) => Promise<Response>): void;
     fetch(request: Request): Promise<Response>;
     listen(port: number): void;
+    /** The port actually bound (useful with port 0). */
+    get port(): number | undefined;
     stop(): void;
 }

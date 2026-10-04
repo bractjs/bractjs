@@ -1,5 +1,19 @@
 import { setClientAddress } from "./client-address.ts";
 import { isExplicitDev } from "./env.ts";
+import {
+  registerUpgrader,
+  runSocketHandler,
+  wrapSocket,
+  type BractWebSocket,
+  type WebSocketHandlers,
+} from "./websocket.ts";
+
+/** Per-connection state Bun keeps on `ws.data`. */
+interface SocketState {
+  handlers: WebSocketHandlers<unknown>;
+  data: unknown;
+  socket?: BractWebSocket<unknown>;
+}
 
 // ── BractAdapter ──────────────────────────────────────────────────────────
 
@@ -63,11 +77,41 @@ export class BunAdapter implements BractAdapter {
       port,
       ...(this.hostname ? { hostname: this.hostname } : {}),
       maxRequestBodySize: this.maxRequestBodySize,
-      fetch(request, server) {
+      async fetch(request, server) {
         // Record the socket address for getClientAddress() (rate limiting, logs).
         const address = server.requestIP(request)?.address;
         if (address) setClientAddress(request, address);
-        return handler(request);
+        // websocket() endpoints: dispatch upgrades through server.upgrade(),
+        // after which Bun answers the handshake and fetch must return nothing.
+        let upgraded = false;
+        registerUpgrader(request, ({ handlers, data }) => {
+          upgraded = server.upgrade(request, { data: { handlers, data } satisfies SocketState });
+          return upgraded;
+        });
+        const response = await handler(request);
+        return upgraded ? undefined : response;
+      },
+      websocket: {
+        open(ws) {
+          const state = ws.data as SocketState;
+          state.socket = wrapSocket(ws, state.data);
+          runSocketHandler("open", () => state.handlers.open?.(state.socket!));
+        },
+        message(ws, message) {
+          const state = ws.data as SocketState;
+          const payload =
+            typeof message === "string"
+              ? message
+              : (message.buffer.slice(
+                  message.byteOffset,
+                  message.byteOffset + message.byteLength,
+                ) as ArrayBuffer);
+          runSocketHandler("message", () => state.handlers.message?.(state.socket!, payload));
+        },
+        close(ws, code, reason) {
+          const state = ws.data as SocketState;
+          runSocketHandler("close", () => state.handlers.close?.(state.socket!, code, reason));
+        },
       },
       error(err: Error) {
         console.error("[bractjs] unhandled server error:", err);
@@ -81,6 +125,11 @@ export class BunAdapter implements BractAdapter {
         });
       },
     });
+  }
+
+  /** The port actually bound (useful with port 0). */
+  get port(): number | undefined {
+    return this.server?.port;
   }
 
   stop(): void {

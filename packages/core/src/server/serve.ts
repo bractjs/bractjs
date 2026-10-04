@@ -340,6 +340,13 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       });
     }
 
+    // WebSocket handshakes for websocket() endpoints (Bun / Deno adapters).
+    if (request.headers.has("Upgrade")) {
+      const { handleWebSocketRequest } = await import("./websocket.ts");
+      const wsRes = await handleWebSocketRequest(request);
+      if (wsRes) return wsRes;
+    }
+
     // Typed API routes (registered via bract.route())
     if (pathname.startsWith("/api")) {
       const { handleApiRequest } = await import("./api-route.ts");

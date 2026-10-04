@@ -207,7 +207,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
  * Match a pathname against a route pattern; returns the `:param` values
  * (null-prototype object) or null when it doesn't match.
  */
-function matchPath(pattern: string, pathname: string): Record<string, string> | null {
+export function matchPath(pattern: string, pathname: string): Record<string, string> | null {
   const pSegs = pattern.split("/").filter(Boolean);
   const rSegs = pathname.split("/").filter(Boolean);
   if (pSegs.length !== rSegs.length) return null;
