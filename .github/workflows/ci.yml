@@ -128,6 +128,13 @@ jobs:
           E2E_TARGET: ${{ matrix.target }}
         run: pnpm e2e
 
+      # The node build's serverless entry (build/node/handler.js, left by the
+      # e2e run's `pnpm build:node`): fetch() and the AWS Lambda handler on Node.
+      - name: Serverless handler smoke
+        if: matrix.target == 'node'
+        working-directory: examples/todo
+        run: node ../../e2e/serverless-smoke.mjs
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7

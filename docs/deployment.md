@@ -46,6 +46,61 @@ The binary boots with **zero filesystem reads**. `bractjs compile` embeds `build
 
 `bractjs build --target node` adds `build/node/server.js`: `app/server.ts` bundled with the app, React and the framework, for Node.js 22+ or Deno. Ship `build/` and `public/`, then run `NODE_ENV=production node build/node/server.js`. `createServer()` picks the right adapter by itself. The app's server code must run on that runtime: no `bun:sqlite` or `Bun.*`, and no `/_image` optimizer. See [§23](../README.md#23-runtimes-and-adapters).
 
+## Serverless: AWS Lambda, Vercel, Netlify
+
+`bractjs build --target node` also writes `build/node/handler.js`: the same app as a self-contained module. It is built from the `createServer({...})` call in `app/server.ts`, so middleware and config apply, but nothing listens. It exports:
+
+- `fetch(request) → Response`, the shape Vercel, Netlify and Deno Deploy call;
+- `handler`, an AWS Lambda handler for API Gateway (HTTP and REST APIs) and Lambda Function URLs.
+
+Either way, deploy `build/node/handler.js` together with `build/client/` and `public/`, keeping those paths relative to the function's working directory. That is where static assets and prerendered pages are read from.
+
+**AWS Lambda.** Use the Node.js 22 runtime, zip `build/` and `public/`, and set the handler to `build/node/handler.handler`. Put a Function URL or an HTTP API in front. Lambda's buffered invoke mode delivers streamed pages whole. `createLambdaHandler(fetch)` is exported too, for wrapping your own handler.
+
+**Vercel** (recipe):
+
+```js
+// api/index.mjs
+import { fetch } from "../build/node/handler.js";
+export {
+  fetch as GET,
+  fetch as POST,
+  fetch as PUT,
+  fetch as PATCH,
+  fetch as DELETE,
+  fetch as HEAD,
+  fetch as OPTIONS,
+};
+```
+
+```json
+// vercel.json
+{
+  "buildCommand": "pnpm build:node",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "functions": { "api/index.mjs": { "includeFiles": "{build/client,public}/**" } }
+}
+```
+
+**Netlify** (recipe):
+
+```js
+// netlify/functions/app.mjs
+import { fetch } from "../../build/node/handler.js";
+export default (request) => fetch(request);
+export const config = { path: "/*" };
+```
+
+```toml
+# netlify.toml
+[build]
+command = "pnpm build:node"
+[functions]
+included_files = ["build/client/**", "public/**"]
+```
+
+CI checks `handler.js` on Node, as `fetch` and as a Lambda handler. The Vercel and Netlify files above follow those platforms' documented function formats, but aren't run in CI. Every in-memory store is per instance on a serverless platform, and instances come and go: memory sessions, `rateLimit()`'s default store, and the ISR cache. Use external stores for anything that must persist.
+
 ## Rendering modes and what they change
 
 All opt-in, all composable with either run path ([§21](../README.md#21-build--run)):

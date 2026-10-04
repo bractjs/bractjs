@@ -577,10 +577,16 @@ export function setCreateServerSuppressed(v: boolean): void {
   createServerSuppressed = v;
 }
 
+// The config of the last suppressed createServer() call, for appFetchHandler().
+let suppressedConfig: Partial<BractJSConfig> | null = null;
+
 export function createServer(config?: Partial<BractJSConfig>): {
   stop(): void;
 } {
-  if (createServerSuppressed) return { stop() {} };
+  if (createServerSuppressed) {
+    suppressedConfig = config ?? {};
+    return { stop() {} };
+  }
 
   // An explicit `port` wins; otherwise the platform's PORT, then 3000.
   const port = parsePort(config?.port, "the `port` option") ?? envPort() ?? 3000;
@@ -691,4 +697,32 @@ function defaultAdapter(config: Partial<BractJSConfig> | undefined): BractAdapte
   if (g.Deno)
     return new DenoAdapter({ hostname: config?.hostname, maxRequestBodySize: config?.maxRequestBodySize });
   return new NodeAdapter({ hostname: config?.hostname, maxRequestBodySize: config?.maxRequestBodySize });
+}
+
+/**
+ * The app's request handler, for serverless platforms (Vercel, Netlify, AWS
+ * Lambda, Deno Deploy): imports your server entry — usually `app/server.ts` —
+ * with its `createServer({...})` call kept from listening, and returns the
+ * `fetch(request)` handler that call configured (middleware, config,
+ * generated registries, compression). `bractjs build --target node` writes
+ * `build/node/handler.js` with it:
+ *
+ *   export const fetch = await appFetchHandler(() => import("../server.ts"));
+ */
+export async function appFetchHandler(
+  importServerEntry: () => Promise<unknown>,
+): Promise<(request: Request) => Promise<Response>> {
+  suppressedConfig = null;
+  setCreateServerSuppressed(true);
+  try {
+    await importServerEntry();
+  } finally {
+    setCreateServerSuppressed(false);
+  }
+  const config = suppressedConfig as Partial<BractJSConfig> | null;
+  if (!config) {
+    throw new Error("[bractjs] appFetchHandler(): the server entry didn't call createServer({...})");
+  }
+  const app = buildFetchHandler(config);
+  return config.compression === false ? app : withCompression(app);
 }

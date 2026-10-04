@@ -17,6 +17,8 @@ export type { DenoAdapterOptions } from "./adapters/deno.ts";
 export { createDenoAdapter, DenoAdapter } from "./adapters/deno.ts";
 export type { NodeAdapterOptions } from "./adapters/node.ts";
 export { createNodeAdapter, NodeAdapter } from "./adapters/node.ts";
+export type { LambdaEvent, LambdaEventV1, LambdaEventV2, LambdaResult } from "./adapters/lambda.ts";
+export { createLambdaHandler, lambdaEventToRequest, responseToLambdaResult } from "./adapters/lambda.ts";
 // Build pipeline (runBuild, runPrerender, bundler plugins) lives at
 // `@bractjs/bractjs/build`; codegen (module registries for the compiled
 // binary) at `@bractjs/bractjs/codegen`. See src/build-entry.ts and
@@ -192,7 +194,7 @@ export { getClientAddress } from "./server/client-address.ts";
 export type { RouteFile, Segment } from "./server/scanner.ts";
 export { searchParamsToObject, validateSearch } from "./server/search.ts";
 export type { I18nConfig } from "./server/serve.ts";
-export { buildFetchHandler } from "./server/serve.ts";
+export { appFetchHandler, buildFetchHandler } from "./server/serve.ts";
 export type {
   CommitOptions,
   CookieSessionOptions,
