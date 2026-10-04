@@ -213,7 +213,7 @@ Every file in `app/routes/` (and `root.tsx`/`layout.tsx`) may export any combina
 
 ```tsx
 import type { LoaderArgs, ActionArgs, MetaArgs, HeadersArgs } from "@bractjs/bractjs";
-import { redirect, json, HttpError } from "@bractjs/bractjs";
+import { cache, redirect, json, HttpError } from "@bractjs/bractjs";
 
 // 1) loader — runs on every GET. Return value → useLoaderData().
 //    `search` is the validated output of searchSchema (below), or the raw
@@ -289,8 +289,11 @@ export function Fallback() {
 // 9) headers — set response headers (Cache-Control / ETag / Vary / CDN hints)
 //    for this route's document AND /_data responses. Runs root → layout →
 //    route; innermost wins per key, and you receive the merged parentHeaders.
+//    cache() builds Cache-Control; mergeCacheControl(parentHeaders.get(
+//    "Cache-Control"), …) keeps a parent's limit instead of overriding it.
+//    A response that sets a cookie is always made `private` (no CDN caching).
 export function headers({ loaderData, parentHeaders }: HeadersArgs<LoaderData>) {
-  return { "Cache-Control": "public, max-age=300, s-maxage=3600" };
+  return cache({ public: true, maxAge: "5m", sMaxAge: "1h", staleWhileRevalidate: "1d" });
 }
 
 // 10) middleware — nested, server-side. Runs root → layout → route BEFORE

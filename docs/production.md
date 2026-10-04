@@ -84,6 +84,24 @@ Change the path with `{ path: "/livez" }`. Register it first, so auth and rate l
 
 Each option takes a string to change the value, or `false` to omit the header. HSTS counts a request as HTTPS when its URL is `https:` or `X-Forwarded-Proto` says `https`. Pair it with `csp()` for a Content-Security-Policy (README §14).
 
+## Caching
+
+`cache()` builds a `Cache-Control` header for a route's `headers()`, for `data(value, { headers })`, or for any `Response`:
+
+```ts
+import { cache } from "@bractjs/bractjs";
+
+// Browsers reuse the page for 1 minute, a CDN for 1 hour, and the CDN may serve it
+// stale for a day while it refreshes in the background.
+export const headers = () => cache({ public: true, maxAge: "1m", sMaxAge: "1h", staleWhileRevalidate: "1d" });
+```
+
+Durations are seconds or `"30s"`/`"5m"`/`"1h"`/`"7d"`. `private: true` keeps per-user pages out of shared caches; `noStore: true` stores nothing.
+
+Route `headers()` run root → layouts → route, and the innermost value wins (React Router's rule). To keep a layout's limit instead, merge: `mergeCacheControl(parentHeaders.get("Cache-Control"), "public, max-age=3600")` returns the most restrictive combination.
+
+**Responses that set a cookie are never shared-cacheable.** If a response carries `Set-Cookie` and its `Cache-Control` says `public` or `s-maxage`, BractJS rewrites it to `private` (dropping `s-maxage`) after all middleware has run, and warns once per path in development. A CDN would otherwise replay one visitor's session cookie to everyone.
+
 ## Rate limiting
 
 `rateLimit({ max, windowMs })` counts requests per client in fixed windows. Past `max` it answers `429 Too Many Requests` with `Retry-After`. Responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`.
