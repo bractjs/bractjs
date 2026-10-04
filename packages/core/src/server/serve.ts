@@ -303,6 +303,20 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
       return handleHmrModuleRequest(url, appDir);
     }
 
+    // Dev-only: the error overlay's code frames and open-in-editor. The
+    // handlers also require the same-origin mutation gate (see the module).
+    if (
+      isDevRuntime() &&
+      isExplicitDev() &&
+      (pathname === "/_bractjs/stack" || pathname === "/_bractjs/open")
+    ) {
+      const overlay = await import("../dev/overlay-endpoints.ts");
+      const opts = { root: process.cwd(), clientOutDir: resolve(buildDir, "client") };
+      return pathname === "/_bractjs/stack"
+        ? overlay.handleStackRequest(request, opts)
+        : overlay.handleOpenRequest(request, opts);
+    }
+
     // Dev-only: serve the DevTools panel module imported by hmr-client.
     // SECURITY(high): gated by isExplicitDev() so production never compiles
     // and ships package internals as JS.

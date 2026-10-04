@@ -1496,6 +1496,8 @@ The CLI is a thin wrapper — every command delegates to a public function, so y
 
 **`createDevServer(options?)`** — dev server with HMR, imported from `@bractjs/bractjs/dev`. (The root import still re-exports it, deprecated, until 0.9.)
 
+**Error overlay (dev only):** a loader error, an uncaught error, a component error an `ErrorBoundary` caught, or a hydration mismatch opens a full-screen overlay with the message and the stack's frames as code excerpts. Browser frames are mapped back to your source. **Open in editor** opens the frame in `$BRACTJS_EDITOR`, else `$VISUAL`, `$EDITOR`, or VS Code's `code` (Cursor, Zed, Sublime, JetBrains IDEs and vim are recognized). Press Escape to close it. Deliberate `HttpError`s don't open it. Its endpoints exist only under `bractjs dev`, refuse cross-site requests, and never read or open files outside the project.
+
 Change handling in dev: route-module edits (including **loaders, actions, and `beforeLoad`**) are applied live — the server re-imports the fresh module on the next request, no restart needed. Changes the process cannot absorb — `app/server.ts`, `lifecycle.ts`, any `*.server.ts`, shared non-route modules, or adding/removing a route file — make `bractjs dev` restart itself and the browser reload once its HMR socket reconnects. Programmatic `createDevServer()` callers can hook this via `onRestartRequired(file)` (the default logs a restart warning instead of exiting).
 
 ```ts

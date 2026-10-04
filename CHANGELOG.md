@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **A better dev error overlay.** It shows each stack frame inside the project as a code excerpt, with browser frames mapped back to the source (through the dev build's source maps, and past the build-time rewrite of route modules), and an **Open in editor** button (`$BRACTJS_EDITOR`, `$VISUAL`, `$EDITOR`, or `code`). It now also opens for client errors, not only server loader errors: uncaught errors, unhandled rejections, errors an `ErrorBoundary` caught (except deliberate `HttpError`s), and hydration mismatches React recovered from. Escape closes it. The two endpoints behind it (`/_bractjs/stack`, `/_bractjs/open`) exist only under `bractjs dev`, refuse cross-site requests, and stay inside the project directory.
+
 - **`bractjs routes`** lists the app's pages (with loader/action markers) and its typed `/api` endpoints; `--json` prints the same as data.
 - **`bractjs doctor`** checks the setup and says how to fix what's wrong: the Bun version (1.4.2 or later), a single copy of React with matching react-dom (two copies break hydration), `bractjs.config.ts`, the app layout, `app/env.ts`, the generated route types, and whether the port is free. It exits 1 when a check fails.
 
