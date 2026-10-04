@@ -1487,6 +1487,8 @@ Generates a `srcset` across breakpoints (320→1920px). Optimized images are cac
 | `bractjs codegen:registry [app]`         | Generate `app/_generated/{routes,actions}.ts`.                          |
 | `bractjs codegen:manifest [app] [build]` | Snapshot manifest → `app/_generated/manifest.ts`.                       |
 | `bractjs compile [outfile] [entry]`      | Full single-binary pipeline.                                            |
+| `bractjs routes [--json]`                | List the pages (with loader/action markers) and typed `/api` endpoints. |
+| `bractjs doctor [--port n]`              | Check Bun, React (one copy), config, `app/env.ts`, typed routes, port.  |
 
 The CLI is a thin wrapper — every command delegates to a public function, so you can script the same thing.
 

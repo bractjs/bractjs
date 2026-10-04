@@ -1,5 +1,5 @@
 import { basename, extname, join, resolve } from "node:path";
-import { extractApiRouteDefs, lintRouteModuleSource } from "../build/route-lint.ts";
+import { extractApiRouteDefs } from "../build/route-lint.ts";
 import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
 import { loadUserConfig } from "../config/load.ts";
 import { loadEnvModule, loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts";
@@ -8,13 +8,13 @@ import { cssModuleClassesChanged, installCssModulesRuntime } from "../server/css
 import { listApiRoutes } from "../server/api-route.ts";
 import { bumpDevModuleGeneration, envPort, parsePort, setDevHmrPort, setRuntimeMode } from "../server/env.ts";
 import type { LifecycleHooks } from "../server/lifecycle.ts";
-import { filePathToPattern, scanRoutes } from "../server/scanner.ts";
+import { filePathToPattern } from "../server/scanner.ts";
 import type { BractJSConfig } from "../server/serve.ts";
 import { createServer } from "../server/serve.ts";
 import { installUseClientServerStub } from "../server/use-client-runtime.ts";
 import { createHmrServer } from "./hmr-server.ts";
 import { rebuildClient } from "./rebuilder.ts";
-import { formatRouteTable, type RouteTableRow } from "./route-table.ts";
+import { collectRouteRows, formatRouteTable, type RouteTableRow } from "./route-table.ts";
 import { watchApp } from "./watcher.ts";
 
 // Warn-once across HMR rebuilds so the same lint message doesn't spam the log.
@@ -26,27 +26,11 @@ const warnedRouteIssues = new Set<string>();
  * table rows so the boot path can print them alongside the HMR port.
  */
 async function inspectRoutes(appDir: string): Promise<RouteTableRow[]> {
-  const routes = await scanRoutes(appDir);
-  const rows: RouteTableRow[] = [];
-  for (const r of routes) {
-    let src = "";
-    try {
-      src = await Bun.file(resolve(process.cwd(), appDir, r.filePath)).text();
-    } catch {
-      continue;
-    }
-    for (const warning of lintRouteModuleSource(src, r.filePath)) {
-      const key = r.filePath + "\0" + warning;
-      if (warnedRouteIssues.has(key)) continue;
-      warnedRouteIssues.add(key);
-      console.warn(`[bractjs] ${warning}`);
-    }
-    rows.push({
-      pattern: r.urlPattern === "" ? "/" : "/" + r.urlPattern,
-      file: r.filePath,
-      hasLoader: /^export\s+(?:async\s+)?function\s+loader\b|^export\s+const\s+loader\b/m.test(src),
-      hasAction: /^export\s+(?:async\s+)?function\s+action\b|^export\s+const\s+action\b/m.test(src),
-    });
+  const { rows, warnings } = await collectRouteRows(appDir);
+  for (const warning of warnings) {
+    if (warnedRouteIssues.has(warning)) continue;
+    warnedRouteIssues.add(warning);
+    console.warn(`[bractjs] ${warning}`);
   }
   return rows;
 }
