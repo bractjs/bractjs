@@ -6,6 +6,8 @@ build/
 # and `bractjs codegen:manifest`. Required for `bun build --compile` but
 # never edited by hand.
 app/_generated/
+# MDX routes compile to these (bractjs codegen / dev / build)
+*.mdx.tsx
 app/route-types.gen.ts
 
 # Bun lockfile is tracked; bun.lock.gz isn't

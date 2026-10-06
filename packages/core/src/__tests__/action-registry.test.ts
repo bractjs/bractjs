@@ -113,3 +113,32 @@ describe("loadServerActionsFromRegistry", () => {
     expect(resolveAction(ignored)).toBeNull();
   });
 });
+
+test("a dev re-scan with a relative appDir still loads (cache-busted imports need an absolute path)", async () => {
+  const { bumpDevModuleGeneration, setRuntimeMode, isDevRuntime } = await import("../server/env.ts");
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  // Outside the package, so the relative path can't resolve by accident.
+  const dir = await mkdtemp(resolve(tmpdir(), "bract-actions-"));
+  await mkdir(resolve(dir, "lib"), { recursive: true });
+  await writeFile(
+    resolve(dir, "lib", "rel.server.ts"),
+    `"use server";\nexport async function relAction() { return 5; }\n`,
+  );
+  const wasDev = isDevRuntime();
+  setRuntimeMode("dev");
+  bumpDevModuleGeneration();
+  try {
+    await loadServerActions(relative(process.cwd(), dir));
+    const raw = new TextEncoder().encode("lib/rel.server.ts#relAction");
+    const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", raw)), (b) =>
+      b.toString(16).padStart(2, "0"),
+    )
+      .join("")
+      .slice(0, 16);
+    expect(typeof resolveAction(id)).toBe("function");
+  } finally {
+    setRuntimeMode(wasDev ? "dev" : "prod");
+    await rm(dir, { recursive: true, force: true });
+  }
+});

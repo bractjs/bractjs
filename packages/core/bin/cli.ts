@@ -236,6 +236,7 @@ switch (command) {
       doctor.checkReactCopies(),
       await doctor.checkGeneratedTypes(appDir),
       await doctor.checkEnv(appDir),
+      doctor.checkMdx(appDir),
       await doctor.checkPort(port),
     ];
     console.log(doctor.formatDoctor(results));

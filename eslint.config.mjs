@@ -23,6 +23,7 @@ export default tseslint.config(
       "**/build/**",
       "**/dist/**",
       "**/_generated/**",
+      "**/*.mdx.tsx",
       "**/route-types.gen.ts",
       // Emitted by `bun run typegen` (tsc --emitDeclarationOnly). Linting
       // generated output can only ever produce findings nobody can fix at the

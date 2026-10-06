@@ -1,0 +1,24 @@
+---
+title: Guide · BractJS Todo
+description: How this demo is built, written in MDX.
+---
+
+import { ClickCounter } from "../guide-demo.tsx";
+
+# Guide
+
+This page is an **MDX route**: `app/routes/guide.mdx`. It's Markdown with React
+components, compiled to a regular route module, so it gets the app's layout,
+styles, client navigation and hydration like any `.tsx` route.
+
+## What's in it
+
+- The frontmatter's `title` and `description` become the page's meta tags.
+- Headings, paragraphs and code are styled by `app/mdx-components.tsx`.
+- Components are imported like in any module:
+
+<ClickCounter />
+
+## Where to go next
+
+Head back to the [board](/) to add a task.

@@ -3,6 +3,7 @@ node_modules
 build
 dist
 **/_generated
+**/*.mdx.tsx
 **/route-types.gen.ts
 
 # Emitted by `bun run typegen` (tsc --emitDeclarationOnly), and CI fails on any

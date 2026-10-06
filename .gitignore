@@ -116,3 +116,6 @@ bench/results/logs/
 bench/apps/*/build/
 bench/apps/bractjs/app/_generated/
 bench/apps/bractjs/app/route-types.gen.ts
+
+# Compiled MDX routes (generated next to each routes/**/*.mdx)
+*.mdx.tsx

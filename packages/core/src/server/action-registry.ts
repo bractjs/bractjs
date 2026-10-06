@@ -103,7 +103,11 @@ export function resolveActionEntry(id: string): ActionEntry | null {
 
 const isEligible = isActionModulePath;
 
-export async function loadServerActions(appDir: string): Promise<void> {
+export async function loadServerActions(appDirInput: string): Promise<void> {
+  // Absolute, always: with a relative appDir ("./app", as the dev server's
+  // re-scan passes it) the cache-busted specifier "app/x.server.ts?v=2" is
+  // resolved like a package name and the import fails.
+  const appDir = resolve(appDirInput);
   const glob = new Bun.Glob("**/*.{ts,tsx}");
   for await (const rel of glob.scan(appDir)) {
     if (!isEligible(rel)) continue;

@@ -5,6 +5,7 @@ import {
   checkAppLayout,
   checkBunVersion,
   checkConfig,
+  checkMdx,
   checkPort,
   checkReactCopies,
   formatDoctor,
@@ -39,6 +40,22 @@ describe("bractjs doctor checks", () => {
         detail: "./app has no root.tsx or routes/",
       });
     });
+  });
+
+  test("MDX routes need the compiler installed", async () => {
+    // Outside the package: module resolution would otherwise walk up into its node_modules.
+    const dir = resolve((await import("node:os")).tmpdir(), `bract-doctor-mdx-${Date.now()}`);
+    await mkdir(resolve(dir, "app/routes"), { recursive: true });
+    try {
+      expect(checkMdx("./app", dir).detail).toBe("no .mdx routes");
+      await Bun.write(resolve(dir, "app/routes/a.mdx"), "# A\n");
+      // No node_modules here: the compiler can't resolve.
+      expect(checkMdx("./app", dir)).toMatchObject({ status: "fail", fix: "bun add -d @mdx-js/mdx" });
+      // The core package has it as a devDependency.
+      expect(checkMdx("./app", resolve(import.meta.dir, "../..")).status).toBe("ok");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test("one copy of React in this workspace", () => {

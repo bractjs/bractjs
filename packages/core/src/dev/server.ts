@@ -1,5 +1,6 @@
 import { basename, extname, join, resolve } from "node:path";
 import { extractApiRouteDefs } from "../build/route-lint.ts";
+import { compileMdxRoutes } from "../codegen/mdx.ts";
 import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
 import { loadUserConfig } from "../config/load.ts";
 import { loadEnvModule, loadLifecycleModule, loadServerEntry } from "../config/server-entry.ts";
@@ -272,6 +273,18 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
 
     // Our own codegen writes here (type-only output) — reacting would loop.
     if (file.startsWith("_generated/")) return;
+
+    // An MDX route: recompile it to its .mdx.tsx sibling. That write is a
+    // route-module change the code below handles like any other (a live
+    // edit, or a restart when the route set changed).
+    if (file.endsWith(".mdx")) {
+      try {
+        await compileMdxRoutes(appDir);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : err);
+      }
+      return;
+    }
 
     // ── Changes the running process cannot absorb ─────────────────────────
     // Route-module CONTENT edits are handled in-process below (cache-busted

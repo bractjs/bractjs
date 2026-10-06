@@ -67,6 +67,9 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
       `[bractjs/testing] No app directory at ${resolve(appDir)}. Run tests from the app root, or pass { appDir }.`,
     );
   }
+  // MDX routes run as their compiled .mdx.tsx modules.
+  const { compileMdxRoutes } = await import("../codegen/mdx.ts");
+  await compileMdxRoutes(appDir);
   if (serverEntry) {
     // Runtime plugins (CSS Modules, "use client" stubs) are installed by
     // loadServerEntry too, before any app module loads.

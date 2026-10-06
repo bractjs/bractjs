@@ -16,7 +16,7 @@ export declare function clearActionRegistry(): void;
 export declare function resolveAction(id: string): ActionFn | null;
 /** The registered action for `id`, with the module it came from. */
 export declare function resolveActionEntry(id: string): ActionEntry | null;
-export declare function loadServerActions(appDir: string): Promise<void>;
+export declare function loadServerActions(appDirInput: string): Promise<void>;
 /**
  * Registry-driven counterpart to `loadServerActions`. Skips the filesystem
  * scan and dynamic imports — every entry was already statically imported by

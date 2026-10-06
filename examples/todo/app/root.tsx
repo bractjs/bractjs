@@ -65,6 +65,9 @@ export function Layout({ children }: { children?: ReactNode }) {
               <NavLink to={localize("/about")} className={navClass}>
                 About
               </NavLink>
+              <NavLink to={localize("/guide")} className={navClass}>
+                Guide
+              </NavLink>
               <span aria-hidden className="mx-1 w-px self-stretch bg-teal-ink/30" />
               {/* Language switcher: this page in each locale. */}
               {(["en", "fr"] as const).map((l) => (
