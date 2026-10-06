@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as buildApi from "../build-entry.ts";
 import * as codegenApi from "../codegen-entry.ts";
+import * as devApi from "../dev-entry.ts";
 import * as testingApi from "../testing-entry.ts";
 import * as rootApi from "../index.ts";
 
@@ -16,7 +17,7 @@ const typesDir = join(import.meta.dir, "../../types");
 
 /**
  * Names in VALUE re-export lists of a generated entry —
- * `export { A, B as C } from "..."`. `export type { ... }` lists and inline
+ * `export { A, B as C } from "..."` — plus values declared in the entry itself. `export type { ... }` lists and inline
  * `type X` entries are excluded: types have no runtime counterpart.
  */
 function valueExports(src: string): Set<string> {
@@ -30,6 +31,8 @@ function valueExports(src: string): Set<string> {
       names.add(asMatch ? asMatch[1] : entry.split(/\s/)[0]);
     }
   }
+  // Declarations made in the entry itself (`export declare const x: …`).
+  for (const m of src.matchAll(/export\s+declare\s+(?:const|let|function|class)\s+(\w+)/g)) names.add(m[1]);
   return names;
 }
 
@@ -38,6 +41,7 @@ const entries = [
   { name: "./build", dts: "build-entry.d.ts", api: buildApi },
   { name: "./codegen", dts: "codegen-entry.d.ts", api: codegenApi },
   { name: "./testing", dts: "testing-entry.d.ts", api: testingApi },
+  { name: "./dev", dts: "dev-entry.d.ts", api: devApi },
 ] as const;
 
 for (const { name, dts, api } of entries) {

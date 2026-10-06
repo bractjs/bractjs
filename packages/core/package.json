@@ -58,6 +58,10 @@
     "./testing": {
       "types": "./types/testing-entry.d.ts",
       "default": "./src/testing-entry.ts"
+    },
+    "./dev": {
+      "types": "./types/dev-entry.d.ts",
+      "default": "./src/dev-entry.ts"
     }
   },
   "scripts": {

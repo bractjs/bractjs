@@ -43,6 +43,7 @@ const required = [
   "types/build-entry.d.ts",
   "types/codegen-entry.d.ts",
   "types/testing-entry.d.ts",
+  "types/dev-entry.d.ts",
   "types/shared/route-types.d.ts",
   "types/config/load.d.ts",
   "types/server/session.d.ts",

@@ -1444,12 +1444,12 @@ The CLI is a thin wrapper — every command delegates to a public function, so y
 
 ### Programmatic API
 
-**`createDevServer(options?)`** — dev server with HMR.
+**`createDevServer(options?)`** — dev server with HMR, imported from `@bractjs/bractjs/dev`. (The root import still re-exports it, deprecated, until 0.9.)
 
 Change handling in dev: route-module edits (including **loaders, actions, and `beforeLoad`**) are applied live — the server re-imports the fresh module on the next request, no restart needed. Changes the process cannot absorb — `app/server.ts`, `lifecycle.ts`, any `*.server.ts`, shared non-route modules, or adding/removing a route file — make `bractjs dev` restart itself and the browser reload once its HMR socket reconnects. Programmatic `createDevServer()` callers can hook this via `onRestartRequired(file)` (the default logs a restart warning instead of exiting).
 
 ```ts
-import { createDevServer } from "@bractjs/bractjs";
+import { createDevServer } from "@bractjs/bractjs/dev";
 
 const dev = await createDevServer({
   port: 3000, // default: PORT env ?? config.port ?? 3000
@@ -1736,7 +1736,7 @@ Everything importable from `@bractjs/bractjs` ([packages/core/src/index.ts](pack
 
 **Client RPC:** `createClient`
 
-**Programmatic:** `createDevServer`, `loadUserConfig`, `defineConfig`
+**Programmatic:** `loadUserConfig`, `defineConfig` (`createDevServer` is at `@bractjs/bractjs/dev`)
 
 **Adapters:** `createNodeAdapter`, `NodeAdapter`, `createDenoAdapter`, `DenoAdapter`, `createCloudflareAdapter`, `makeCloudflareHandler`, `getPlatform`
 

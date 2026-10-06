@@ -13,6 +13,9 @@ import { join, resolve } from "node:path";
 
 const PKG_ROOT = resolve(import.meta.dir, "../..");
 
+// Gzipped size of the test page + client entry, production build.
+const GZIP_BUDGET = 76_000;
+
 const ROUTE_SRC = `
 import { Link, useLoaderData } from "@bractjs/bractjs";
 export default function Page() {
@@ -41,6 +44,8 @@ async function buildClient(): Promise<string> {
     splitting: true,
     outdir: join(dir, "out"),
     minify: true,
+    // Same as runBuild's client pass: React's production build, not dev.
+    define: { "process.env.NODE_ENV": JSON.stringify("production") },
   });
   expect(result.success).toBe(true);
   return (await Promise.all(result.outputs.map((o) => o.text()))).join("\n");
@@ -61,8 +66,34 @@ describe("client bundle weight", () => {
     expect({ hasStaticMarkup: js.includes("renderToStaticMarkup") }).toEqual({ hasStaticMarkup: false });
   });
 
+  test("dev-server and build-pipeline code never reaches the browser bundle", () => {
+    // The root barrel still re-exports createDevServer (deprecated; the real
+    // home is @bractjs/bractjs/dev), so these strings — one per module that
+    // would come along with it — guard the sideEffects-based tree-shaking.
+    const markers = {
+      "dev/server.ts": "initial client build in",
+      "dev/watcher.ts": "watch handler error",
+      "dev/hmr-server.ts": "HMR server on ws://",
+      "build/bundler.ts": "Server build failed",
+      "build/prerender.ts": "prerender: paths must start with",
+    };
+    const leaked = Object.entries(markers)
+      .filter(([, marker]) => js.includes(marker))
+      .map(([file]) => file);
+    expect(leaked).toEqual([]);
+  });
+
+  test("stays within the gzip size budget", () => {
+    // Measured at 69,367 bytes (2026-10-03); the budget leaves ~10% headroom. Raise it
+    // deliberately (with the new measurement) when a feature needs the bytes.
+    const gz = Bun.gzipSync(js).length;
+    expect({ gz, withinBudget: gz <= GZIP_BUDGET }).toEqual({ gz, withinBudget: true });
+  });
+
   test("the client entry keeps its hydration side effect", () => {
-    expect({ hasHydrateRoot: js.includes("hydrateRoot") }).toEqual({ hasHydrateRoot: true });
+    // The minifier renames hydrateRoot itself; the entry's read of the
+    // server payload global is what survives when the side effect is kept.
+    expect({ hasEntry: js.includes("__BRACTJS_DATA__") }).toEqual({ hasEntry: true });
   });
 
   test("every sideEffects allowlist entry exists (a rename would silently drop it)", async () => {

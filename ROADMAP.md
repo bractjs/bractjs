@@ -7,16 +7,21 @@
 
 ## Next
 
-Open work, roughly in priority order.
+Open work for 0.8.0, roughly in priority order.
 
-- [x] **Root/layout loader errors render an `ErrorBoundary`** (unreleased)
-- [x] **CSS Modules server/client class-name parity** (unreleased)
-- [x] **Browser end-to-end tests in CI** (unreleased)
-- [x] **React Router–style root `Layout` export, in-app 404s** (unreleased)
-- [x] **`clientMiddleware`, client `context`, `clientLoader` on revalidation, fetchers, root and layouts** (unreleased)
-- [x] **Built-in i18n as a one-line opt-in** (unreleased)
-- [x] **Client build and prerender output embedded in the compiled binary** (unreleased)
-- [x] **Node.js / Deno production servers** (`bractjs build --target node`; unreleased)
+- [ ] **Route middleware runs for `"use server"` actions** (a route's auth guard can't be bypassed through its actions)
+- [ ] **The page for a failed root loader hydrates**, so links work and the app recovers
+- [ ] **`viewTransition` on `navigate()`, `<Form>` and `submit()`**, and a fixed `<Link viewTransition>`
+- [ ] **`cache()` Cache-Control helpers**, with a `private` safety net for responses that set cookies
+- [ ] **Typed, validated environment** (`defineEnv`), checked at startup in every run mode
+- [ ] **`bractjs routes` and `bractjs doctor`**
+- [ ] **Dev error overlay**: code frames, open-in-editor, client runtime errors
+- [ ] **ISR for prerendered pages** (`revalidate`, `revalidatePath()`)
+- [ ] **Sitemap and robots.txt** from the route table, prerender paths and locales
+- [ ] **OpenTelemetry preset** on top of `instrument()`
+- [ ] **AWS Lambda adapter**; Vercel and Netlify recipes
+- [ ] **WebSockets for app code** (Bun and Deno)
+- [ ] **MDX routes** (opt-in)
 
 ---
 
@@ -26,6 +31,8 @@ One line per release; see the changelog for everything else.
 
 | Version | Date         | Headline                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.7.1   | 2026-10-02   | `/_image` on Node.js and Deno, a Deno request-body cap, compression backpressure, i18n `//` path fix                                                                                                                                                                                                                                                                                                                                                                  |
+| 0.7.0   | 2026-10-02   | Production servers on Node.js and Deno, self-contained `bractjs compile` binary, i18n, `clientMiddleware`, root `Layout` export and in-app 404s, typed loader data by route id, `@bractjs/bractjs/testing`, production middleware (rate limiting, request ids, health checks, secure headers), server-side sessions, React 19 form actions                                                                                                                            |
 | 0.6.0   | 2026-09-29   | React Router 8 features (typed `createContext`, instrumentation, `fetcher.reset`, `defaultShouldRevalidate`, `streamTimeout`) and a React Router 7/8 API-compatibility layer (`data()`, `useSubmit`, `useRouteError`, `NavLink`, `links`, `HydrateFallback`, cookie session storage, …)                                                                                                                                                                               |
 | 0.5.0   | 2026-09-28   | Response compression, `getRequest()` for server actions, `layout.tsx` components actually render, `defer()`/`<Await>` hydration fix, route-loader `HttpError` renders the `ErrorBoundary`, 37–47% smaller client bundles, benchmarks, Remix/React Router porting guide                                                                                                                                                                                                |
 | 0.4.1   | 2026-09-27   | `bractjs new` scaffolds a working app again                                                                                                                                                                                                                                                                                                                                                                                                                           |
