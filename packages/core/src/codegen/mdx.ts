@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { rm, utimes } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 
 // MDX routes. Each `routes/**/*.mdx` compiles to a sibling `*.mdx.tsx` — a
@@ -31,11 +31,11 @@ export function splitFrontmatter(
   source: string,
   file: string,
 ): { data: Record<string, unknown>; body: string } {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
+  const m = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(source);
   if (!m) return { data: {}, body: source };
   let data: unknown;
   try {
-    data = Bun.YAML.parse(m[1]);
+    data = m[1] ? Bun.YAML.parse(m[1]) : {};
   } catch (err) {
     throw new Error(`[bractjs] ${file}: invalid frontmatter: ${(err as Error).message}`);
   }
@@ -140,43 +140,74 @@ export async function compileMdxRoutes(appDir: string): Promise<MdxCompileResult
   if (stale.length === 0) return result;
   const compile = await loadCompiler(stale[0]);
 
+  // One broken file mustn't hold up the others: compile every stale file,
+  // then report all failures together.
+  const failures: string[] = [];
   for (const rel of stale) {
-    const abs = join(root, rel);
-    const stem = abs.slice(0, -".mdx".length);
-    for (const ext of [".tsx", ".ts"]) {
-      if (existsSync(stem + ext)) {
-        throw new Error(
-          `[bractjs] ${rel} and ${relative(root, stem + ext)} are both routes for the same URL`,
-        );
-      }
-    }
-    const { data, body } = splitFrontmatter(readFileSync(abs, "utf8"), rel);
-    let compiled: string;
     try {
-      compiled = String(
-        await compile(body, { jsxImportSource: "react", development: false, outputFormat: "program" }),
-      );
+      const written = await compileOne(rel, root, compile, componentsPath);
+      if (written) result.written.push(written);
     } catch (err) {
-      throw new Error(`[bractjs] ${rel}: ${(err as Error).message}`);
-    }
-    let componentsImport: string | undefined;
-    if (componentsPath) {
-      componentsImport = relative(dirname(abs), componentsPath).split("\\").join("/");
-      if (!componentsImport.startsWith(".")) componentsImport = `./${componentsImport}`;
-    }
-    const out = mdxModuleSource({
-      sourceName: basename(rel),
-      compiled,
-      frontmatter: data,
-      componentsImport,
-      hasOwnMeta: /^export\s+(?:async\s+)?(?:const|let|function)\s+meta\b/m.test(body),
-    });
-    const target = abs + ".tsx";
-    const current = existsSync(target) ? readFileSync(target, "utf8") : null;
-    if (current !== out) {
-      await Bun.write(target, out);
-      result.written.push(rel + ".tsx");
+      failures.push((err as Error).message);
     }
   }
+  if (failures.length === 1) throw new Error(failures[0]);
+  if (failures.length > 1)
+    throw new Error(`[bractjs] ${failures.length} MDX routes failed:\n${failures.join("\n")}`);
   return result;
+}
+
+/** An MDX body exports its own `meta` (outside fenced code blocks). */
+export function exportsOwnMeta(body: string): boolean {
+  const code = body.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[ \t]*$/gm, "");
+  return (
+    /^export\s+(?:async\s+)?(?:const|let|var|function)\s+meta\b/m.test(code) ||
+    /^export\s*\{[^}]*\bmeta\b[^}]*\}/m.test(code)
+  );
+}
+
+/** Compile one stale route; returns its output path when the file changed. */
+async function compileOne(
+  rel: string,
+  root: string,
+  compile: Compile,
+  componentsPath: string | undefined,
+): Promise<string | null> {
+  const abs = join(root, rel);
+  const stem = abs.slice(0, -".mdx".length);
+  for (const ext of [".tsx", ".ts"]) {
+    if (existsSync(stem + ext)) {
+      throw new Error(`[bractjs] ${rel} and ${relative(root, stem + ext)} are both routes for the same URL`);
+    }
+  }
+  const { data, body } = splitFrontmatter(readFileSync(abs, "utf8"), rel);
+  let compiled: string;
+  try {
+    compiled = String(
+      await compile(body, { jsxImportSource: "react", development: false, outputFormat: "program" }),
+    );
+  } catch (err) {
+    throw new Error(`[bractjs] ${rel}: ${(err as Error).message}`);
+  }
+  let componentsImport: string | undefined;
+  if (componentsPath) {
+    componentsImport = relative(dirname(abs), componentsPath).split("\\").join("/");
+    if (!componentsImport.startsWith(".")) componentsImport = `./${componentsImport}`;
+  }
+  const out = mdxModuleSource({
+    sourceName: basename(rel),
+    compiled,
+    frontmatter: data,
+    componentsImport,
+    hasOwnMeta: exportsOwnMeta(body),
+  });
+  const target = abs + ".tsx";
+  if (existsSync(target) && readFileSync(target, "utf8") === out) {
+    // Same output: mark it fresh, or the mtime check would recompile it forever.
+    const now = new Date();
+    await utimes(target, now, now);
+    return null;
+  }
+  await Bun.write(target, out);
+  return rel + ".tsx";
 }

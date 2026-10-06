@@ -163,20 +163,27 @@ export async function handleStackRequest(request: Request, opts: OverlayEndpoint
   );
 }
 
-/** argv to open `file` at `line`:`column` in `editor` (a command name or path). */
+/**
+ * argv to open `file` at `line`:`column` with `editor`: a command name or
+ * path, optionally with flags (`EDITOR="code --wait"` is common). A value
+ * that is an existing path is one command, even with spaces in it.
+ */
 export function editorArgs(editor: string, file: string, line: number, column: number): string[] {
-  const name = basename(editor)
+  const trimmed = editor.trim();
+  const [command, ...flags] = existsSync(trimmed) ? [trimmed] : trimmed.split(/\s+/);
+  const name = basename(command)
     .replace(/\.(exe|cmd)$/i, "")
     .toLowerCase();
+  const head = [command, ...flags];
   if (["code", "code-insiders", "cursor", "windsurf", "codium", "vscodium"].includes(name)) {
-    return [editor, "-g", `${file}:${line}:${column}`];
+    return [...head, "-g", `${file}:${line}:${column}`];
   }
-  if (["subl", "zed", "sublime_text"].includes(name)) return [editor, `${file}:${line}:${column}`];
+  if (["subl", "zed", "sublime_text"].includes(name)) return [...head, `${file}:${line}:${column}`];
   if (["idea", "webstorm", "phpstorm", "pycharm", "goland", "rubymine", "clion"].includes(name)) {
-    return [editor, "--line", String(line), "--column", String(column), file];
+    return [...head, "--line", String(line), "--column", String(column), file];
   }
-  if (["vim", "nvim", "vi", "emacs", "nano", "mate"].includes(name)) return [editor, `+${line}`, file];
-  return [editor, file];
+  if (["vim", "nvim", "vi", "emacs", "nano", "mate"].includes(name)) return [...head, `+${line}`, file];
+  return [...head, file];
 }
 
 /** `BRACTJS_EDITOR`, else `VISUAL`, else `EDITOR`, else VS Code's `code`. */

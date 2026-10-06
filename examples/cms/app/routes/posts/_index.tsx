@@ -14,7 +14,10 @@ type Data = {
 };
 
 export async function loader({ request }: LoaderArgs): Promise<Data> {
-  const page = Math.max(1, Number(new URL(request.url).searchParams.get("page") ?? "1") || 1);
+  // A whole, bounded number: SQLite rejects a fractional or non-finite OFFSET
+  // ("datatype mismatch"), so ?page=1.5 or ?page=Infinity would be a 500.
+  const pageRaw = Math.floor(Number(new URL(request.url).searchParams.get("page") ?? "1"));
+  const page = Number.isFinite(pageRaw) ? Math.min(Math.max(1, pageRaw), 100_000) : 1;
   const total = countPublished();
   return {
     posts: listPublished({ limit: PER_PAGE, offset: (page - 1) * PER_PAGE }),

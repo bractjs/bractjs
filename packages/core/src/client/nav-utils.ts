@@ -23,11 +23,14 @@ export function toSamePath(loc: string): string | null {
   }
 }
 
+const SAFE_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
 /**
- * Full-page navigation to an off-origin redirect target (the `null` branch of
- * {@link toSamePath}). SECURITY(medium): only http(s) targets are followed —
- * `location.assign("javascript:…")` would execute script in this origin, which
- * would turn an app-level open redirect into XSS. Anything else is dropped.
+ * Full-page navigation to an off-origin target (the `null` branch of
+ * {@link toSamePath}). SECURITY(high): only http(s), mailto: and tel: targets
+ * are followed — `location.assign("javascript:…")` would execute script in
+ * this origin, turning an app-level open redirect or a user-supplied link into
+ * XSS. Anything else is dropped.
  */
 export function assignExternal(loc: string): void {
   let protocol: string;
@@ -36,8 +39,8 @@ export function assignExternal(loc: string): void {
   } catch {
     protocol = "";
   }
-  if (protocol !== "http:" && protocol !== "https:") {
-    console.error(`[bractjs] refused to navigate to non-http(s) redirect target "${loc}"`);
+  if (!SAFE_EXTERNAL_PROTOCOLS.has(protocol)) {
+    console.error(`[bractjs] refused to navigate to "${loc}" (only http, https, mailto and tel)`);
     return;
   }
   window.location.assign(loc);

@@ -1,4 +1,4 @@
-import type { ActionEntry } from "./action-registry.ts";
+import { type ActionEntry } from "./action-registry.ts";
 import { type ModuleRegistry } from "./layout.ts";
 import { type MiddlewareFn, type RouteMiddleware } from "./middleware.ts";
 /**
@@ -13,7 +13,7 @@ import { type MiddlewareFn, type RouteMiddleware } from "./middleware.ts";
 export declare function withMiddleware<F extends (...args: never[]) => unknown>(middleware: MiddlewareFn[], fn: F): F;
 /**
  * SECURITY(high): the middleware chain a `"use server"` action runs behind,
- * derived from WHERE THE ACTION IS DEFINED — never from the Referer or the
+ * derived from WHERE THE ACTION IS EXPORTED — never from the Referer or the
  * calling page's URL, which the client controls.
  *
  * - A module under `routes/` gets root → the layouts above its file → its own
@@ -22,6 +22,9 @@ export declare function withMiddleware<F extends (...args: never[]) => unknown>(
  *   `routes/admin/**`.
  * - Any other module (`app/*.server.ts`) gets root's middleware, which runs
  *   for every page.
+ * - A function exported by SEVERAL modules (re-exported elsewhere) runs the
+ *   union of their chains, each module's middleware once: re-exporting an
+ *   admin action from an unguarded module must not unguard it.
  * - `withMiddleware([...], fn)` appends the action's own middleware.
  */
 export declare function actionMiddlewareChain(entry: ActionEntry, appDir: string, registry?: ModuleRegistry): Promise<RouteMiddleware[]>;

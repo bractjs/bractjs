@@ -70,6 +70,11 @@ export function validateUserConfig(cfg: unknown): Partial<BractJSConfig> {
   check("ssr", typeof c.ssr === "boolean", "a boolean");
   check("actionMiddleware", typeof c.actionMiddleware === "boolean", "a boolean");
   check(
+    "origin",
+    typeof c.origin === "string" && /^https?:\/\/[^/]+\/?$/.test(c.origin),
+    'an origin like "https://example.com"',
+  );
+  check(
     "prerender",
     typeof c.prerender === "function" ||
       (Array.isArray(c.prerender) && c.prerender.every((p) => typeof p === "string")),

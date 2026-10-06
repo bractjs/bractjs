@@ -112,7 +112,14 @@ export function csp(options: CspOptions = {}): MiddlewareFn {
 
     const response = await next();
     // Mutate headers in place so we don't break a single-shot streaming body.
-    response.headers.set(headerName, policy);
-    return response;
+    try {
+      response.headers.set(headerName, policy);
+      return response;
+    } catch {
+      // Immutable headers (Response.redirect(), a Response from fetch()): copy.
+      const copy = new Response(response.body, response);
+      copy.headers.set(headerName, policy);
+      return copy;
+    }
   };
 }

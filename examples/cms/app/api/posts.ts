@@ -28,7 +28,8 @@ type FeedPost = {
 // raw Request (2nd arg) yourself. Here we read an optional `?limit=`.
 export const getPublishedFeed = route("GET", "/api/posts", (_input, request) => {
   const limitRaw = Number(new URL(request.url).searchParams.get("limit") ?? "20");
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 100) : 20;
+  // Whole numbers only: SQLite rejects a fractional LIMIT ("datatype mismatch").
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 100) : 20;
   const posts: FeedPost[] = listPublished({ limit }).map((p) => ({
     title: p.title,
     slug: p.slug,

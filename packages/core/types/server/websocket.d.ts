@@ -62,4 +62,6 @@ export declare function upgradedResponse(): Response;
  * Handle a WebSocket handshake for a registered endpoint, or return null
  * (not a handshake, or no endpoint at that path).
  */
-export declare function handleWebSocketRequest(request: Request): Promise<Response | null>;
+export declare function handleWebSocketRequest(request: Request, 
+/** The request's context from global middleware. */
+context?: Record<string, unknown>): Promise<Response | null>;

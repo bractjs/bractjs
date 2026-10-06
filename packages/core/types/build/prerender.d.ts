@@ -10,6 +10,8 @@ export interface PrerenderOptions {
     manifest?: ServerManifest;
     /** The app's `i18n`: each path is also prerendered in every non-default locale (`/fr/about`). */
     i18n?: I18nConfig;
+    /** The app's public origin (`BractJSConfig.origin`): the `request.url` origin pages render with. */
+    origin?: string;
 }
 export interface PrerenderResult {
     written: string[];

@@ -26,7 +26,11 @@ export interface OverlayFrame {
 export declare function relocate(rewritten: string, original: string, line: number): number | null;
 export declare function framesForStack(stack: string, opts: OverlayEndpointOptions): OverlayFrame[];
 export declare function handleStackRequest(request: Request, opts: OverlayEndpointOptions): Promise<Response>;
-/** argv to open `file` at `line`:`column` in `editor` (a command name or path). */
+/**
+ * argv to open `file` at `line`:`column` with `editor`: a command name or
+ * path, optionally with flags (`EDITOR="code --wait"` is common). A value
+ * that is an existing path is one command, even with spaces in it.
+ */
 export declare function editorArgs(editor: string, file: string, line: number, column: number): string[];
 /** `BRACTJS_EDITOR`, else `VISUAL`, else `EDITOR`, else VS Code's `code`. */
 export declare function chosenEditor(env?: Record<string, string | undefined>): string;

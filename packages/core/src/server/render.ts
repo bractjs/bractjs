@@ -180,18 +180,27 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   });
 }
 
+/**
+ * The hardening headers every document gets (nosniff, framing, referrer) —
+ * SSR documents here, and prerendered / ISR pages in serve.ts, so a static
+ * page isn't frameable where its SSR twin isn't.
+ */
+export const DOCUMENT_SECURITY_HEADERS: Readonly<Record<string, string>> = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+};
+
 function baselineDocumentHeaders(): Headers {
+  // SECURITY(medium): baseline hardening headers. For a Content-Security-
+  // Policy, opt into the nonce-based `csp()` middleware — it generates a
+  // per-request nonce, applies it to the inline bootstrap script + client
+  // entry module here (via renderToReadableStream's `nonce` option), and
+  // sets the CSP response header.
   return new Headers({
+    ...DOCUMENT_SECURITY_HEADERS,
     "Content-Type": "text/html; charset=utf-8",
     "Transfer-Encoding": "chunked",
-    // SECURITY(medium): baseline hardening headers. For a Content-Security-
-    // Policy, opt into the nonce-based `csp()` middleware — it generates a
-    // per-request nonce, applies it to the inline bootstrap script + client
-    // entry module here (via renderToReadableStream's `nonce` option), and
-    // sets the CSP response header.
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "SAMEORIGIN",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
   });
 }
 

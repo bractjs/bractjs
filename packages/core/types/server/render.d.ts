@@ -64,6 +64,12 @@ export interface RenderOptions {
     i18n?: I18nConfig;
 }
 export declare function renderRoute(options: RenderOptions): Promise<Response>;
+/**
+ * The hardening headers every document gets (nosniff, framing, referrer) —
+ * SSR documents here, and prerendered / ISR pages in serve.ts, so a static
+ * page isn't frameable where its SSR twin isn't.
+ */
+export declare const DOCUMENT_SECURITY_HEADERS: Readonly<Record<string, string>>;
 export interface RootErrorDocumentOptions {
     /** root.tsx's ErrorBoundary, else the built-in fallback. */
     Boundary: ComponentType<{

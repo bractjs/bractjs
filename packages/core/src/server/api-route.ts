@@ -119,7 +119,11 @@ export function route<TMethod extends HttpMethod, TPath extends string, TInput, 
  * Attempt to handle the request by matching against registered API routes.
  * Returns null if no route matches so the caller can fall through.
  */
-export async function handleApiRequest(request: Request): Promise<Response | null> {
+export async function handleApiRequest(
+  request: Request,
+  /** The request's context from global middleware, shared with endpoint middleware. */
+  context: Record<string, unknown> = {},
+): Promise<Response | null> {
   const url = new URL(request.url);
   for (const def of routeRegistry) {
     if (def.method !== request.method) continue;
@@ -138,7 +142,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
     // Shared across the middleware chain and the handler (third argument):
     // middleware sets fields on ctx.context (e.g. the authenticated user) and
     // the handler reads them.
-    const ctx: MiddlewareContext = createMiddlewareContext(request, params);
+    const ctx: MiddlewareContext = createMiddlewareContext(request, params, context);
 
     const invoke = async (): Promise<Response> => {
       let input: unknown;

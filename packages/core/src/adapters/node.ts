@@ -4,7 +4,6 @@
 // Namespace imports: the package barrel reaches this file, and the client
 // build checks named imports against node:* browser polyfills (no createServer
 // there) before tree-shaking drops the module. See compression.ts.
-import * as events from "node:events";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import * as http from "node:http";
 import * as stream from "node:stream";
@@ -119,6 +118,8 @@ async function writeResponse(req: IncomingMessage, res: ServerResponse, response
   const cookies = response.headers.getSetCookie();
   if (cookies.length > 0) res.setHeader("Set-Cookie", cookies);
   if (!response.body || req.method === "HEAD") {
+    // HEAD sends no body: cancel it so a streamed render stops now.
+    void response.body?.cancel().catch(() => {});
     res.end();
     return;
   }
@@ -131,7 +132,20 @@ async function writeResponse(req: IncomingMessage, res: ServerResponse, response
       const { done, value } = await reader.read();
       if (done) break;
       // Respect backpressure; streamed SSR chunks go out as they're produced.
-      if (!res.write(value)) await events.once(res, "drain");
+      if (!res.write(value)) {
+        // Wait for "drain" — or "close": a client that disconnects never
+        // drains, and waiting only for "drain" would hang this loop forever.
+        await new Promise<void>((resume) => {
+          const done = () => {
+            res.off("drain", done);
+            res.off("close", done);
+            resume();
+          };
+          res.once("drain", done);
+          res.once("close", done);
+        });
+        if (res.destroyed) break;
+      }
     }
     res.end();
   } catch {

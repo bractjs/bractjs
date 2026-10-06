@@ -3,7 +3,7 @@ import { type BractAdapter } from "./adapter.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { type OnErrorHook } from "./lifecycle.ts";
 import { type Instrumentation } from "./instrumentation.ts";
-import type { ServerManifest } from "./render.ts";
+import { type ServerManifest } from "./render.ts";
 import { type RouteFile } from "./scanner.ts";
 export type { I18nConfig } from "../shared/i18n.ts";
 export interface BractJSConfig {
@@ -46,6 +46,14 @@ export interface BractJSConfig {
      * SSR in production; requests with a query string stay dynamic.
      */
     prerender?: string[] | (() => string[] | Promise<string[]>);
+    /**
+     * The app's public origin, e.g. `"https://example.com"`. Prerendering and
+     * ISR regeneration render pages with no visitor request behind them; this is
+     * the origin their `request.url` gets, so absolute URLs a loader or `meta()`
+     * builds from it (canonical links, og:url) are right. Unset: a placeholder
+     * origin. Never taken from a request's Host header, which a client controls.
+     */
+    origin?: string;
     /** Client bundle sourcemaps. Default `"none"`: build/client/ is publicly served, so maps would publish module source. */
     sourcemap?: "none" | "linked" | "inline" | "external";
     minify?: boolean;

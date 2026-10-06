@@ -136,16 +136,16 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     if (e.button !== 0) return;
     if (rest.target && rest.target !== "_self") return;
+    // Relative `to` ("edit", "../list") resolves like the anchor's href would.
+    const safe = toSamePath(resolveHref(href));
+    // SECURITY(high): an off-origin target (https://…, mailto:, javascript:…)
+    // is left to the browser's own handling of the <a href>. React has already
+    // neutralized a javascript: href there; navigating to it ourselves would
+    // run the script in this origin.
+    if (safe === null) return;
     e.preventDefault();
 
     const opts = { replace, state, defaultShouldRevalidate: revalidateByDefault, viewTransition };
-    // Relative `to` ("edit", "../list") resolves like the anchor's href would.
-    const target = resolveHref(href);
-    const safe = toSamePath(target);
-    if (safe === null) {
-      window.location.assign(href); // off-origin: plain browser navigation
-      return;
-    }
     // The router commits the new page inside the View Transition itself, once
     // its data and module are loaded (see client/view-transition.ts).
     void navCtx.navigate(safe, opts);

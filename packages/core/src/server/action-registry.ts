@@ -15,6 +15,25 @@ export interface ActionEntry {
 
 const registry = new Map<string, ActionEntry>();
 
+// Every module that exports each action function. A function re-exported from
+// another "use server" module is registered under both; its middleware chain
+// is the union of theirs (action-middleware.ts).
+let exporters = new WeakMap<ActionFn, Array<{ relPath: string; mod: Record<string, unknown> }>>();
+
+function register(id: string, entry: ActionEntry): void {
+  registry.set(id, entry);
+  const list = exporters.get(entry.fn) ?? [];
+  if (!list.some((e) => e.relPath === entry.relPath)) list.push({ relPath: entry.relPath, mod: entry.mod });
+  exporters.set(entry.fn, list);
+}
+
+/** The modules exporting `entry`'s function (at least `entry`'s own). */
+export function actionExporters(
+  entry: ActionEntry,
+): Array<{ relPath: string; mod: Record<string, unknown> }> {
+  return exporters.get(entry.fn) ?? [{ relPath: entry.relPath, mod: entry.mod }];
+}
+
 /**
  * Internal: empty the action registry. Used by the dev watcher before a
  * re-scan (so deleted/renamed "use server" modules don't linger) and by tests
@@ -22,6 +41,7 @@ const registry = new Map<string, ActionEntry>();
  */
 export function clearActionRegistry(): void {
   registry.clear();
+  exporters = new WeakMap();
 }
 
 // SECURITY(high): exporting a function from a `"use server"` module publishes
@@ -136,7 +156,7 @@ export async function loadServerActions(appDirInput: string): Promise<void> {
       if (!shouldRegisterExport(name, fromRouteFile)) continue;
       const relPath = pathKeyForAction(filePath, appDir);
       const id = await computeId(relPath, name);
-      registry.set(id, { fn: val as ActionFn, relPath, mod });
+      register(id, { fn: val as ActionFn, relPath, mod });
     }
   }
 }
@@ -159,7 +179,7 @@ export async function loadServerActionsFromRegistry(
       if (typeof val !== "function") continue;
       if (!shouldRegisterExport(name, fromRouteFile)) continue;
       const id = await computeId(relPath, name);
-      registry.set(id, { fn: val as ActionFn, relPath, mod });
+      register(id, { fn: val as ActionFn, relPath, mod });
     }
   }
 }

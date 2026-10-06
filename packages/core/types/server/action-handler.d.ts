@@ -7,6 +7,8 @@ export interface ActionGateOptions {
     moduleRegistry?: ModuleRegistry;
     /** `false` skips route middleware for actions (`BractJSConfig.actionMiddleware`). */
     routeMiddleware?: boolean;
+    /** The request's context from global middleware, shared with route middleware as on pages. */
+    context?: Record<string, unknown>;
 }
 /**
  * Run `work` behind the route middleware for `entry` (see

@@ -1,5 +1,5 @@
 import { relative, resolve } from "node:path";
-import type { ActionEntry } from "./action-registry.ts";
+import { type ActionEntry, actionExporters } from "./action-registry.ts";
 import {
   importRouteModule,
   type ModuleRegistry,
@@ -50,38 +50,70 @@ function isRoutesPath(rel: string): boolean {
  *   for every page.
  * - `withMiddleware([...], fn)` appends the action's own middleware.
  */
+type ChainModule = { middleware?: unknown; unstable_middleware?: unknown };
+
+/** The modules (file → module) whose middleware guards actions exported by `exporter`, outermost first. */
+async function chainModulesFor(
+  exporter: { relPath: string; mod: Record<string, unknown> },
+  appDir: string,
+  registry?: ModuleRegistry,
+): Promise<Array<[string, ChainModule]>> {
+  if (!isRoutesPath(exporter.relPath)) {
+    const rootChain = await resolveRootChain(appDir, registry);
+    return rootChain.files?.root ? [[rootChain.files.root, rootChain.root]] : [];
+  }
+  const routeFile = { filePath: exporter.relPath, urlPattern: "", segments: [] };
+  let files: string[];
+  let mods: ChainModule[];
+  if (registry) {
+    files = resolveLayoutChainFromRegistry(routeFile, registry).layoutFiles;
+    mods = files.map((k) => (registry[k] ?? {}) as ChainModule);
+  } else {
+    const abs = (await resolveLayoutChain(routeFile, appDir)).layoutFiles;
+    const root = resolve(appDir);
+    files = abs.map((f) => relative(root, f).split("\\").join("/"));
+    mods = await Promise.all(abs.map(importRouteModule));
+  }
+  const pairs: Array<[string, ChainModule]> = files.map((f, i) => [f, mods[i]]);
+  // The exporting module's own middleware last (a layout's own actions: it's already in).
+  const self = exporter.relPath.split("\\").join("/");
+  if (!files.includes(self)) pairs.push([self, exporter.mod]);
+  return pairs;
+}
+
+/**
+ * SECURITY(high): the middleware chain a `"use server"` action runs behind,
+ * derived from WHERE THE ACTION IS EXPORTED — never from the Referer or the
+ * calling page's URL, which the client controls.
+ *
+ * - A module under `routes/` gets root → the layouts above its file → its own
+ *   `middleware` export: exactly the chain that guards a page at that spot,
+ *   so an auth guard in `routes/admin/layout.tsx` also guards the actions in
+ *   `routes/admin/**`.
+ * - Any other module (`app/*.server.ts`) gets root's middleware, which runs
+ *   for every page.
+ * - A function exported by SEVERAL modules (re-exported elsewhere) runs the
+ *   union of their chains, each module's middleware once: re-exporting an
+ *   admin action from an unguarded module must not unguard it.
+ * - `withMiddleware([...], fn)` appends the action's own middleware.
+ */
 export async function actionMiddlewareChain(
   entry: ActionEntry,
   appDir: string,
   registry?: ModuleRegistry,
 ): Promise<RouteMiddleware[]> {
   const own = (entry.fn as Guarded)[ACTION_MIDDLEWARE] ?? [];
-
-  let chain: RouteMiddleware[];
-  if (isRoutesPath(entry.relPath)) {
-    const routeFile = { filePath: entry.relPath, urlPattern: "", segments: [] };
-    let files: string[];
-    let mods: Array<{ middleware?: unknown; unstable_middleware?: unknown }>;
-    if (registry) {
-      files = resolveLayoutChainFromRegistry(routeFile, registry).layoutFiles;
-      mods = files.map((k) => (registry[k] ?? {}) as { middleware?: unknown });
-    } else {
-      const abs = (await resolveLayoutChain(routeFile, appDir)).layoutFiles;
-      const root = resolve(appDir);
-      files = abs.map((f) => relative(root, f).split("\\").join("/"));
-      mods = await Promise.all(abs.map(importRouteModule));
+  const modules = new Map<string, ChainModule>();
+  for (const exporter of actionExporters(entry)) {
+    for (const [file, mod] of await chainModulesFor(exporter, appDir, registry)) {
+      if (!modules.has(file)) modules.set(file, mod);
     }
-    // A layout's own actions: the layout is already in the chain.
-    const isLayoutItself = files.includes(entry.relPath.split("\\").join("/"));
-    chain = collectRouteMiddleware({
-      root: {},
-      layouts: mods,
-      route: isLayoutItself ? {} : entry.mod,
-      files: { layouts: files, route: entry.relPath },
-    });
-  } else {
-    const rootChain = await resolveRootChain(appDir, registry);
-    chain = collectRouteMiddleware({ ...rootChain, route: {} });
   }
+  const chain = collectRouteMiddleware({
+    root: {},
+    layouts: [...modules.values()],
+    route: {},
+    files: { layouts: [...modules.keys()] },
+  });
   return own.length ? [...chain, ...own] : chain;
 }
