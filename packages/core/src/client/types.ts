@@ -28,6 +28,8 @@ export interface BractJSClientData {
   i18n?: import("../shared/i18n.ts").I18nConfig;
   /** Set on the document for a failed root loader: hydrate RootErrorDocument, not the app. */
   rootError?: { status: number };
+  /** `defineEnv({ client })` values, read by defineEnv in the browser. */
+  env?: Record<string, string>;
 }
 
 // ── Window augmentation ────────────────────────────────────────────────────

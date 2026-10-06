@@ -84,6 +84,10 @@ Change the path with `{ path: "/livez" }`. Register it first, so auth and rate l
 
 Each option takes a string to change the value, or `false` to omit the header. HSTS counts a request as HTTPS when its URL is `https:` or `X-Forwarded-Proto` says `https`. Pair it with `csp()` for a Content-Security-Policy (README §14).
 
+## Environment variables
+
+Declare them with `defineEnv()` in `app/env.ts` (README §17). The server checks them at startup, so a deploy with a missing `DATABASE_URL` or a malformed `PORT` fails immediately, with the full list, instead of on the first request that needs it. `client` variables are read at runtime too, so the same build works in staging and production.
+
 ## Caching
 
 `cache()` builds a `Cache-Control` header for a route's `headers()`, for `data(value, { headers })`, or for any `Response`:

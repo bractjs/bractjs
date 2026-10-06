@@ -112,6 +112,8 @@ export { createMiddlewareContext, MiddlewarePipeline, pipeline } from "./server/
 export { withMiddleware } from "./server/action-middleware.ts";
 export type { CacheDuration, CacheOptions } from "./server/cache.ts";
 export { cache, cacheControl, mergeCacheControl } from "./server/cache.ts";
+export type { EnvOutput, EnvSchema, EnvSpec, EnvVar } from "./shared/define-env.ts";
+export { defineEnv, env, EnvError } from "./shared/define-env.ts";
 export { getRequest, getRequestId } from "./server/request-context.ts";
 export { getPlatform } from "./server/platform.ts";
 export { useRequestId } from "./shared/request-id.ts";

@@ -316,13 +316,20 @@ switch (command) {
     if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
     const { createServer } = await import("../src/server/serve.ts");
     const { loadUserConfig } = await import("../src/config/load.ts");
-    const { loadLifecycleModule, loadServerEntry } = await import("../src/config/server-entry.ts");
+    const { loadEnvModule, loadLifecycleModule, loadServerEntry } =
+      await import("../src/config/server-entry.ts");
     // The config carries runtime-relevant fields too (ssr, port, dirs).
     const userCfg = await loadUserConfig();
     const appDir = userCfg.appDir ?? "./app";
     // Parity with `bractjs dev` and the compiled binary: pick up lifecycle
     // hooks and app/server.ts's pipeline.use(...) registrations (its own
     // createServer() call is suppressed during the import).
+    try {
+      await loadEnvModule(appDir);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
     const lifecycle = await loadLifecycleModule(appDir);
     const entry = await loadServerEntry(appDir);
     if (entry.error) {

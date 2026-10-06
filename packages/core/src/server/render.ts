@@ -13,6 +13,7 @@ import {
 } from "../shared/style-links.tsx";
 import type { I18nConfig } from "../shared/i18n.ts";
 import { RequestIdContext } from "../shared/request-id.ts";
+import { getPublicEnv } from "../shared/define-env.ts";
 import { HttpError } from "../shared/errors.ts";
 import { RootErrorDocument } from "../shared/root-error-document.tsx";
 import type { LinkDescriptor, MetaDescriptor, RouteMatch } from "../shared/route-types.ts";
@@ -109,7 +110,7 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
   const { matches: wireMatches, ...wireLoaderData } = wire;
   const bootstrapScriptContent =
     devOverlay +
-    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, links: options.links?.length ? options.links : undefined, ssrMode: options.ssrMode, requestId, locale: options.locale, i18n: options.i18n })};`;
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: wireLoaderData, actionData, params, pathname, search: options.search, manifest, routeFile: options.routeFile, meta: mergedMeta, matches: wireMatches, links: options.links?.length ? options.links : undefined, ssrMode: options.ssrMode, requestId, locale: options.locale, i18n: options.i18n, env: getPublicEnv() })};`;
 
   // Render <title>/<meta> elements alongside the app shell. React 19 hoists
   // document-metadata elements into <head> during streaming SSR, so crawlers
@@ -251,7 +252,7 @@ export async function renderRootErrorDocument(options: RootErrorDocumentOptions)
     : "";
   const bootstrapScriptContent =
     devOverlay +
-    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: { root: { __error: rootError }, layouts: [] }, actionData: null, params: options.params, pathname, manifest, requestId, locale: options.locale, i18n: options.i18n, rootError: { status } })};`;
+    `window.__BRACTJS_DATA__=${safeStringify({ loaderData: { root: { __error: rootError }, layouts: [] }, actionData: null, params: options.params, pathname, manifest, requestId, locale: options.locale, i18n: options.i18n, env: getPublicEnv(), rootError: { status } })};`;
   const tree = createElement(CspNonceContext.Provider, { value: options.nonce }, document);
   let renderError: unknown;
   let stream: ReadableStream;

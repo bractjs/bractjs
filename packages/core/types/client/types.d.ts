@@ -27,6 +27,8 @@ export interface BractJSClientData {
     rootError?: {
         status: number;
     };
+    /** `defineEnv({ client })` values, read by defineEnv in the browser. */
+    env?: Record<string, string>;
 }
 declare global {
     interface Window {

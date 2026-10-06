@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **Typed, validated environment variables: `defineEnv()`.** Declare them in `app/env.ts` with `env.string()`, `env.number()`, `env.boolean()`, `env.url()`, `env.enum()` (plus `.optional()` / `.default()`), or any Standard Schema / Zod-style schema, and import the typed values anywhere. BractJS imports the file at startup in every run mode — `dev`, `start`, the compiled binary, the Node build — so a missing or malformed variable stops the server with one error listing them all. `client` variables are sent to the browser in each page's payload, so the server and the browser always agree and one build runs in any environment; reading a `server` variable in the browser throws. `examples/todo` reads `PORT` and `PUBLIC_APP_NAME` through it. See README §17.
+
 - **`cache()` and `mergeCacheControl()`** for `Cache-Control`. `cache({ public: true, maxAge: "1m", sMaxAge: "1h", staleWhileRevalidate: "1d" })` returns the header, ready for a route's `headers()`, `data()`, or a `Response`; it accepts seconds or `"30s"`/`"5m"`/`"1h"`/`"7d"`, and rejects contradictions like `private` with `sMaxAge`. `mergeCacheControl(parent, child)` returns the most restrictive combination, so a route can keep a layout's limit. See [Running in production](docs/production.md#caching).
 
 - **`viewTransition` on `navigate()`, `<Form>` and `submit()`**, as on `<Link>`. The page update after the navigation, the action's redirect or the post-action revalidation is committed inside `document.startViewTransition`. These options were accepted before but did nothing.

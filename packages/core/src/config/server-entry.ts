@@ -85,3 +85,14 @@ export async function loadLifecycleModule(appDir: string): Promise<LifecycleHook
     return {};
   }
 }
+
+/**
+ * Import `<appDir>/env.ts` (see `defineEnv`) so missing or invalid environment
+ * variables stop startup with the full list, before anything else runs. No
+ * env.ts → no-op. Errors propagate: callers report them and exit.
+ */
+export async function loadEnvModule(appDir: string): Promise<void> {
+  const envPath = resolve(process.cwd(), appDir, "env.ts");
+  if (!existsSync(envPath)) return;
+  await import(envPath);
+}
