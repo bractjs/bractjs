@@ -2,6 +2,7 @@
 // `createServer()` picks it automatically when it runs on Deno.
 import { type BractAdapter, DEFAULT_MAX_REQUEST_BODY_BYTES } from "../server/adapter.ts";
 import { setClientAddress } from "../server/client-address.ts";
+import { registerUpgrader, runSocketHandler, wrapSocket } from "../server/websocket.ts";
 
 interface DenoServeInfo {
   remoteAddr: { hostname: string };
@@ -9,7 +10,16 @@ interface DenoServeInfo {
 interface DenoHttpServer {
   shutdown(): Promise<void>;
 }
+interface DenoSocket {
+  binaryType: string;
+  send(message: string | ArrayBuffer | Uint8Array): void;
+  close(code?: number, reason?: string): void;
+  onopen: (() => void) | null;
+  onmessage: ((event: { data: string | ArrayBuffer }) => void) | null;
+  onclose: ((event: { code: number; reason: string }) => void) | null;
+}
 interface DenoNamespace {
+  upgradeWebSocket(request: Request): { socket: DenoSocket; response: Response };
   serve(
     options: { port: number; hostname?: string; onListen?: () => void },
     handler: (request: Request, info: DenoServeInfo) => Response | Promise<Response>,
@@ -59,7 +69,21 @@ export class DenoAdapter implements BractAdapter {
       }
       const capped = request.body ? limitBody(request, this.maxBody) : request;
       setClientAddress(capped, info.remoteAddr.hostname);
-      return this.fetch(capped);
+      // websocket() endpoints: Deno.upgradeWebSocket gives the 101 response,
+      // which is answered as is (it never passes through middleware).
+      let upgradeResponse: Response | null = null;
+      registerUpgrader(capped, ({ handlers, data }) => {
+        const { socket, response } = deno.upgradeWebSocket(request);
+        socket.binaryType = "arraybuffer";
+        const ws = wrapSocket(socket, data);
+        socket.onopen = () => runSocketHandler("open", () => handlers.open?.(ws));
+        socket.onmessage = (event) => runSocketHandler("message", () => handlers.message?.(ws, event.data));
+        socket.onclose = (event) =>
+          runSocketHandler("close", () => handlers.close?.(ws, event.code, event.reason));
+        upgradeResponse = response;
+        return true;
+      });
+      return this.fetch(capped).then((res) => upgradeResponse ?? res);
     });
   }
 

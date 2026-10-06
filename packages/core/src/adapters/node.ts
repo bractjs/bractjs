@@ -11,6 +11,7 @@ import * as stream from "node:stream";
 import type { BractAdapter } from "../server/adapter.ts";
 import { setClientAddress } from "../server/client-address.ts";
 import { isExplicitDev } from "../server/env.ts";
+import { hasWebSocketEndpoints } from "../server/websocket.ts";
 
 export interface NodeAdapterOptions {
   /** Interface to listen on. Default: all interfaces. */
@@ -43,6 +44,11 @@ export class NodeAdapter implements BractAdapter {
 
   listen(port: number): void {
     if (!this.handler) throw new Error("NodeAdapter: handler not set before listen()");
+    if (hasWebSocketEndpoints()) {
+      throw new Error(
+        "[bractjs] This app defines websocket() endpoints, which need a Bun or Deno server; the Node.js server doesn't support them.",
+      );
+    }
     this.server = http.createServer((req, res) => {
       void this.respond(req, res);
     });

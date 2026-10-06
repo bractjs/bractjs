@@ -1005,6 +1005,33 @@ The proxy builds `METHOD path` from the property chain. Non-2xx responses throw 
 
 ---
 
+### WebSockets
+
+`websocket(path, handlers, { middleware })` adds a WebSocket endpoint on Bun and Deno servers. It registers like `route()`, so import the defining module from `app/root.tsx` or `app/server.ts`:
+
+```ts
+// app/chat.server.ts — imported from app/root.tsx
+import { websocket } from "@bractjs/bractjs";
+import { getUser } from "./auth.server.ts";
+
+websocket<{ name: string }>("/ws/chat/:room", {
+  // Runs after global and endpoint middleware: authenticate here.
+  async upgrade({ request, params }) {
+    const user = await getUser(request);
+    return user ? { name: user.name } : new Response("Unauthorized", { status: 401 });
+  },
+  open(ws) {
+    ws.send(`welcome, ${ws.data.name}`);
+  },
+  message(ws, text) {
+    ws.send(`${ws.data.name}: ${String(text)}`);
+  },
+  close(ws, code) {},
+});
+```
+
+A handshake goes through the global pipeline, then the endpoint's `middleware`, then `upgrade()`, which returns the per-connection `ws.data` or a `Response` to refuse. **A handshake from another site is refused** (403): browsers let any page open a WebSocket to your host with the user's cookies, so the `Origin` must be yours. `ws.raw` is the runtime's own socket. The Node.js server refuses to start when an app defines endpoints (Node has no built-in WebSocket server); use Bun or Deno.
+
 ## 13. Input validation: `validate`
 
 Validate `FormData` or a plain object against any **Zod- or Valibot-compatible** schema (anything with `.safeParse()` or `.parse()`).

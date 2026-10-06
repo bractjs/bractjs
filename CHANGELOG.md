@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **WebSockets: `websocket(path, { upgrade, open, message, close }, { middleware })`** on Bun and Deno servers. Endpoints register like `route()` (`:param` paths too), and handshakes go through global middleware, the endpoint's middleware and `upgrade()`, which authenticates and returns the per-connection `ws.data` (or a `Response` to refuse). A cross-origin handshake gets a 403, against cross-site WebSocket hijacking. A Node.js server refuses to start with endpoints defined. See README §12.
+
 - **Serverless deploys.** `bractjs build --target node` also writes `build/node/handler.js`, the app as a self-contained module. It exports `fetch(request)` (Vercel, Netlify, Deno Deploy) and `handler` for AWS Lambda (API Gateway HTTP and REST APIs, Function URLs). Underneath are `appFetchHandler(() => import("./server.ts"))`, which returns the handler `app/server.ts`'s `createServer({...})` configures without listening, and `createLambdaHandler(fetch)`. [Deployment](docs/deployment.md#serverless-aws-lambda-vercel-netlify) has Lambda steps and Vercel/Netlify recipes; CI runs `handler.js` on Node.
 
 - **OpenTelemetry tracing: `instrument(otel(api))`.** You pass your own `@opentelemetry/api`, so BractJS gains no dependency. Every request gets a server span that continues an incoming `traceparent` and is named after its route (`GET /blog/:id`). Loaders, actions and route middleware get child spans, with errors recorded where they're thrown. Route instrumentations now also receive the matched `pattern`.
