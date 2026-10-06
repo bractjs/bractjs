@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **`cache()` and `mergeCacheControl()`** for `Cache-Control`. `cache({ public: true, maxAge: "1m", sMaxAge: "1h", staleWhileRevalidate: "1d" })` returns the header, ready for a route's `headers()`, `data()`, or a `Response`; it accepts seconds or `"30s"`/`"5m"`/`"1h"`/`"7d"`, and rejects contradictions like `private` with `sMaxAge`. `mergeCacheControl(parent, child)` returns the most restrictive combination, so a route can keep a layout's limit. See [Running in production](docs/production.md#caching).
+
 - **`viewTransition` on `navigate()`, `<Form>` and `submit()`**, as on `<Link>`. The page update after the navigation, the action's redirect or the post-action revalidation is committed inside `document.startViewTransition`. These options were accepted before but did nothing.
 
 ### Fixed
@@ -15,6 +17,8 @@ All notable changes to BractJS are documented here.
 - **`<Link viewTransition>` animates.** It started the View Transition, but the router committed the new page only after the transition's callback had returned. The browser snapshotted the old page twice, so nothing animated. The router now commits the new page synchronously inside the callback.
 
 ### Changed
+
+- **Security: a response that sets a cookie is never shared-cacheable.** When `Set-Cookie` meets `Cache-Control: public` or `s-maxage`, BractJS now rewrites `Cache-Control` to `private` and drops `s-maxage`, after global middleware runs, with a one-time warning per path in development. A CDN honoring the old header would replay one visitor's session cookie to everyone.
 
 - **The page for a failed root loader hydrates.** It used to be static HTML with no client scripts, so root's `ErrorBoundary` couldn't run a "Try again" button, an effect or anything else interactive. It now ships the client entry, which hydrates the same tree: root's `Layout` (or the minimal framework document) around root's `ErrorBoundary`. Its links are full page loads, since `/_data` would hit the same failed loader. `examples/todo` shows it: set the `todo-maintenance=1` cookie.
 

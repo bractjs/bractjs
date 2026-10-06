@@ -7,6 +7,7 @@ import type { I18nConfig } from "../shared/i18n.ts";
 import { DenoAdapter } from "../adapters/deno.ts";
 import { NodeAdapter } from "../adapters/node.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
+import { privateWhenSettingCookies } from "./cache.ts";
 import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
 import { envPort, isDevRuntime, isExplicitDev, parsePort } from "./env.ts";
@@ -439,11 +440,13 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // generic 500 with the message gated to dev — matching every other path.
     try {
       // getRequest() works anywhere below this point (server actions above all).
-      return await runWithRequest(request, () =>
+      const res = await runWithRequest(request, () =>
         instrumentRequest({ request, context: ctx.context }, () =>
           pipeline.run(ctx, () => dispatch(request, ctx.context)),
         ),
       );
+      // After global middleware, so a cookie it sets is covered too.
+      return privateWhenSettingCookies(res, request);
     } catch (err) {
       console.error("[bract] unhandled request error:", err);
       await fireOnError(onError, err, request);

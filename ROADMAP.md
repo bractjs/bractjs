@@ -12,7 +12,7 @@ Open work for 0.8.0, roughly in priority order.
 - [x] **Route middleware runs for `"use server"` actions** (a route's auth guard can't be bypassed through its actions)
 - [x] **The page for a failed root loader hydrates**, so links work and the app recovers
 - [x] **`viewTransition` on `navigate()`, `<Form>` and `submit()`**, and a fixed `<Link viewTransition>`
-- [ ] **`cache()` Cache-Control helpers**, with a `private` safety net for responses that set cookies
+- [x] **`cache()` Cache-Control helpers**, with a `private` safety net for responses that set cookies
 - [ ] **Typed, validated environment** (`defineEnv`), checked at startup in every run mode
 - [ ] **`bractjs routes` and `bractjs doctor`**
 - [ ] **Dev error overlay**: code frames, open-in-editor, client runtime errors
