@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **OpenTelemetry tracing: `instrument(otel(api))`.** You pass your own `@opentelemetry/api`, so BractJS gains no dependency. Every request gets a server span that continues an incoming `traceparent` and is named after its route (`GET /blog/:id`). Loaders, actions and route middleware get child spans, with errors recorded where they're thrown. Route instrumentations now also receive the matched `pattern`.
+
 - **`sitemap()`** global middleware serves `/sitemap.xml` and `/robots.txt` from the app's own routes: every static route, every prerendered path, and `extra()` for the URLs of dynamic routes. Under `i18n`, each page is listed in every locale with `hreflang` alternates. `/api` is never listed; `exclude` drops more. See [Running in production](docs/production.md#sitemap-and-robotstxt).
 
 - **Incremental static regeneration.** `export const config = { revalidate: 60 }` on a prerendered route makes the production server serve it from memory and, once it is older than 60 seconds, regenerate it (document and `/_data` payload) in the background while the old copy keeps serving. A failed regeneration keeps the old copy. `revalidatePath("/news")` regenerates on demand, e.g. from an action. The cache is per process. It works in the compiled binary, not on Cloudflare. See README §21.

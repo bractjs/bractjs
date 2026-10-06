@@ -10,12 +10,21 @@ interface RequestScope {
   request: Request;
   /** Set by the requestId() middleware. */
   requestId?: string;
+  /** The matched route as a React Router pattern (`/blog/:id`), for instrumentation. */
+  routePattern?: string;
 }
-const storage = new asyncHooks.AsyncLocalStorage<RequestScope>();
+// Created on first use, not at module load: this module is reachable from the
+// client bundle (through instrumentation.ts), where node:async_hooks is an
+// empty shim and constructing AsyncLocalStorage would throw.
+let storageInstance: InstanceType<typeof asyncHooks.AsyncLocalStorage<RequestScope>> | null = null;
+function storage(): InstanceType<typeof asyncHooks.AsyncLocalStorage<RequestScope>> {
+  storageInstance ??= new asyncHooks.AsyncLocalStorage<RequestScope>();
+  return storageInstance;
+}
 
 /** Run `fn` with `request` as the current request. */
 export function runWithRequest<T>(request: Request, fn: () => T): T {
-  return storage.run({ request }, fn);
+  return storage().run({ request }, fn);
 }
 
 /**
@@ -34,7 +43,7 @@ export function runWithRequest<T>(request: Request, fn: () => T): T {
  * called outside a request, e.g. at module scope.
  */
 export function getRequest(): Request {
-  const request = storage.getStore()?.request;
+  const request = storage().getStore()?.request;
   if (!request) {
     throw new Error(
       "[bractjs] getRequest() was called outside a request. Call it inside a server action, loader, action, " +
@@ -50,11 +59,22 @@ export function getRequest(): Request {
  * request or when `requestId()` isn't registered.
  */
 export function getRequestId(): string | undefined {
-  return storage.getStore()?.requestId;
+  return storage().getStore()?.requestId;
 }
 
 /** Record the current request's id (the requestId() middleware). */
 export function setRequestId(id: string): void {
-  const scope = storage.getStore();
+  const scope = storage().getStore();
   if (scope) scope.requestId = id;
+}
+
+/** @internal Record the matched route's pattern (request-handler). */
+export function setRoutePattern(pattern: string | undefined): void {
+  const scope = storage().getStore();
+  if (scope) scope.routePattern = pattern;
+}
+
+/** @internal The current request's matched route pattern, if a route matched yet. */
+export function getRoutePattern(): string | undefined {
+  return storage().getStore()?.routePattern;
 }

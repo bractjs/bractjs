@@ -108,3 +108,11 @@ export async function scanRoutes(appDir: string): Promise<RouteFile[]> {
 
   return routes.sort((a, b) => routeScore(a) - routeScore(b));
 }
+
+/** A route's segments as a React Router pattern: `/blog/:id`, `/docs/:lang?`, `/files/*`. */
+export function routePatternOf(segments: Segment[]): string {
+  const parts = segments.map((s) =>
+    typeof s === "string" ? s : "param" in s ? `:${s.param}` : "optional" in s ? `:${s.optional}?` : "*",
+  );
+  return "/" + parts.join("/");
+}

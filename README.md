@@ -1934,6 +1934,17 @@ export default defineLifecycle({
 });
 ```
 
+**OpenTelemetry.** `otel(api)` is a ready-made instrumentation that creates spans. Pass your own `@opentelemetry/api`, so BractJS doesn't depend on it:
+
+```ts
+// app/server.ts — after your OpenTelemetry SDK setup
+import * as api from "@opentelemetry/api";
+import { instrument, otel } from "@bractjs/bractjs";
+instrument(otel(api));
+```
+
+Each request gets a server span that continues an incoming `traceparent` and is named after its route once one matches (`GET /blog/:id`, with `http.route`). Loaders, actions and route middleware get child spans (`loader routes/blog/[id].tsx`), and an error is recorded on the span where it was thrown. Instrumentations can't see the response, so request spans carry no status code. Route instrumentation info now includes `pattern` (`/blog/:id`).
+
 **Data and errors.** `return data(value, { status, headers })` sets the status and headers without building a Response. `throw new Response("Not found", { status: 404 })` or `throw data(…, { status: 404 })` renders the ErrorBoundary, where `useRouteError()` and `isRouteErrorResponse()` work. `redirectDocument()` forces a full page load; `replace()` swaps the history entry instead of pushing.
 
 **Route exports.** `links()` is rendered into `<head>`. `HydrateFallback` with `clientLoader.hydrate = true` works as in React Router. `unstable_middleware` is read when `middleware` is absent. `meta({ data, matches, location })` gets React Router's arguments. Components receive `{ loaderData, actionData, params, matches }` props.

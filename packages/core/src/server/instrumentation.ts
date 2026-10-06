@@ -10,6 +10,7 @@
 // are caught and logged). With nothing registered, every hook is a direct call.
 
 import type { RouteContext } from "../shared/router-context.ts";
+import { getRoutePattern } from "./request-context.ts";
 
 /** What `call()` resolves to inside an instrumentation wrapper. */
 export type InstrumentResult = { status: "success"; error: undefined } | { status: "error"; error: unknown };
@@ -233,5 +234,6 @@ export function instrumentRoute<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   if (registered.length === 0) return fn();
-  return runWrapped(getRouteWrappers(info.id)[kind], info, fn);
+  const withPattern = info.pattern === undefined ? { ...info, pattern: getRoutePattern() } : info;
+  return runWrapped(getRouteWrappers(info.id)[kind], withPattern, fn);
 }
