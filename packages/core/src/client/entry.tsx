@@ -63,6 +63,32 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
     }
   }
 
+  // Dev: errors React reports from rendering and effects also go to the error
+  // overlay: uncaught ones, ones an ErrorBoundary caught (a component that
+  // throws is a bug even when a boundary renders a fallback; deliberate
+  // HttpErrors, which carry a status, are the app's intended UI), and
+  // recoverable ones (a hydration mismatch React fixed on the client).
+  const report =
+    (title: string) =>
+    (error: unknown, info?: { componentStack?: string }): void => {
+      console.error(error, info?.componentStack ?? "");
+      if (error && typeof error === "object" && typeof (error as { status?: unknown }).status === "number")
+        return;
+      const e = error instanceof Error ? error : new Error(String(error));
+      (window as unknown as { __BRACTJS_ERROR__?: unknown }).__BRACTJS_ERROR__ = {
+        title,
+        message: e.message,
+        stack: e.stack,
+      };
+    };
+  const rootOptions = (window as unknown as { __BRACT_DEV__?: boolean }).__BRACT_DEV__
+    ? {
+        onUncaughtError: report("Uncaught error"),
+        onCaughtError: report("Error (an ErrorBoundary rendered its fallback)"),
+        onRecoverableError: report("Recoverable error (the page re-rendered on the client)"),
+      }
+    : undefined;
+
   // i18n: the client matcher strips locale prefixes like the server does.
   setClientI18n(data.i18n);
 
@@ -101,6 +127,7 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
         locale={data.locale}
         i18n={data.i18n}
       />,
+      rootOptions,
     );
     return;
   }
@@ -164,5 +191,6 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
         <RootWithProps Root={RootComponent as ComponentType<Record<string, unknown>>} />
       )}
     </ClientRouter>,
+    rootOptions,
   );
 })();

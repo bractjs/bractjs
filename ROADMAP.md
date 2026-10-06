@@ -15,7 +15,7 @@ Open work for 0.8.0, roughly in priority order.
 - [x] **`cache()` Cache-Control helpers**, with a `private` safety net for responses that set cookies
 - [x] **Typed, validated environment** (`defineEnv`), checked at startup in every run mode
 - [x] **`bractjs routes` and `bractjs doctor`**
-- [ ] **Dev error overlay**: code frames, open-in-editor, client runtime errors
+- [x] **Dev error overlay**: code frames, open-in-editor, client runtime errors
 - [ ] **ISR for prerendered pages** (`revalidate`, `revalidatePath()`)
 - [ ] **Sitemap and robots.txt** from the route table, prerender paths and locales
 - [ ] **OpenTelemetry preset** on top of `instrument()`
