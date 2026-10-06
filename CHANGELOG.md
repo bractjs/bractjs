@@ -6,6 +6,19 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.8.0] — 2026-10-05
+
+**Upgrading from 0.7** — behavior changes to check (details below):
+
+- Route `middleware` now also guards `"use server"` actions, by where they're defined. Root middleware sees `POST /_action` too; `actionMiddleware: false` restores the old behavior until 0.9.
+- `trustProxy` reads the **last** `X-Forwarded-For` entry. With several proxies in a row, use `trustProxy: <number of proxies>`.
+- A response that sets a cookie is never shared-cacheable: `public` / `s-maxage` become `private`.
+- `createDevServer` moved to `@bractjs/bractjs/dev` (the root re-export is deprecated).
+
 ### Added
 
 - **`origin` config:** the app's public origin. Prerendering and ISR regeneration render with it as `request.url`'s origin, so canonical links and `og:url` built from it are right. It is never taken from a request's Host header.

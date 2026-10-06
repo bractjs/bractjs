@@ -7,21 +7,9 @@
 
 ## Next
 
-Open work for 0.8.0, roughly in priority order.
+Open work, roughly in priority order.
 
-- [x] **Route middleware runs for `"use server"` actions** (a route's auth guard can't be bypassed through its actions)
-- [x] **The page for a failed root loader hydrates**, so links work and the app recovers
-- [x] **`viewTransition` on `navigate()`, `<Form>` and `submit()`**, and a fixed `<Link viewTransition>`
-- [x] **`cache()` Cache-Control helpers**, with a `private` safety net for responses that set cookies
-- [x] **Typed, validated environment** (`defineEnv`), checked at startup in every run mode
-- [x] **`bractjs routes` and `bractjs doctor`**
-- [x] **Dev error overlay**: code frames, open-in-editor, client runtime errors
-- [x] **ISR for prerendered pages** (`revalidate`, `revalidatePath()`)
-- [x] **Sitemap and robots.txt** from the route table, prerender paths and locales
-- [x] **OpenTelemetry preset** on top of `instrument()`
-- [x] **AWS Lambda adapter**; Vercel and Netlify recipes
-- [x] **WebSockets for app code** (Bun and Deno)
-- [x] **MDX routes** (opt-in)
+- _Nothing planned yet._ Ideas and requests go to [GitHub issues](https://github.com/bractjs/bractjs/issues).
 
 ---
 
@@ -31,6 +19,7 @@ One line per release; see the changelog for everything else.
 
 | Version | Date         | Headline                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.8.0   | 2026-10-05   | Route middleware guards server actions, the page for a failed root loader hydrates, viewTransition everywhere, cache() helpers, typed and validated env (defineEnv), bractjs routes/doctor, a dev error overlay with code frames, ISR, sitemap(), OpenTelemetry, serverless deploys (AWS Lambda, Vercel, Netlify), WebSockets, MDX routes, security fixes                                                                                                             |
 | 0.7.1   | 2026-10-02   | `/_image` on Node.js and Deno, a Deno request-body cap, compression backpressure, i18n `//` path fix                                                                                                                                                                                                                                                                                                                                                                  |
 | 0.7.0   | 2026-10-02   | Production servers on Node.js and Deno, self-contained `bractjs compile` binary, i18n, `clientMiddleware`, root `Layout` export and in-app 404s, typed loader data by route id, `@bractjs/bractjs/testing`, production middleware (rate limiting, request ids, health checks, secure headers), server-side sessions, React 19 form actions                                                                                                                            |
 | 0.6.0   | 2026-09-29   | React Router 8 features (typed `createContext`, instrumentation, `fetcher.reset`, `defaultShouldRevalidate`, `streamTimeout`) and a React Router 7/8 API-compatibility layer (`data()`, `useSubmit`, `useRouteError`, `NavLink`, `links`, `HydrateFallback`, cookie session storage, …)                                                                                                                                                                               |

@@ -1,9 +1,9 @@
 {
   "name": "bractjs-monorepo",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": true,
   "packageManager": "pnpm@9.15.9",
-  "description": "BractJS monorepo \u2014 pnpm workspace for the @bractjs/bractjs framework and example apps.",
+  "description": "BractJS monorepo — pnpm workspace for the @bractjs/bractjs framework and example apps.",
   "license": "MIT",
   "scripts": {
     "dev": "bun run packages/core/src/dev/server.ts",
