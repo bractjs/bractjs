@@ -88,6 +88,10 @@ Each option takes a string to change the value, or `false` to omit the header. H
 
 Declare them with `defineEnv()` in `app/env.ts` (README §17). The server checks them at startup, so a deploy with a missing `DATABASE_URL` or a malformed `PORT` fails immediately, with the full list, instead of on the first request that needs it. `client` variables are read at runtime too, so the same build works in staging and production.
 
+## Sitemap and robots.txt
+
+`sitemap({ origin })` in `app/server.ts` serves `/sitemap.xml` and `/robots.txt`. The sitemap lists every route without dynamic segments, every path in `prerender`, and whatever `extra()` returns (the concrete URLs of dynamic routes, e.g. from your database). With `i18n` configured it lists each page in every locale, with `hreflang` alternates. `/api/*` is never listed; `exclude` drops more (`["/admin/*"]`, or a predicate). `robots: { disallow: ["/admin"] }` adds rules, and `robots: false` leaves robots.txt to you. Both are cached for `maxAge` seconds (default 3600). `examples/todo` uses it.
+
 ## Caching
 
 `cache()` builds a `Cache-Control` header for a route's `headers()`, for `data(value, { headers })`, or for any `Response`:

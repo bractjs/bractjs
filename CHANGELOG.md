@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **`sitemap()`** global middleware serves `/sitemap.xml` and `/robots.txt` from the app's own routes: every static route, every prerendered path, and `extra()` for the URLs of dynamic routes. Under `i18n`, each page is listed in every locale with `hreflang` alternates. `/api` is never listed; `exclude` drops more. See [Running in production](docs/production.md#sitemap-and-robotstxt).
+
 - **Incremental static regeneration.** `export const config = { revalidate: 60 }` on a prerendered route makes the production server serve it from memory and, once it is older than 60 seconds, regenerate it (document and `/_data` payload) in the background while the old copy keeps serving. A failed regeneration keeps the old copy. `revalidatePath("/news")` regenerates on demand, e.g. from an action. The cache is per process. It works in the compiled binary, not on Cloudflare. See README §21.
 
 - **A better dev error overlay.** It shows each stack frame inside the project as a code excerpt, with browser frames mapped back to the source (through the dev build's source maps, and past the build-time rewrite of route modules), and an **Open in editor** button (`$BRACTJS_EDITOR`, `$VISUAL`, `$EDITOR`, or `code`). It now also opens for client errors, not only server loader errors: uncaught errors, unhandled rejections, errors an `ErrorBoundary` caught (except deliberate `HttpError`s), and hydration mismatches React recovered from. Escape closes it. The two endpoints behind it (`/_bractjs/stack`, `/_bractjs/open`) exist only under `bractjs dev`, refuse cross-site requests, and stay inside the project directory.
