@@ -6,6 +6,8 @@ import { Outlet } from "./components/Outlet.tsx";
 import { matchPatternForPath, setClientI18n } from "./nav-utils.ts";
 import { type RouteModuleClient, RouterContext } from "./router.tsx";
 import type { BractJSClientData } from "./types.ts";
+import { RootErrorDocument } from "../shared/root-error-document.tsx";
+import { pickErrorBoundary, routeLoaderError } from "../shared/route-error.ts";
 
 // ── Fallback App shell (used when rootChunk is missing) ────────────────────
 
@@ -77,6 +79,30 @@ function RootWithProps({ Root }: { Root: ComponentType<Record<string, unknown>> 
     if (rootMod.default) RootComponent = rootMod.default;
     rootErrorBoundary = rootMod.ErrorBoundary;
     RootLayout = rootMod.Layout;
+  }
+
+  // A failed root loader: the server sent RootErrorDocument instead of the app.
+  // Hydrate that same tree — no router (/_data would hit the same failed
+  // loader), so links stay document loads that retry the app.
+  if (data.rootError) {
+    const error = routeLoaderError(data.loaderData.root) ?? new Error("Internal Server Error");
+    hydrateRoot(
+      document,
+      <RootErrorDocument
+        Boundary={pickErrorBoundary(rootErrorBoundary)}
+        Layout={RootLayout}
+        error={error}
+        status={data.rootError.status}
+        params={data.params}
+        pathname={data.pathname}
+        search={window.location.search}
+        manifest={data.manifest}
+        requestId={data.requestId}
+        locale={data.locale}
+        i18n={data.i18n}
+      />,
+    );
+    return;
   }
 
   // The SPA shell is built once for "/" and served for every document path —

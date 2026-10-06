@@ -237,9 +237,10 @@ describe("root loader errors", () => {
     expect(html).toContain("<html");
     expect(html).toContain("root-boundary:503:maintenance");
     expect(html).toContain("/build/client/root.css");
-    // Nothing to hydrate: no data island, no client entry.
-    expect(html).not.toContain("__BRACTJS_DATA__");
-    expect(html).not.toContain("/c.js");
+    // It hydrates: the root slot carries the error, and the client entry loads.
+    expect(html).toContain('"root":{"__error":{"message":"maintenance","status":503}}');
+    expect(html).toContain('"rootError":{"status":503}');
+    expect(html).toContain('<script type="module" src="/c.js"');
   });
 
   test("without a root ErrorBoundary the built-in fallback renders", async () => {
@@ -362,5 +363,26 @@ describe("hydration parity", () => {
     );
     expect(server).toContain("b-boundary:403:no b");
     expect(client).toBe(server);
+  });
+});
+
+describe("the root error document under a strict CSP", () => {
+  test("its bootstrap script and client entry carry the request's nonce", async () => {
+    const { renderRootErrorDocument } = await import("../server/render.ts");
+    const { RouteErrorFallback } = await import("../shared/route-error.ts");
+    const { HttpError } = await import("../shared/errors.ts");
+    const res = await renderRootErrorDocument({
+      Boundary: RouteErrorFallback,
+      error: new HttpError(503, "maintenance"),
+      params: {},
+      manifest: { clientEntry: "/c.js", routes: {} },
+      nonce: "n0nce",
+      status: 503,
+    });
+    const html = await res.text();
+    expect(html).toContain('<script nonce="n0nce" id="_R_">window.__BRACTJS_DATA__=');
+    expect(html).toMatch(
+      /<script type="module" src="\/c.js" nonce="n0nce"|<script nonce="n0nce" type="module" src="\/c.js"/,
+    );
   });
 });

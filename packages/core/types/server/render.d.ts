@@ -80,11 +80,15 @@ export interface RootErrorDocumentOptions {
     manifest: ServerManifest;
     nonce?: string;
     status: number;
+    locale?: string;
+    i18n?: I18nConfig;
 }
 /**
  * The document for a failed root loader. root.tsx renders `<html>` itself and
- * needs its loader data to do so, so the framework owns this document: the
- * app-wide stylesheets plus root's ErrorBoundary. No client scripts — there is
- * no app to hydrate, and links on the page are plain document navigations.
+ * needs its loader data to do so, so the framework owns this document: root's
+ * `Layout` (or a minimal `<html>`), the app-wide stylesheets and root's
+ * ErrorBoundary (shared/root-error-document.tsx). It ships the client entry,
+ * which hydrates the same tree — the boundary's buttons and effects work, and
+ * links are document loads that retry the app.
  */
 export declare function renderRootErrorDocument(options: RootErrorDocumentOptions): Promise<Response>;

@@ -512,6 +512,8 @@ async function route(
           manifest,
           nonce: getCspNonce(mwCtx.context),
           status: routeErrorStatus(failure.error),
+          locale,
+          i18n,
         });
       }
 

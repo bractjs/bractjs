@@ -252,3 +252,26 @@ test("i18n: /fr renders the board in French, and the switcher soft-navigates", a
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expectSameDocument(page);
 });
+
+test.describe("a failed root loader", () => {
+  test.use({ allowErrors: ["503"] });
+
+  test("renders root's ErrorBoundary in the Layout, and the page hydrates", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await context.addCookies([{ name: "todo-maintenance", value: "1", url: baseURL }]);
+    const res = await page.goto("/about");
+    expect(res?.status()).toBe(503);
+    await expect(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible();
+    // The app's own chrome, from root's Layout.
+    await expect(page.getByRole("link", { name: "Bract Todo" })).toBeVisible();
+    await hydrated(page);
+
+    // "Try again" is an onClick handler: it only works on a hydrated page.
+    await context.clearCookies({ name: "todo-maintenance" });
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByRole("heading", { name: "About this demo" })).toBeVisible();
+  });
+});
