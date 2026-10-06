@@ -762,6 +762,8 @@ Soft-navigates without a full reload. After codegen (§18), `to` autocompletes y
 
 Modifier-clicks (ctrl/cmd/shift/alt) fall back to native browser navigation.
 
+**View Transitions:** `viewTransition` on `<Link>`, `<Form>`, `navigate(to, { viewTransition: true })` and `submit(data, { viewTransition: true })` commits the new page inside `document.startViewTransition`, once its data and module have loaded, so the browser animates between the old and new snapshots. For a submission it animates the redirect or the revalidated page. Style it with `::view-transition-*` CSS (and `@media (prefers-reduced-motion)`). Browsers without the API just navigate.
+
 **Prefetch modes** — prefetching warms the route chunk (`modulepreload`) _and_ the loader cache, so the click commits instantly (prefetched data stays fresh ≥ 30s; concurrent data prefetches are capped at 6 so long lists can't stampede the server):
 
 | mode               | when                                                                          |

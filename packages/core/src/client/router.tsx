@@ -86,6 +86,11 @@ export interface NavigateOptions {
    * would be refreshed in the background (routes without one follow it).
    */
   defaultShouldRevalidate?: boolean;
+  /**
+   * Animate the change with the View Transitions API
+   * (`document.startViewTransition`). Ignored where unsupported.
+   */
+  viewTransition?: boolean;
   /** @internal Skip `useBlocker` checks (a blocker's own `proceed()`). */
   unblocked?: boolean;
 }
@@ -101,6 +106,8 @@ export interface RouterSubmitOptions {
   json?: unknown;
   /** Raw text payload, surfaced as `useNavigation().text`. */
   text?: string;
+  /** Animate the resulting page update (a redirect or the revalidated data) with a View Transition. */
+  viewTransition?: boolean;
 }
 
 /**

@@ -275,3 +275,30 @@ test.describe("a failed root loader", () => {
     await expect(page.getByRole("heading", { name: "About this demo" })).toBeVisible();
   });
 });
+
+test("<Link viewTransition> commits the new page inside the View Transition", async ({ page }) => {
+  await page.goto("/");
+  await hydrated(page);
+  const title = unique("Transition");
+  await addTask(page, title);
+  // Record the page heading at the moment the transition's update callback
+  // returns: the browser takes the "new" snapshot right then.
+  await page.evaluate(() => {
+    const w = window as unknown as { __vtHeadings: string[] };
+    w.__vtHeadings = [];
+    const doc = document as Document & { startViewTransition(cb: () => unknown): unknown };
+    const original = doc.startViewTransition.bind(doc);
+    doc.startViewTransition = (cb) =>
+      original(async () => {
+        await cb();
+        w.__vtHeadings.push(document.querySelector("h1")?.textContent ?? "");
+      });
+  });
+  await markDocument(page);
+  await page.getByRole("link", { name: title }).click();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __vtHeadings: string[] }).__vtHeadings)).toEqual([
+    title,
+  ]);
+  await expectSameDocument(page);
+});

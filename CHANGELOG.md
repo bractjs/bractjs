@@ -6,6 +6,14 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`viewTransition` on `navigate()`, `<Form>` and `submit()`**, as on `<Link>`. The page update after the navigation, the action's redirect or the post-action revalidation is committed inside `document.startViewTransition`. These options were accepted before but did nothing.
+
+### Fixed
+
+- **`<Link viewTransition>` animates.** It started the View Transition, but the router committed the new page only after the transition's callback had returned. The browser snapshotted the old page twice, so nothing animated. The router now commits the new page synchronously inside the callback.
+
 ### Changed
 
 - **The page for a failed root loader hydrates.** It used to be static HTML with no client scripts, so root's `ErrorBoundary` couldn't run a "Try again" button, an effect or anything else interactive. It now ships the client entry, which hydrates the same tree: root's `Layout` (or the minimal framework document) around root's `ErrorBoundary`. Its links are full page loads, since `/_data` would hit the same failed loader. `examples/todo` shows it: set the `todo-maintenance=1` cookie.

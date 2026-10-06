@@ -41,7 +41,7 @@ interface FormProps extends Omit<FormHTMLAttributes<HTMLFormElement>, "method" |
   preventScrollReset?: boolean;
   /** Accepted for React Router compatibility; no effect. */
   relative?: "route" | "path";
-  /** Accepted for React Router compatibility; no effect. */
+  /** Animate the resulting page update with the View Transitions API (ignored where unsupported). */
   viewTransition?: boolean;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   children: ReactNode;
@@ -62,7 +62,7 @@ export function Form({
   defaultShouldRevalidate,
   preventScrollReset: _preventScrollReset,
   relative: _relative,
-  viewTransition: _viewTransition,
+  viewTransition,
   onSubmit,
   children,
   ...rest
@@ -118,7 +118,7 @@ export function Form({
 
     if (n.method === "GET") {
       // A search form: navigate to action?<fields>, loaders re-run.
-      await navCtx!.navigate(n.url, { replace, state, defaultShouldRevalidate });
+      await navCtx!.navigate(n.url, { replace, state, defaultShouldRevalidate, viewTransition });
       return;
     }
 
@@ -131,6 +131,7 @@ export function Form({
       body: n.body,
       contentType: n.contentType,
       defaultShouldRevalidate,
+      viewTransition,
     });
   }
 

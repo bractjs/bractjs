@@ -15,6 +15,8 @@ export interface RevalidationInfo {
      * route's `shouldRevalidate`; routes without one follow it directly.
      */
     defaultShouldRevalidate?: boolean;
+    /** Commit the fresh data inside a View Transition. */
+    viewTransition?: boolean;
 }
 type RevalidateFn = (info?: RevalidationInfo) => Promise<void>;
 /** Called by ClientRouter on mount/unmount. Not part of the public API. */

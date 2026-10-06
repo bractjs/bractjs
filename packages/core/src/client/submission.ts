@@ -43,7 +43,7 @@ export interface SubmitOptions {
   relative?: "route" | "path";
   /** Accepted for React Router compatibility; no effect. */
   flushSync?: boolean;
-  /** Accepted for React Router compatibility; no effect. */
+  /** Animate the resulting page update with the View Transitions API (ignored where unsupported). */
   viewTransition?: boolean;
 }
 

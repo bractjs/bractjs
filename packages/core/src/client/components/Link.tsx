@@ -37,7 +37,10 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<
   /** Search params for the target, typed by its `searchSchema` (replaces any query in `to`). */
   search?: Partial<SearchOutputFor<TTo>>;
   prefetch?: PrefetchMode;
-  /** Opt in to View Transitions API for this navigation (E1). */
+  /**
+   * Animate this navigation with the View Transitions API: the new page is
+   * committed inside `document.startViewTransition`. Ignored where unsupported.
+   */
   viewTransition?: boolean;
   /** Replace the current history entry instead of pushing. */
   replace?: boolean;
@@ -65,11 +68,6 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<
 export type { LinkProps };
 
 // ── Component ──────────────────────────────────────────────────────────────
-
-// Feature-detection at module evaluation so every click doesn't repeat it.
-const supportsViewTransitions =
-  typeof document !== "undefined" &&
-  typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === "function";
 
 /** Hover-intent delay before prefetching — cancels on a fly-by pointer. */
 const INTENT_DELAY_MS = 100;
@@ -140,7 +138,7 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
     if (rest.target && rest.target !== "_self") return;
     e.preventDefault();
 
-    const opts = { replace, state, defaultShouldRevalidate: revalidateByDefault };
+    const opts = { replace, state, defaultShouldRevalidate: revalidateByDefault, viewTransition };
     // Relative `to` ("edit", "../list") resolves like the anchor's href would.
     const target = resolveHref(href);
     const safe = toSamePath(target);
@@ -148,13 +146,9 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
       window.location.assign(href); // off-origin: plain browser navigation
       return;
     }
-    if (viewTransition && supportsViewTransitions) {
-      (document as Document & { startViewTransition(cb: () => void): void }).startViewTransition(() => {
-        void navCtx.navigate(safe, opts);
-      });
-    } else {
-      void navCtx.navigate(safe, opts);
-    }
+    // The router commits the new page inside the View Transition itself, once
+    // its data and module are loaded (see client/view-transition.ts).
+    void navCtx.navigate(safe, opts);
   }
 
   function startIntent() {
