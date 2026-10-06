@@ -15,7 +15,9 @@ const USAGE =
   "  codegen:seed  [app]                  Seed _generated/ so app/server.ts typechecks (no build needed)\n" +
   "  codegen:registry  [app]              Generate _generated/{routes,actions}.ts\n" +
   "  codegen:manifest  [app] [build]      Generate _generated/manifest.ts\n" +
-  "  compile  [outfile] [entry]           Full single-binary pipeline\n\n" +
+  "  compile  [outfile] [entry]           Full single-binary pipeline\n" +
+  "  routes   [--json]                    List the app's pages and typed API endpoints\n" +
+  "  doctor   [--port n]                  Check the setup: Bun, React, config, env, generated files, port\n\n" +
   "  -v, --version                        Print the BractJS version\n" +
   "  -h, --help                           Print this help\n\n" +
   "Ports: --port wins, then the PORT environment variable, then `port` in bractjs.config.ts, then 3000.";
@@ -30,6 +32,8 @@ const COMMANDS = [
   "codegen:registry",
   "codegen:manifest",
   "compile",
+  "routes",
+  "doctor",
 ];
 
 /** Value of `--name value` or `--name=value`; `""` for a bare `--name`; undefined when absent. */
@@ -190,6 +194,54 @@ switch (command) {
   case "new":
     await scaffoldNew();
     break;
+
+  case "routes": {
+    const { loadUserConfig } = await import("../src/config/load.ts");
+    const appDir = (await loadUserConfig()).appDir ?? "./app";
+    const { collectApiRouteRows, collectRouteRows, formatApiRouteTable, formatRouteTable } =
+      await import("../src/dev/route-table.ts");
+    const [{ rows, warnings }, api] = await Promise.all([
+      collectRouteRows(appDir),
+      collectApiRouteRows(appDir),
+    ]);
+    if (process.argv.includes("--json")) {
+      console.log(JSON.stringify({ routes: rows, api }, null, 2));
+      break;
+    }
+    console.log(formatRouteTable(rows));
+    if (api.length) console.log("\n" + formatApiRouteTable(api));
+    for (const w of warnings) console.warn(`[bractjs] ${w}`);
+    break;
+  }
+
+  case "doctor": {
+    const doctor = await import("../src/cli/doctor.ts");
+    const { loadUserConfig } = await import("../src/config/load.ts");
+    const { envPort, parsePort } = await import("../src/server/env.ts");
+    let config: Awaited<ReturnType<typeof loadUserConfig>> = {};
+    const configResult = await doctor.checkConfig(async () => {
+      config = await loadUserConfig();
+    });
+    const appDir = config.appDir ?? "./app";
+    let port = 3000;
+    try {
+      port = (await portFlag()) ?? envPort() ?? parsePort(config.port, "bractjs.config.ts") ?? 3000;
+    } catch {
+      // An invalid PORT shows up in the env check.
+    }
+    const results = [
+      doctor.checkBunVersion(),
+      configResult,
+      doctor.checkAppLayout(appDir),
+      doctor.checkReactCopies(),
+      await doctor.checkGeneratedTypes(appDir),
+      await doctor.checkEnv(appDir),
+      await doctor.checkPort(port),
+    ];
+    console.log(doctor.formatDoctor(results));
+    if (results.some((r) => r.status === "fail")) process.exit(1);
+    break;
+  }
 
   case "dev": {
     // Ensure dev-only handlers gated by isExplicitDev() (e.g. /_hmr/module,
