@@ -139,3 +139,14 @@ export declare function setCreateServerSuppressed(v: boolean): void;
 export declare function createServer(config?: Partial<BractJSConfig>): {
     stop(): void;
 };
+/**
+ * The app's request handler, for serverless platforms (Vercel, Netlify, AWS
+ * Lambda, Deno Deploy): imports your server entry — usually `app/server.ts` —
+ * with its `createServer({...})` call kept from listening, and returns the
+ * `fetch(request)` handler that call configured (middleware, config,
+ * generated registries, compression). `bractjs build --target node` writes
+ * `build/node/handler.js` with it:
+ *
+ *   export const fetch = await appFetchHandler(() => import("../server.ts"));
+ */
+export declare function appFetchHandler(importServerEntry: () => Promise<unknown>): Promise<(request: Request) => Promise<Response>>;

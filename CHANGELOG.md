@@ -8,6 +8,8 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **Serverless deploys.** `bractjs build --target node` also writes `build/node/handler.js`, the app as a self-contained module. It exports `fetch(request)` (Vercel, Netlify, Deno Deploy) and `handler` for AWS Lambda (API Gateway HTTP and REST APIs, Function URLs). Underneath are `appFetchHandler(() => import("./server.ts"))`, which returns the handler `app/server.ts`'s `createServer({...})` configures without listening, and `createLambdaHandler(fetch)`. [Deployment](docs/deployment.md#serverless-aws-lambda-vercel-netlify) has Lambda steps and Vercel/Netlify recipes; CI runs `handler.js` on Node.
+
 - **OpenTelemetry tracing: `instrument(otel(api))`.** You pass your own `@opentelemetry/api`, so BractJS gains no dependency. Every request gets a server span that continues an incoming `traceparent` and is named after its route (`GET /blog/:id`). Loaders, actions and route middleware get child spans, with errors recorded where they're thrown. Route instrumentations now also receive the matched `pattern`.
 
 - **`sitemap()`** global middleware serves `/sitemap.xml` and `/robots.txt` from the app's own routes: every static route, every prerendered path, and `extra()` for the URLs of dynamic routes. Under `i18n`, each page is listed in every locale with `hreflang` alternates. `/api` is never listed; `exclude` drops more. See [Running in production](docs/production.md#sitemap-and-robotstxt).

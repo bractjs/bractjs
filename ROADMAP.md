@@ -19,7 +19,7 @@ Open work for 0.8.0, roughly in priority order.
 - [x] **ISR for prerendered pages** (`revalidate`, `revalidatePath()`)
 - [x] **Sitemap and robots.txt** from the route table, prerender paths and locales
 - [x] **OpenTelemetry preset** on top of `instrument()`
-- [ ] **AWS Lambda adapter**; Vercel and Netlify recipes
+- [x] **AWS Lambda adapter**; Vercel and Netlify recipes
 - [ ] **WebSockets for app code** (Bun and Deno)
 - [ ] **MDX routes** (opt-in)
 
