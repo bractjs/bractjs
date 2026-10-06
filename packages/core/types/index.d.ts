@@ -109,6 +109,7 @@ export type { LifecycleHooks } from "./server/lifecycle.ts";
 export { defineLifecycle } from "./server/lifecycle.ts";
 export type { MiddlewareContext, MiddlewareFn, RouteMiddleware } from "./server/middleware.ts";
 export { createMiddlewareContext, MiddlewarePipeline, pipeline } from "./server/middleware.ts";
+export { withMiddleware } from "./server/action-middleware.ts";
 export { getRequest, getRequestId } from "./server/request-context.ts";
 export { getPlatform } from "./server/platform.ts";
 export { useRequestId } from "./shared/request-id.ts";

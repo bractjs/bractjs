@@ -6,12 +6,12 @@ Auth is where BractJS's scoping rules matter most: the framework gives you secur
 
 Guards do not cascade across surfaces. This table is the whole guide in miniature — everything below is elaboration:
 
-| Surface                                 | Guarded by                                                       | NOT guarded by                    |
-| --------------------------------------- | ---------------------------------------------------------------- | --------------------------------- |
-| Pages + their `/_data` (soft-nav JSON)  | Layout/route `middleware` export, or `beforeLoad`                | A check inside the component      |
-| Typed `/api` endpoints                  | `route(..., { middleware: [...] })`, or checks in the handler    | Layout/route `middleware` exports |
-| Server actions (`/_action`, `/_stream`) | Checks **inside the function body**                              | Layout/route `middleware` exports |
-| Everything at once                      | Global `pipeline.use(...)` in `app/server.ts` (e.g. `authGuard`) | —                                 |
+| Surface                                 | Guarded by                                                                                 | NOT guarded by                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------- |
+| Pages + their `/_data` (soft-nav JSON)  | Layout/route `middleware` export, or `beforeLoad`                                          | A check inside the component      |
+| Typed `/api` endpoints                  | `route(..., { middleware: [...] })`, or checks in the handler                              | Layout/route `middleware` exports |
+| Server actions (`/_action`, `/_stream`) | The `middleware` exports above the defining file, `withMiddleware`, and checks in the body | `beforeLoad`, the calling page    |
+| Everything at once                      | Global `pipeline.use(...)` in `app/server.ts` (e.g. `authGuard`)                           | —                                 |
 
 ## 1. Sessions
 
@@ -172,7 +172,17 @@ The endpoint chain runs before body parsing, so an unauthorized request is rejec
 
 ## 5. Server actions authorize themselves
 
-Every exported function of a `"use server"` module is a public RPC endpoint at `POST /_action`. The CSRF gate proves the call came from your origin — **it does not prove who is calling**. No middleware surface wraps individual actions, so the function body is the guard. An action receives only the arguments the caller passed; read the session from the current request with `getRequest()`:
+Every exported function of a `"use server"` module is a public RPC endpoint at `POST /_action`. The CSRF gate proves the call came from your origin — **it does not prove who is calling**.
+
+Route middleware covers actions by **where they are defined**, never by which page calls them (the caller controls that):
+
+- An action in a module under `routes/` runs root → the layouts above that file → the module's own `middleware` export, the same chain that guards a page there. An auth `middleware` on `routes/admin/layout.tsx` guards `routes/admin/actions.ts` too.
+- An action anywhere else (`app/posts.server.ts`) runs root's `middleware` only.
+- `withMiddleware([requireAdmin], fn)` adds middleware to one action.
+
+Only `middleware` exports apply, not `beforeLoad` (that gate runs with the loaders). The chain runs after the CSRF gate and before the body is parsed; a returned or thrown `redirect()` makes the calling page navigate. Set `actionMiddleware: false` in the config to turn this off (until 0.9).
+
+Middleware decides _whether_ the call happens. Anything finer — "may this user delete _this_ post?" — still belongs in the body. An action receives only the arguments the caller passed; read the session from the current request with `getRequest()`:
 
 ```ts
 // app/posts.server.ts — actions live in *.server.ts files or route modules
@@ -188,7 +198,7 @@ export async function deletePost(postId: string) {
 
 Never accept the user, a user ID, or a role as an action _argument_ and trust it — the caller controls every argument.
 
-Streaming actions (`GET /_stream`) are invoked with _no caller input_ — they must be safe to call with none, and must authorize themselves the same way. ([§27](../README.md#27-security-model))
+Streaming actions (`GET /_stream`) run the same middleware, and are invoked with _no caller input_ — they must be safe to call with none. ([§27](../README.md#27-security-model))
 
 ## 6. The global option: `authGuard`
 

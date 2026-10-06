@@ -123,6 +123,14 @@ export interface BractJSConfig {
    */
   streamTimeout?: number;
   /**
+   * Run route middleware for `"use server"` actions (`/_action`, `/_stream`).
+   * An action defined under `routes/` runs root → layouts → its own module's
+   * `middleware`, the chain guarding a page at the same place; one defined
+   * elsewhere (`app/*.server.ts`) runs root's. Default `true`. `false` restores
+   * the pre-0.8 behavior (global middleware only); it goes away in 0.9.
+   */
+  actionMiddleware?: boolean;
+  /**
    * Pre-scanned route list (typically exported from `app/_generated/routes.ts`).
    * When provided, skips the startup `Bun.Glob` scan of `appDir`. Required for
    * `bun build --compile` binaries where the embedded filesystem has no
@@ -230,6 +238,9 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     ? loadServerActionsFromRegistry(config.actionModules)
     : loadServerActions(appDir);
   const moduleRegistry = config.moduleRegistry;
+  // Route middleware for "use server" actions: chain derived from each
+  // action's defining module (server/action-middleware.ts).
+  const actionGate = { appDir, moduleRegistry, routeMiddleware: config.actionMiddleware !== false };
   const onError = config.onError;
   // Config-supplied instrumentations replace the previous handler's (a second
   // buildFetchHandler — tests, embedders — must not stack duplicates).
@@ -320,7 +331,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // Server actions endpoint (exact path; handler also validates).
     if (pathname === "/_action") {
       await actionsReady;
-      const actionRes = await handleActionRequest(request);
+      const actionRes = await handleActionRequest(request, actionGate);
       if (actionRes) return actionRes;
     }
 
@@ -328,7 +339,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     if (pathname === "/_stream") {
       await actionsReady;
       const { handleStreamRequest } = await import("./stream-handler.ts");
-      const streamRes = await handleStreamRequest(request);
+      const streamRes = await handleStreamRequest(request, actionGate);
       if (streamRes) return streamRes;
     }
 

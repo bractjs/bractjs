@@ -9,7 +9,7 @@
 
 Open work for 0.8.0, roughly in priority order.
 
-- [ ] **Route middleware runs for `"use server"` actions** (a route's auth guard can't be bypassed through its actions)
+- [x] **Route middleware runs for `"use server"` actions** (a route's auth guard can't be bypassed through its actions)
 - [ ] **The page for a failed root loader hydrates**, so links work and the app recovers
 - [ ] **`viewTransition` on `navigate()`, `<Form>` and `submit()`**, and a fixed `<Link viewTransition>`
 - [ ] **`cache()` Cache-Control helpers**, with a `private` safety net for responses that set cookies

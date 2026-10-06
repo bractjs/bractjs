@@ -2,7 +2,18 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { hasServerDirective, isActionModulePath } from "../shared/directives.ts";
 import { devBustedSpecifier } from "./env.ts";
 
-const registry = new Map<string, (...args: unknown[]) => Promise<unknown>>();
+type ActionFn = (...args: unknown[]) => Promise<unknown>;
+
+/** A registered server action and the module it was exported from. */
+export interface ActionEntry {
+  fn: ActionFn;
+  /** appDir-relative path of the defining module (absolute when outside appDir). */
+  relPath: string;
+  /** The defining module's namespace — its `middleware` export guards its actions. */
+  mod: Record<string, unknown>;
+}
+
+const registry = new Map<string, ActionEntry>();
 
 /**
  * Internal: empty the action registry. Used by the dev watcher before a
@@ -81,7 +92,12 @@ function pathKeyForAction(absPath: string, appDir: string): string {
   return rel.startsWith("..") ? absPath : rel;
 }
 
-export function resolveAction(id: string): ((...args: unknown[]) => Promise<unknown>) | null {
+export function resolveAction(id: string): ActionFn | null {
+  return registry.get(id)?.fn ?? null;
+}
+
+/** The registered action for `id`, with the module it came from. */
+export function resolveActionEntry(id: string): ActionEntry | null {
   return registry.get(id) ?? null;
 }
 
@@ -114,8 +130,9 @@ export async function loadServerActions(appDir: string): Promise<void> {
     for (const [name, val] of Object.entries(mod)) {
       if (typeof val !== "function") continue;
       if (!shouldRegisterExport(name, fromRouteFile)) continue;
-      const id = await computeId(pathKeyForAction(filePath, appDir), name);
-      registry.set(id, val as (...args: unknown[]) => Promise<unknown>);
+      const relPath = pathKeyForAction(filePath, appDir);
+      const id = await computeId(relPath, name);
+      registry.set(id, { fn: val as ActionFn, relPath, mod });
     }
   }
 }
@@ -138,7 +155,7 @@ export async function loadServerActionsFromRegistry(
       if (typeof val !== "function") continue;
       if (!shouldRegisterExport(name, fromRouteFile)) continue;
       const id = await computeId(relPath, name);
-      registry.set(id, val as (...args: unknown[]) => Promise<unknown>);
+      registry.set(id, { fn: val as ActionFn, relPath, mod });
     }
   }
 }

@@ -1,14 +1,55 @@
-import { resolveAction } from "./action-registry.ts";
+import { actionMiddlewareChain } from "./action-middleware.ts";
+import { type ActionEntry, resolveActionEntry } from "./action-registry.ts";
 import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
+import type { ModuleRegistry } from "./layout.ts";
+import { createMiddlewareContext, runRouteMiddleware } from "./middleware.ts";
 import { hasForbiddenKey } from "./proto-guard.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
 import { json, redirectEnvelope, sanitizeRedirect } from "./response.ts";
+
+/** Where `/_action` and `/_stream` find the route middleware guarding an action. */
+export interface ActionGateOptions {
+  appDir: string;
+  /** Pre-loaded modules (compiled binary); dev imports from `appDir`. */
+  moduleRegistry?: ModuleRegistry;
+  /** `false` skips route middleware for actions (`BractJSConfig.actionMiddleware`). */
+  routeMiddleware?: boolean;
+}
+
+/**
+ * Run `work` behind the route middleware for `entry` (see
+ * `actionMiddlewareChain`). Without `gate` — direct handler calls in tests —
+ * or with `routeMiddleware: false`, `work` runs alone. A redirect from the
+ * middleware (returned or thrown) becomes the 204 envelope the client proxy
+ * follows; an `HttpError` becomes its status.
+ */
+export async function runActionGate(
+  request: Request,
+  entry: ActionEntry,
+  gate: ActionGateOptions | undefined,
+  work: () => Promise<Response>,
+): Promise<Response> {
+  if (!gate || gate.routeMiddleware === false) return work();
+  const chain = await actionMiddlewareChain(entry, gate.appDir, gate.moduleRegistry);
+  if (chain.length === 0) return work();
+  try {
+    const res = await runRouteMiddleware(chain, createMiddlewareContext(request), work);
+    return redirectEnvelope(sanitizeRedirect(res, request.url));
+  } catch (err) {
+    if (isRedirect(err)) return redirectEnvelope(sanitizeRedirect(err, request.url));
+    if (isHttpError(err)) return json({ error: err.message }, { status: err.status });
+    throw err;
+  }
+}
 
 // Cap action JSON bodies. Anything over this looks like an abuse attempt;
 // FormData uploads (large files) take the multipart branch and bypass this.
 const MAX_JSON_BODY_BYTES = 1_048_576; // 1 MiB
 
-export async function handleActionRequest(request: Request): Promise<Response | null> {
+export async function handleActionRequest(
+  request: Request,
+  gate?: ActionGateOptions,
+): Promise<Response | null> {
   const url = new URL(request.url);
   // SECURITY(medium): exact-match prevents URL confusion (e.g. "/_actionfoo"
   // would otherwise also reach this handler).
@@ -19,9 +60,15 @@ export async function handleActionRequest(request: Request): Promise<Response | 
   const id = url.searchParams.get("id");
   if (!id) return new Response("Bad Request: missing action id", { status: 400 });
 
-  const fn = resolveAction(id);
-  if (!fn) return new Response("Not Found", { status: 404 });
+  const entry = resolveActionEntry(id);
+  if (!entry) return new Response("Not Found", { status: 404 });
 
+  // SECURITY(high): the route middleware runs before the body is read, as for
+  // typed /api endpoints, so a rejected caller costs no parsing.
+  return runActionGate(request, entry, gate, () => invokeAction(request, entry.fn));
+}
+
+async function invokeAction(request: Request, fn: ActionEntry["fn"]): Promise<Response> {
   let args: unknown[];
   try {
     const ct = request.headers.get("Content-Type") ?? "";
