@@ -50,6 +50,7 @@ import {
   redirectEnvelope,
   sanitizeRedirect,
 } from "./response.ts";
+import { PRERENDER_HEADER, REVALIDATE_HEADER } from "./isr.ts";
 import { validateSearch } from "./search.ts";
 
 export interface HandlerConfig {
@@ -614,7 +615,7 @@ async function route(
       // from the leaf loader, then the action (React Router parity).
       const dataStatus = loaderResults.inits?.route?.status ?? actionInit?.status;
 
-      return renderRoute({
+      const document = await renderRoute({
         shell,
         loaderData,
         actionData,
@@ -637,6 +638,12 @@ async function route(
         i18n,
         status: statusFailure ? routeErrorStatus(statusFailure.error) : dataStatus,
       });
+      // Prerendering asks which pages are ISR pages (route `config.revalidate`).
+      const revalidate = chain.route.config?.revalidate;
+      if (request.headers.has(PRERENDER_HEADER) && typeof revalidate === "number") {
+        document.headers.set(REVALIDATE_HEADER, String(revalidate));
+      }
+      return document;
     },
   );
   // With detect, remember the locale this page is in — a visitor who follows

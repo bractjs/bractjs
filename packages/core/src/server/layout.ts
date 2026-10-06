@@ -121,6 +121,7 @@ export async function importRouteModule(filePath: string): Promise<RouteModule> 
     // (running loaders the route opted out of); dropping `Fallback` would
     // SSR an empty outlet and guarantee a hydration mismatch.
     ssr: mod.ssr,
+    config: mod.config,
     Fallback: mod.Fallback,
     // React Router HydrateFallback + clientLoader.hydrate → "data-only" SSR.
     HydrateFallback: mod.HydrateFallback,
@@ -157,6 +158,7 @@ function pickRouteModule(mod: Record<string, unknown> | RouteModule | undefined)
     // skip search validation only in compiled binaries, the worst kind of skew.
     searchSchema: m.searchSchema,
     ssr: m.ssr as RouteModule["ssr"],
+    config: m.config as RouteModule["config"],
     Fallback: m.Fallback as RouteModule["Fallback"],
     HydrateFallback: m.HydrateFallback as RouteModule["HydrateFallback"],
     clientLoaderHydrate: isHydratingClientLoader(m.clientLoader),

@@ -307,6 +307,16 @@ export interface RouteModule<TLoader = unknown, TAction = unknown> {
      *   STILL runs on the server — it is the auth gate.
      */
     ssr?: boolean | "data-only";
+    /**
+     * Route options. `revalidate` (seconds) turns a prerendered page into an
+     * ISR page: it is served from memory and regenerated in the background once
+     * older than this. `staleTime` / `gcTime` tune the client loader cache.
+     */
+    config?: {
+        revalidate?: number;
+        staleTime?: number;
+        gcTime?: number;
+    };
     /** SSR'd in the component's place for `ssr: false` / `"data-only"` routes (HydrateFallback equivalent). */
     Fallback?: React.ComponentType;
     /**
