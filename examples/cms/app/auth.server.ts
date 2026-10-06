@@ -145,16 +145,28 @@ export async function logoutCookie(): Promise<string> {
 
 // ── Pending-MFA cookie (between factor 1 and factor 2) ───────────────────────
 
+// The cookie's own max-age is only a hint to the browser: a copied cookie
+// would otherwise stay usable forever. So the signed payload carries when it
+// was issued and the user's session epoch, and both are checked on every read:
+// it expires after PENDING_MFA_MS, and a password change voids it.
+const PENDING_MFA_MS = 10 * 60 * 1000;
+
 export async function beginPendingMfa(userId: string): Promise<string> {
   const session = await pending.getSession(null);
   session.set("pendingUserId", userId);
+  session.set("issuedAt", Date.now());
+  session.set("epoch", getUserSessionEpoch(userId));
   return pending.commitSession(session);
 }
 
 export async function getPendingUserId(request: Request): Promise<string | null> {
   const session = await pending.getSession(request.headers.get("cookie"));
   const id = session.get("pendingUserId");
-  return typeof id === "string" ? id : null;
+  const issuedAt = Number(session.get("issuedAt"));
+  if (typeof id !== "string" || !Number.isFinite(issuedAt)) return null;
+  if (Date.now() - issuedAt > PENDING_MFA_MS) return null;
+  if (Number(session.get("epoch") ?? 0) !== getUserSessionEpoch(id)) return null;
+  return id;
 }
 
 export async function clearPendingMfa(): Promise<string> {

@@ -79,6 +79,12 @@ interface InternalSession extends Session {
 
 // ── Private helpers ─────────────────────────────────────────────────────────
 
+// SECURITY(medium): a cookie's Max-Age is only an instruction to the browser.
+// A copied cookie would stay valid forever, outliving logout and its age, so
+// the expiry also goes inside the signed payload and is checked on every read.
+// Cookies issued before this key existed carry none and stay readable.
+const EXPIRES_KEY = "__bract_exp";
+
 function encode(data: SessionData): string {
   return btoa(JSON.stringify(data)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -244,7 +250,13 @@ export function createCookieSession(options: CookieSessionOptions): CookieSessio
       const encoded = await readSignedCookie(cookie, name, secrets);
       if (encoded === null) return makeSession({});
       try {
-        return makeSession(decode(encoded));
+        const data = decode(encoded);
+        if (EXPIRES_KEY in data) {
+          const expires = data[EXPIRES_KEY];
+          delete data[EXPIRES_KEY];
+          if (typeof expires !== "number" || Date.now() > expires) return makeSession({});
+        }
+        return makeSession(data);
       } catch {
         return makeSession({});
       }
@@ -252,9 +264,12 @@ export function createCookieSession(options: CookieSessionOptions): CookieSessio
 
     async commitSession(session: Session, opts?: CommitOptions): Promise<string> {
       const data = (session as InternalSession)[DATA] ?? {};
-      const encoded = encode(data);
+      const age = opts?.maxAge ?? maxAge;
+      const payload =
+        age !== undefined && age > 0 ? { ...data, [EXPIRES_KEY]: Date.now() + age * 1000 } : data;
+      const encoded = encode(payload);
       const sig = await sign(encoded, secrets[0]);
-      return serializeCookie(attrs, `${encoded}.${sig}`, opts?.maxAge ?? maxAge);
+      return serializeCookie(attrs, `${encoded}.${sig}`, age);
     },
 
     async destroySession(): Promise<string> {

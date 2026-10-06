@@ -323,6 +323,7 @@ switch (command) {
         publicDir: userCfg.publicDir,
         buildDir: userCfg.buildDir ?? "./build",
         i18n: userCfg.i18n,
+        origin: userCfg.origin,
       });
       console.log(`[bract] prerender → ${written.length} files`);
     }
@@ -496,6 +497,7 @@ switch (command) {
         publicDir: userCfg.publicDir,
         buildDir: buildDirRel,
         i18n: userCfg.i18n,
+        origin: userCfg.origin,
       });
       console.log(`[bract]       prerender → ${written.length} files`);
     }

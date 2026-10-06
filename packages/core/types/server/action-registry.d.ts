@@ -7,6 +7,11 @@ export interface ActionEntry {
     /** The defining module's namespace — its `middleware` export guards its actions. */
     mod: Record<string, unknown>;
 }
+/** The modules exporting `entry`'s function (at least `entry`'s own). */
+export declare function actionExporters(entry: ActionEntry): Array<{
+    relPath: string;
+    mod: Record<string, unknown>;
+}>;
 /**
  * Internal: empty the action registry. Used by the dev watcher before a
  * re-scan (so deleted/renamed "use server" modules don't linger) and by tests

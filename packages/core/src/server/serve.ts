@@ -18,7 +18,7 @@ import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import { buildTrie, matchRoute } from "./matcher.ts";
 import { instrument, type Instrumentation, instrumentRequest } from "./instrumentation.ts";
 import { createMiddlewareContext, type MiddlewareContext, pipeline } from "./middleware.ts";
-import type { ServerManifest } from "./render.ts";
+import { DOCUMENT_SECURITY_HEADERS, type ServerManifest } from "./render.ts";
 import { runWithRequest } from "./request-context.ts";
 import { type HandlerConfig, handleRequest } from "./request-handler.ts";
 import { error } from "./response.ts";
@@ -72,6 +72,14 @@ export interface BractJSConfig {
    * SSR in production; requests with a query string stay dynamic.
    */
   prerender?: string[] | (() => string[] | Promise<string[]>);
+  /**
+   * The app's public origin, e.g. `"https://example.com"`. Prerendering and
+   * ISR regeneration render pages with no visitor request behind them; this is
+   * the origin their `request.url` gets, so absolute URLs a loader or `meta()`
+   * builds from it (canonical links, og:url) are right. Unset: a placeholder
+   * origin. Never taken from a request's Host header, which a client controls.
+   */
+  origin?: string;
   // Build options (used by src/build/bundler.ts)
   /** Client bundle sourcemaps. Default `"none"`: build/client/ is publicly served, so maps would publish module source. */
   sourcemap?: "none" | "linked" | "inline" | "external";
@@ -343,21 +351,21 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // WebSocket handshakes for websocket() endpoints (Bun / Deno adapters).
     if (request.headers.has("Upgrade")) {
       const { handleWebSocketRequest } = await import("./websocket.ts");
-      const wsRes = await handleWebSocketRequest(request);
+      const wsRes = await handleWebSocketRequest(request, context);
       if (wsRes) return wsRes;
     }
 
     // Typed API routes (registered via bract.route())
     if (pathname.startsWith("/api")) {
       const { handleApiRequest } = await import("./api-route.ts");
-      const apiRes = await handleApiRequest(request);
+      const apiRes = await handleApiRequest(request, context);
       if (apiRes) return apiRes;
     }
 
     // Server actions endpoint (exact path; handler also validates).
     if (pathname === "/_action") {
       await actionsReady;
-      const actionRes = await handleActionRequest(request, actionGate);
+      const actionRes = await handleActionRequest(request, { ...actionGate, context });
       if (actionRes) return actionRes;
     }
 
@@ -365,7 +373,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     if (pathname === "/_stream") {
       await actionsReady;
       const { handleStreamRequest } = await import("./stream-handler.ts");
-      const streamRes = await handleStreamRequest(request, actionGate);
+      const streamRes = await handleStreamRequest(request, { ...actionGate, context });
       if (streamRes) return streamRes;
     }
 
@@ -410,6 +418,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
           if (f) {
             return new Response(f, {
               headers: {
+                ...DOCUMENT_SECURITY_HEADERS,
                 "Content-Type": "application/json",
                 "Cache-Control": "public, max-age=0, must-revalidate",
               },
@@ -424,6 +433,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
         if (f) {
           return new Response(f, {
             headers: {
+              ...DOCUMENT_SECURITY_HEADERS,
               "Content-Type": "text/html; charset=utf-8",
               "Cache-Control": "public, max-age=0, must-revalidate",
             },
@@ -449,13 +459,14 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   // background through this same handler, with a secret header that skips the
   // prerender cache (server/isr.ts).
   const isrToken = crypto.randomUUID();
+  const renderOrigin = config.origin ? new URL(config.origin).origin : "http://isr.local";
   const isr = createIsr({
     load: async (rel) => (await prerenderFile(rel))?.text() ?? null,
     render: async (path) => {
       const headers = { [ISR_REGEN_HEADER]: isrToken };
       const [html, data] = await Promise.all([
-        handler(new Request(`http://isr.local${path}`, { headers })),
-        handler(new Request(`http://isr.local/_data?path=${encodeURIComponent(path)}`, { headers })),
+        handler(new Request(`${renderOrigin}${path}`, { headers })),
+        handler(new Request(`${renderOrigin}/_data?path=${encodeURIComponent(path)}`, { headers })),
       ]);
       return { html, data };
     },

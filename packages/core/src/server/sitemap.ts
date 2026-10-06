@@ -91,9 +91,12 @@ export function renderSitemap(origin: string, entries: SitemapEntry[], i18n?: I1
         const d = entry.lastmod instanceof Date ? entry.lastmod.toISOString() : entry.lastmod;
         lines.push(`    <lastmod>${xml(d)}</lastmod>`);
       }
-      if (entry.changefreq) lines.push(`    <changefreq>${entry.changefreq}</changefreq>`);
-      if (entry.priority !== undefined)
-        lines.push(`    <priority>${Math.min(1, Math.max(0, entry.priority)).toFixed(1)}</priority>`);
+      // Escaped like everything else: extra() entries often come from a database.
+      if (entry.changefreq) lines.push(`    <changefreq>${xml(String(entry.changefreq))}</changefreq>`);
+      const priority = Number(entry.priority);
+      if (entry.priority !== undefined && Number.isFinite(priority)) {
+        lines.push(`    <priority>${Math.min(1, Math.max(0, priority)).toFixed(1)}</priority>`);
+      }
       urls.push(`  <url>\n${lines.join("\n")}\n  </url>`);
     }
   }

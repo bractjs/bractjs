@@ -14,7 +14,7 @@ import {
   requireAdmin,
   setOAuthState,
 } from "../auth.server.ts";
-import { createUser } from "../models/users.server.ts";
+import { createUser, updateUser } from "../models/users.server.ts";
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
 const make = () =>
@@ -104,4 +104,24 @@ test("checkLoginRate: anonymous junk logins can't lock out everyone (no shared '
   } finally {
     await _resetLoginRateLimits();
   }
+});
+
+test("the pending-MFA cookie expires server-side after 10 minutes, whatever the browser keeps", async () => {
+  const u = (await make()).user!;
+  const cookie = await beginPendingMfa(u.id);
+  expect(await getPendingUserId(reqWith(cookie))).toBe(u.id);
+  const realNow = Date.now;
+  Date.now = () => realNow() + 10 * 60 * 1000 + 1;
+  try {
+    expect(await getPendingUserId(reqWith(cookie))).toBeNull();
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("a password change voids a pending-MFA cookie", async () => {
+  const u = (await make()).user!;
+  const cookie = await beginPendingMfa(u.id);
+  await updateUser(u.id, { displayName: "A", email: u.email ?? "", password: "changed-456" });
+  expect(await getPendingUserId(reqWith(cookie))).toBeNull();
 });

@@ -144,7 +144,11 @@ export function upgradedResponse(): Response {
  * Handle a WebSocket handshake for a registered endpoint, or return null
  * (not a handshake, or no endpoint at that path).
  */
-export async function handleWebSocketRequest(request: Request): Promise<Response | null> {
+export async function handleWebSocketRequest(
+  request: Request,
+  /** The request's context from global middleware. */
+  context: Record<string, unknown> = {},
+): Promise<Response | null> {
   if (endpoints.length === 0) return null;
   if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return null;
   const { pathname } = new URL(request.url);
@@ -167,7 +171,7 @@ export async function handleWebSocketRequest(request: Request): Promise<Response
     return new Response("WebSockets need a Bun or Deno server", { status: 501 });
   }
   const ep = endpoint;
-  const ctx = createMiddlewareContext(request, params);
+  const ctx = createMiddlewareContext(request, params, context);
   return runRouteMiddleware(ep.middleware, ctx, async () => {
     const data = ep.handlers.upgrade ? await ep.handlers.upgrade(ctx) : undefined;
     if (data instanceof Response) return data;

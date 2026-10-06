@@ -118,7 +118,7 @@ Route `headers()` run root → layouts → route, and the innermost value wins (
 
 `rateLimit({ max, windowMs })` counts requests per client in fixed windows. Past `max` it answers `429 Too Many Requests` with `Retry-After`. Responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`.
 
-- **The client** is its IP: the socket address under Bun, or with `trustProxy: true` the first `X-Forwarded-For` entry (or `X-Real-IP`). Only set `trustProxy` when a proxy you control always sits in front; otherwise clients can pick their own address. Behind a proxy _without_ `trustProxy`, every request shares the proxy's address, so one bucket covers everyone. Set it, or key the limit yourself.
+- **The client** is its IP: the socket address under Bun, or with `trustProxy: true` the last `X-Forwarded-For` entry, the address your proxy saw (or `X-Real-IP`). Earlier entries came from the client and are never trusted. With several proxies in a row (a CDN in front of a load balancer), pass their number: `trustProxy: 2`. Only set `trustProxy` when a proxy you control always sits in front; otherwise clients can pick their own address. Behind a proxy _without_ `trustProxy`, every request shares the proxy's address, so one bucket covers everyone. Set it, or key the limit yourself.
 - **Unknown clients aren't limited.** No address means no limit, because one shared bucket would let anyone lock everybody out.
 - **`key(request)`** buckets by something else (an API key, a user id); returning `undefined` skips the request. **`match(request)`** limits only some requests.
 - **`store`** defaults to process memory. Implement `{ hit(key, windowMs), reset(key?) }` over Redis to share limits between instances.

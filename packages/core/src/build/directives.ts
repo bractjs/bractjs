@@ -102,7 +102,15 @@ const PROXY_HELPER = `async function __bract(id: string, args: unknown[]): Promi
   const location = r.headers.get("X-BractJS-Redirect");
   if (location) {
     if (router) await router.navigate(location);
-    else window.location.assign(location);
+    // SECURITY: no router mounted — follow only a same-origin path or an
+    // http(s) URL, never a script URL. (String checks: this is emitted code.)
+    else if (
+      (location.startsWith("/") && !location.startsWith("//")) ||
+      location.toLowerCase().startsWith("http://") ||
+      location.toLowerCase().startsWith("https://")
+    ) {
+      window.location.assign(location);
+    }
     return undefined;
   }
   if (!r.ok) {

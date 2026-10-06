@@ -14,6 +14,8 @@ export interface ActionGateOptions {
   moduleRegistry?: ModuleRegistry;
   /** `false` skips route middleware for actions (`BractJSConfig.actionMiddleware`). */
   routeMiddleware?: boolean;
+  /** The request's context from global middleware, shared with route middleware as on pages. */
+  context?: Record<string, unknown>;
 }
 
 /**
@@ -33,7 +35,7 @@ export async function runActionGate(
   const chain = await actionMiddlewareChain(entry, gate.appDir, gate.moduleRegistry);
   if (chain.length === 0) return work();
   try {
-    const res = await runRouteMiddleware(chain, createMiddlewareContext(request), work);
+    const res = await runRouteMiddleware(chain, createMiddlewareContext(request, {}, gate.context), work);
     return redirectEnvelope(sanitizeRedirect(res, request.url));
   } catch (err) {
     if (isRedirect(err)) return redirectEnvelope(sanitizeRedirect(err, request.url));

@@ -12,10 +12,11 @@ import type { ServerManifest } from "../server/render.ts";
  */
 export declare function toSamePath(loc: string): string | null;
 /**
- * Full-page navigation to an off-origin redirect target (the `null` branch of
- * {@link toSamePath}). SECURITY(medium): only http(s) targets are followed —
- * `location.assign("javascript:…")` would execute script in this origin, which
- * would turn an app-level open redirect into XSS. Anything else is dropped.
+ * Full-page navigation to an off-origin target (the `null` branch of
+ * {@link toSamePath}). SECURITY(high): only http(s), mailto: and tel: targets
+ * are followed — `location.assign("javascript:…")` would execute script in
+ * this origin, turning an app-level open redirect or a user-supplied link into
+ * XSS. Anything else is dropped.
  */
 export declare function assignExternal(loc: string): void;
 /**

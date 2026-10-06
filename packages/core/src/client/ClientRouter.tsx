@@ -330,7 +330,9 @@ export function ClientRouter({
               const freshData = reviveDeferred(fresh as Record<string, unknown>);
               loaderCache.set(key, freshData, staleTime, gcTime);
               startTransition(() => applyPayload(freshData));
-            });
+            })
+            // A background refresh: on a network error, keep the stale page.
+            .catch((err: unknown) => console.warn("[bractjs] background revalidation failed:", err));
           return;
         }
 
@@ -418,6 +420,14 @@ export function ClientRouter({
           blocker.onBlock(nextLocation, () => navigateRef.current(to, { ...options, unblocked: true }));
           return;
         }
+      }
+      // SECURITY(high): only same-origin targets are routed (after the
+      // blockers, which may hold any navigation). Anything else — another
+      // site, mailto:, a javascript: URL from navigate(userInput) — goes
+      // through assignExternal, which refuses script URLs.
+      if (toSamePath(to) === null) {
+        assignExternal(to);
+        return;
       }
       const loaded = await loadRoute(to, {
         key,

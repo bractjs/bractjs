@@ -3,6 +3,7 @@
 // ClientRouter (circular); instead the router registers its revalidate
 // function here on mount.
 
+import { assignExternal, toSamePath } from "./nav-utils.ts";
 export interface RevalidationInfo {
   /** The mutation's HTTP method, when revalidation follows an action. */
   formMethod?: string;
@@ -53,7 +54,8 @@ export function registerNavigator(fn: NavigateFn | null): void {
 /** Soft-navigate through the mounted router, or fall back to a full page load. */
 export function softNavigate(to: string, opts?: { replace?: boolean }): Promise<void> {
   if (currentNavigator) return currentNavigator(to, opts);
-  if (opts?.replace) window.location.replace(to);
+  if (toSamePath(to) === null) assignExternal(to);
+  else if (opts?.replace) window.location.replace(to);
   else window.location.assign(to);
   return Promise.resolve();
 }

@@ -180,7 +180,7 @@ Route middleware covers actions by **where they are defined**, never by which pa
 - An action anywhere else (`app/posts.server.ts`) runs root's `middleware` only.
 - `withMiddleware([requireAdmin], fn)` adds middleware to one action.
 
-Only `middleware` exports apply, not `beforeLoad` (that gate runs with the loaders). The chain runs after the CSRF gate and before the body is parsed; a returned or thrown `redirect()` makes the calling page navigate. Set `actionMiddleware: false` in the config to turn this off (until 0.9).
+Only `middleware` exports apply, not `beforeLoad` (that gate runs with the loaders). An action has no URL, so for actions the middleware sees **`params: {}`**: a guard in `routes/org/[orgId]/layout.tsx` that checks `params.orgId` can't rely on it there. Check the organization inside the action, from its arguments, or fail closed when the param is missing (`if (!params.orgId) return forbidden`). The middleware does get the same `context` that global middleware filled in. The chain runs after the CSRF gate and before the body is parsed; a returned or thrown `redirect()` makes the calling page navigate. Set `actionMiddleware: false` in the config to turn this off (until 0.9).
 
 Middleware decides _whether_ the call happens. Anything finer — "may this user delete _this_ post?" — still belongs in the body. An action receives only the arguments the caller passed; read the session from the current request with `getRequest()`:
 

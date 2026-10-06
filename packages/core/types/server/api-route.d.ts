@@ -67,7 +67,9 @@ export declare function route<TMethod extends HttpMethod, TPath extends string, 
  * Attempt to handle the request by matching against registered API routes.
  * Returns null if no route matches so the caller can fall through.
  */
-export declare function handleApiRequest(request: Request): Promise<Response | null>;
+export declare function handleApiRequest(request: Request, 
+/** The request's context from global middleware, shared with endpoint middleware. */
+context?: Record<string, unknown>): Promise<Response | null>;
 /**
  * Match a pathname against a route pattern; returns the `:param` values
  * (null-prototype object) or null when it doesn't match.

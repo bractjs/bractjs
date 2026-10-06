@@ -30,3 +30,5 @@ export interface MdxCompileResult {
  * `.mdx` and a `.tsx` route claim the same URL.
  */
 export declare function compileMdxRoutes(appDir: string): Promise<MdxCompileResult>;
+/** An MDX body exports its own `meta` (outside fenced code blocks). */
+export declare function exportsOwnMeta(body: string): boolean;

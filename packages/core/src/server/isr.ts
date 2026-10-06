@@ -9,6 +9,8 @@
 // request handler. A failed regeneration keeps the old copy. The cache is per
 // process: each instance of a scaled-out app regenerates on its own.
 
+import { DOCUMENT_SECURITY_HEADERS } from "./render.ts";
+
 /** Sent by prerendering: "tell me if this page is an ISR page". */
 export const PRERENDER_HEADER = "X-BractJS-Prerender";
 /** The handler's answer: the route's `config.revalidate`, in seconds. */
@@ -108,11 +110,17 @@ export function createIsr(options: IsrOptions): Isr {
           console.error(
             `[bractjs] ISR: regenerating ${path} answered ${html.status}; serving the previous copy`,
           );
+          await Promise.all([html.body?.cancel(), data.body?.cancel()]).catch(() => {});
+          // Back off for a full interval: retrying on every request would
+          // re-render the page continuously while it keeps failing.
+          entry.generatedAt = now();
           return false;
         }
         const [htmlText, dataText] = await Promise.all([
           html.text(),
-          data.status === 200 ? data.text() : Promise.resolve(entry.data),
+          data.status === 200
+            ? data.text()
+            : (data.body?.cancel() ?? Promise.resolve()).then(() => entry.data),
         ]);
         entry.html = htmlText;
         entry.data = dataText;
@@ -121,6 +129,7 @@ export function createIsr(options: IsrOptions): Isr {
         return true;
       } catch (err) {
         console.error(`[bractjs] ISR: regenerating ${path} failed; serving the previous copy:`, err);
+        entry.generatedAt = now(); // back off, as above
         return false;
       } finally {
         entry.inflight = undefined;
@@ -149,6 +158,7 @@ export function createIsr(options: IsrOptions): Isr {
       if (body === null) return null;
       return new Response(body, {
         headers: {
+          ...DOCUMENT_SECURITY_HEADERS,
           "Content-Type": kind === "html" ? "text/html; charset=utf-8" : "application/json",
           // Browsers revalidate; shared caches may hold it as long as the server does.
           "Cache-Control": `public, max-age=0, s-maxage=${entry.revalidate}, stale-while-revalidate=${entry.revalidate}`,

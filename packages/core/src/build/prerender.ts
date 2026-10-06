@@ -14,6 +14,8 @@ export interface PrerenderOptions {
   manifest?: ServerManifest;
   /** The app's `i18n`: each path is also prerendered in every non-default locale (`/fr/about`). */
   i18n?: I18nConfig;
+  /** The app's public origin (`BractJSConfig.origin`): the `request.url` origin pages render with. */
+  origin?: string;
 }
 
 export interface PrerenderResult {
@@ -64,6 +66,7 @@ export async function runPrerender(options: PrerenderOptions): Promise<Prerender
     ? [...new Set(listed.flatMap((p) => i18n.locales.map((l) => localizePath(p, l, i18n))))]
     : listed;
 
+  const origin = options.origin ? new URL(options.origin).origin : "http://prerender.local";
   const handler = buildFetchHandler({
     appDir: options.appDir ?? "./app",
     publicDir: options.publicDir,
@@ -77,7 +80,7 @@ export async function runPrerender(options: PrerenderOptions): Promise<Prerender
   for (const path of paths) {
     const out = prerenderPaths(path);
 
-    const htmlRes = await handler(new Request("http://prerender.local" + path, { headers: { [PRERENDER_HEADER]: "1" } }));
+    const htmlRes = await handler(new Request(origin + path, { headers: { [PRERENDER_HEADER]: "1" } }));
     if (htmlRes.status !== 200) {
       throw new Error(`[bractjs] prerender: GET ${path} returned ${htmlRes.status}`);
     }
@@ -88,7 +91,7 @@ export async function runPrerender(options: PrerenderOptions): Promise<Prerender
     written.push(htmlFile);
 
     const dataRes = await handler(
-      new Request("http://prerender.local/_data?path=" + encodeURIComponent(path)),
+      new Request(origin + "/_data?path=" + encodeURIComponent(path)),
     );
     if (dataRes.status === 200) {
       const dataFile = join(buildDir, "client", "_prerender", out.data);

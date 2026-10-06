@@ -50,7 +50,14 @@ export function cors(options: CorsOptions): MiddlewareFn {
     // Mutate headers in place rather than wrapping body. Wrapping with
     // `new Response(response.body, response)` makes the original Response
     // unusable to anyone holding a reference (single-shot stream).
-    for (const [k, v] of Object.entries(corsHeaders)) response.headers.set(k, v);
-    return response;
+    try {
+      for (const [k, v] of Object.entries(corsHeaders)) response.headers.set(k, v);
+      return response;
+    } catch {
+      // Immutable headers (Response.redirect(), a Response from fetch()): copy.
+      const copy = new Response(response.body, response);
+      for (const [k, v] of Object.entries(corsHeaders)) copy.headers.set(k, v);
+      return copy;
+    }
   };
 }

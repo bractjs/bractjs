@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { fileExists } from "../server/runtime.ts";
 import { getFromDisk, getFromMemory, setInMemory, setOnDisk } from "./cache.ts";
 import { transformImage } from "./optimizer.ts";
@@ -59,11 +59,16 @@ async function parseParams(
   const q = snapQuality(qRaw);
   const fmt = (sp.get("format") ?? FORMAT_DEFAULT) as ImageFormat;
   const fitRaw = sp.get("fit") ?? FIT_DEFAULT;
-  if (!MIME[fmt]) return null;
+  // Own keys only: "constructor" / "toString" are on every object's prototype.
+  if (!Object.hasOwn(MIME, fmt)) return null;
   if (!ALLOWED_FITS.has(fitRaw as ImageFit)) return null;
   const fit = fitRaw as ImageFit;
 
-  return { src, filePath, params: { w, h, q, format: fmt, fit } };
+  // SECURITY(medium): cache by the file, not the URL string. `/public/./a.png`,
+  // `/public//a.png`, … are the same file; keyed by `src` each would cost an
+  // ImageMagick run and leave another entry in the (never-evicted) disk cache.
+  const canonical = "/public/" + relative(root, filePath).split(sep).join("/");
+  return { src: canonical, filePath, params: { w, h, q, format: fmt, fit } };
 }
 
 /** Nearest step on {@link QUALITY_STEPS} (ties round up). */

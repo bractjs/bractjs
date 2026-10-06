@@ -8,6 +8,7 @@ All notable changes to BractJS are documented here.
 
 ### Added
 
+- **`origin` config:** the app's public origin. Prerendering and ISR regeneration render with it as `request.url`'s origin, so canonical links and `og:url` built from it are right. It is never taken from a request's Host header.
 - **MDX routes.** `app/routes/**/*.mdx` pages are compiled to sibling `.mdx.tsx` route modules by codegen. They get your layouts, client navigation and hydration, and work in every run mode, including the compiled binary and the Node build. Frontmatter `title` / `description` become meta tags, and `app/mdx-components.tsx` styles every MDX page. Needs `@mdx-js/mdx` in the app's devDependencies (an optional peer dependency); production servers don't need it. `examples/todo` has a `/guide` page written in MDX. See README §4.
 
 - **WebSockets: `websocket(path, { upgrade, open, message, close }, { middleware })`** on Bun and Deno servers. Endpoints register like `route()` (`:param` paths too), and handshakes go through global middleware, the endpoint's middleware and `upgrade()`, which authenticates and returns the per-connection `ws.data` (or a `Response` to refuse). A cross-origin handshake gets a 403, against cross-site WebSocket hijacking. A Node.js server refuses to start with endpoints defined. See README §12.
@@ -33,6 +34,25 @@ All notable changes to BractJS are documented here.
 
 ### Fixed
 
+- **Security: `<Link>` and `navigate()` never run a `javascript:` URL.** An off-origin `<Link to>` was navigated with `location.assign()`, bypassing React's own blocking of `javascript:` hrefs. `<Link to={userUrl}>` with `javascript:…` therefore ran script on click. Off-origin `<Link>` clicks are now left to the browser's native `<a>` handling. `navigate()`, `softNavigate()` and the server-action redirect fallback follow only http(s), `mailto:` and `tel:`.
+- **Security: `trustProxy` reads the address your proxy appended, not the client's.** `getClientAddress(…, { trustProxy: true })` (and `rateLimit({ trustProxy: true })`) took the first `X-Forwarded-For` entry. Behind any proxy that appends to that header, the client controls that entry, so per-IP rate limits could be bypassed by rotating the header. It now takes the last entry. With several proxies in a row (CDN → load balancer), pass their number: `trustProxy: 2`.
+- **Security: cookie sessions expire server-side.** `createCookieSession` / `createCookieSessionStorage` now sign the expiry (from `maxAge`) into the cookie and refuse an expired one, so a copied cookie stops working when its `maxAge` runs out, not only when the browser drops it. Cookies issued before this change keep working until they're next committed.
+- **Security: re-exporting a `"use server"` action doesn't drop its guard.** A function exported from several modules now runs every exporting module's middleware chain.
+- **Prerendered and ISR pages get the baseline security headers** (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) that SSR documents already had.
+- **Endpoint middleware sees global middleware's `context`.** Route middleware for `"use server"` actions and `/_stream`, `/api` endpoint middleware and WebSocket endpoint middleware each got an empty `context`, unlike pages. A guard reading `context.user` refused every call.
+- **`/_image` caches by file:** `/public/./a.png` and `/public//a.png` no longer bypass the cache (each cost an ImageMagick run and a disk-cache entry). `format=constructor` is rejected.
+- **ISR backs off after a failed regeneration** instead of re-rendering on every request.
+- **A `/_stream` middleware redirect navigates** instead of failing the stream with "/_stream 204".
+- **MDX:** one broken `.mdx` no longer blocks the others (all failures are reported together); unchanged files aren't recompiled forever after a touch; `export const meta` inside a code fence no longer hides the frontmatter meta; empty frontmatter works.
+- **Smaller fixes:**
+  - The sitemap escapes `changefreq` and ignores a non-numeric `priority`.
+  - `cors()` and `csp()` work on responses with immutable headers (`Response.redirect()`).
+  - The Node.js adapter stops waiting on a disconnected client and cancels HEAD bodies.
+  - `EDITOR="code --wait"` works for "Open in editor".
+  - A failed background revalidation no longer causes an unhandled rejection.
+- **`examples/cms`:**
+  - The pending-2FA cookie expires after 10 minutes server-side and is voided by a password change.
+  - `?limit=2.5` / `?page=1.5` no longer cause a 500.
 - **Dev: server actions survive a route edit.** After any route change, `bractjs dev` re-scanned `"use server"` modules with the app directory as a relative path. The cache-busted import (`app/actions.server.ts?v=1`) then failed to resolve, so every action 404'd until a restart.
 - **`<Link viewTransition>` animates.** It started the View Transition, but the router committed the new page only after the transition's callback had returned. The browser snapshotted the old page twice, so nothing animated. The router now commits the new page synchronously inside the callback.
 

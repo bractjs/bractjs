@@ -19,7 +19,7 @@ import {
 import { reviveDeferred } from "../deferred-revive.ts";
 import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
 import { assignExternal, toSamePath } from "../nav-utils.ts";
-import { triggerRevalidation } from "../revalidation.ts";
+import { softNavigate, triggerRevalidation } from "../revalidation.ts";
 import {
   normalizeSubmission,
   type SubmitOptions as RRSubmitOptions,
@@ -102,13 +102,23 @@ export interface UseFetcherOptions {
 
 // ── SSE async generator ────────────────────────────────────────────────────
 
-async function* sseStream<T>(actionId: string): AsyncGenerator<T> {
+/** @internal Exported for tests. */
+export async function* sseStream<T>(actionId: string): AsyncGenerator<T> {
   // Send X-BractJS-Action so the server's CSRF gate accepts this same-origin
   // GET. Cross-origin <script>/<img>/<link rel=prefetch> tags cannot set this
   // header, so the gate blocks CSRF invocations of server actions.
   const res = await fetch(`/_stream?id=${encodeURIComponent(actionId)}`, {
     headers: { "X-BractJS-Action": "1" },
   });
+  // A route-middleware redirect (e.g. to /login) arrives as the 204 envelope:
+  // follow it like an action redirect, and end the stream with no values.
+  const redirectTo = res.headers.get("X-BractJS-Redirect");
+  if (redirectTo !== null) {
+    const safe = toSamePath(redirectTo);
+    if (safe) void softNavigate(safe);
+    else assignExternal(redirectTo);
+    return;
+  }
   if (!res.ok || !res.body) {
     throw new Error(`[bractjs] /_stream ${res.status}`);
   }
