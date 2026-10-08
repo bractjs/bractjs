@@ -48,6 +48,7 @@ All notable changes to BractJS are documented here.
 - **`useFetchers()` ghost entries:** an unkeyed fetcher, `<Form navigate={false}>` or `useSubmit({ navigate: false })` whose component unmounted mid-request no longer reappears when the request finishes.
 - **`getClientAddress(request)` in actions and soft-navigation loaders** returned `undefined`: the request those receive is derived from the incoming one, and the address didn't carry over.
 - **`csp()` broke prerendered pages, ISR pages and the SPA shell:** they are rendered once, so their scripts carried no nonce (prerender, SPA shell) or one stale nonce shared by every visitor (ISR) while each response's header had a fresh one — under `'strict-dynamic'` they never hydrated. They are now rendered with a random, per-render placeholder nonce and served with each request's own. The placeholder is unguessable, so HTML injected into a cached page can't claim it (a fixed token would have handed injected scripts a valid nonce), and the render-for-cache signal is internal (never the `X-BractJS-Prerender` header), so a client can't obtain a placeholder page.
+- **Cookie sessions with non-Latin-1 values:** storing a string with a character outside Latin-1 (`’`, `ü`, an emoji) — a flash message, a display name — threw `InvalidCharacterError` and failed the response. The payload is now UTF-8 encoded; cookies issued before this keep reading.
 
 ---
 
