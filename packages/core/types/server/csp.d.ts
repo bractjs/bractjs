@@ -35,6 +35,36 @@ export interface CspOptions {
  */
 export declare function getCspNonce(context: Record<string, unknown>): string | undefined;
 /**
+ * Cached documents (prerendered pages, ISR pages, the SPA shell) outlive the
+ * request that rendered them, so they can't carry a real nonce. Each one is
+ * rendered with its own placeholder token instead, and the server swaps that
+ * token for every request's own nonce as it serves the document
+ * ({@link applyCspNonce}).
+ *
+ * SECURITY(high): the token is random PER RENDER. A fixed, public token would
+ * let any HTML injected into a cached page (a stored-XSS payload in a CMS
+ * post) write `nonce="<token>"` and be handed a valid nonce at serve time — a
+ * CSP bypass. Content stored before a render cannot know that render's token;
+ * learning it afterwards (the raw build file is public) is harmless, because
+ * the document it belongs to is already fixed. Plain `[A-Za-z0-9_]`, so HTML
+ * and JSON escaping leave it untouched.
+ */
+export declare function createNoncePlaceholder(): string;
+/** Prefix a cached document (written to disk) with the placeholder it was rendered with. */
+export declare function stampNoncePlaceholder(html: string, placeholder: string): string;
+/** A stamped document's body and placeholder; an unstamped file (an older build) has none. */
+export declare function readNonceStamp(text: string): {
+    body: string;
+    placeholder?: string;
+};
+/**
+ * Put this request's nonce into a document rendered with `placeholder`.
+ * Without a nonce (no `csp()` on this request) the placeholder attributes are
+ * removed instead, and any other occurrence (an app's own use of the nonce)
+ * becomes empty. Without a placeholder the text is returned as is.
+ */
+export declare function applyCspNonce(text: string, placeholder: string | undefined, nonce: string | undefined): string;
+/**
  * Opt-in nonce-based Content-Security-Policy middleware.
  *
  * Generates a fresh random nonce per request, stashes it on `ctx.context` so

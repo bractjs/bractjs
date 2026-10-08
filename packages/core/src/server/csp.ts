@@ -42,6 +42,58 @@ export function getCspNonce(context: Record<string, unknown>): string | undefine
   return typeof v === "string" ? v : undefined;
 }
 
+/**
+ * Cached documents (prerendered pages, ISR pages, the SPA shell) outlive the
+ * request that rendered them, so they can't carry a real nonce. Each one is
+ * rendered with its own placeholder token instead, and the server swaps that
+ * token for every request's own nonce as it serves the document
+ * ({@link applyCspNonce}).
+ *
+ * SECURITY(high): the token is random PER RENDER. A fixed, public token would
+ * let any HTML injected into a cached page (a stored-XSS payload in a CMS
+ * post) write `nonce="<token>"` and be handed a valid nonce at serve time — a
+ * CSP bypass. Content stored before a render cannot know that render's token;
+ * learning it afterwards (the raw build file is public) is harmless, because
+ * the document it belongs to is already fixed. Plain `[A-Za-z0-9_]`, so HTML
+ * and JSON escaping leave it untouched.
+ */
+export function createNoncePlaceholder(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return `__BRACTJS_NONCE_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}__`;
+}
+
+// A cached document written to disk starts with the token it was rendered
+// with, so the server knows which string to swap — never by pattern-matching
+// the body, where injected content could plant a look-alike.
+const STAMP_RE = /^<!--bractjs-nonce:(__BRACTJS_NONCE_[0-9a-f]{32}__)-->/;
+
+/** Prefix a cached document (written to disk) with the placeholder it was rendered with. */
+export function stampNoncePlaceholder(html: string, placeholder: string): string {
+  return `<!--bractjs-nonce:${placeholder}-->${html}`;
+}
+
+/** A stamped document's body and placeholder; an unstamped file (an older build) has none. */
+export function readNonceStamp(text: string): { body: string; placeholder?: string } {
+  const m = STAMP_RE.exec(text);
+  return m ? { body: text.slice(m[0].length), placeholder: m[1] } : { body: text };
+}
+
+/**
+ * Put this request's nonce into a document rendered with `placeholder`.
+ * Without a nonce (no `csp()` on this request) the placeholder attributes are
+ * removed instead, and any other occurrence (an app's own use of the nonce)
+ * becomes empty. Without a placeholder the text is returned as is.
+ */
+export function applyCspNonce(
+  text: string,
+  placeholder: string | undefined,
+  nonce: string | undefined,
+): string {
+  if (!placeholder || !text.includes(placeholder)) return text;
+  if (nonce) return text.replaceAll(placeholder, nonce);
+  return text.replaceAll(` nonce="${placeholder}"`, "").replaceAll(placeholder, "");
+}
+
 function generateNonce(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);

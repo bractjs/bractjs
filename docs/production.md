@@ -82,7 +82,7 @@ Change the path with `{ path: "/livez" }`. Register it first, so auth and rate l
 | `Referrer-Policy`              | `strict-origin-when-cross-origin`                               |
 | `X-Content-Type-Options`       | `nosniff`                                                       |
 
-Each option takes a string to change the value, or `false` to omit the header. HSTS counts a request as HTTPS when its URL is `https:` or `X-Forwarded-Proto` says `https`. Pair it with `csp()` for a Content-Security-Policy (README §14).
+Each option takes a string to change the value, or `false` to omit the header. HSTS counts a request as HTTPS when its URL is `https:` or `X-Forwarded-Proto` says `https`. Pair it with `csp()` for a Content-Security-Policy (README §14). With `csp()`, every HTML document carries a per-request nonce — prerendered, ISR and SPA-shell pages included — so documents are sent `private` rather than shared-cacheable; static assets and `/_data` keep their caching.
 
 ## Environment variables
 

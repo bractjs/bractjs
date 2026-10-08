@@ -7,8 +7,15 @@ import { type I18nConfig, splitLocale } from "../shared/i18n.ts";
 import { DenoAdapter } from "../adapters/deno.ts";
 import { NodeAdapter } from "../adapters/node.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
-import { privateWhenSettingCookies } from "./cache.ts";
-import { createIsr, ISR_REGEN_HEADER, registerIsr } from "./isr.ts";
+import { privateWhenNonced, privateWhenSettingCookies } from "./cache.ts";
+import { applyCspNonce, createNoncePlaceholder, CSP_NONCE_KEY, getCspNonce, readNonceStamp } from "./csp.ts";
+import {
+  cachedRenderPlaceholder,
+  createIsr,
+  ISR_REGEN_HEADER,
+  markCachedRender,
+  registerIsr,
+} from "./isr.ts";
 import { registerSiteSource } from "./sitemap.ts";
 import { withCompression } from "./compression.ts";
 import { isAllowedDevHost } from "./dev-host.ts";
@@ -276,20 +283,27 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   // SPA shell: production prefers the file `bractjs build` wrote; dev (or a
   // missing file) renders it on demand so root.tsx edits show up. Cached per
   // manifest in prod-without-file; never cached in dev.
-  let spaShellCache: { key: string; html: string } | null = null;
-  async function getSpaShell(manifest: ServerManifest): Promise<string> {
+  // The shell is rendered with a CSP nonce placeholder (each request's nonce
+  // is put in as it is served); `placeholder` is the token it was rendered with.
+  type SpaShell = { body: string; placeholder?: string };
+  let spaShellCache: { key: string; shell: SpaShell } | null = null;
+  async function renderShellWithPlaceholder(manifest: ServerManifest): Promise<SpaShell> {
+    const placeholder = createNoncePlaceholder();
+    return { body: await renderSpaShell(appDir, manifest, moduleRegistry, placeholder), placeholder };
+  }
+  async function getSpaShell(manifest: ServerManifest): Promise<SpaShell> {
     if (!isDevRuntime()) {
       const shellPath = join(buildDir, "client", "__spa.html");
       const embedded = embeddedFile(join(buildDir, "client"), "__spa.html");
-      if (embedded) return embedded.text();
-      if (await fileExists(shellPath)) return readText(shellPath);
+      if (embedded) return readNonceStamp(await embedded.text());
+      if (await fileExists(shellPath)) return readNonceStamp(await readText(shellPath));
       const key = manifest.clientEntry;
-      if (spaShellCache?.key === key) return spaShellCache.html;
-      const html = await renderSpaShell(appDir, manifest, moduleRegistry);
-      spaShellCache = { key, html };
-      return html;
+      if (spaShellCache?.key === key) return spaShellCache.shell;
+      const shell = await renderShellWithPlaceholder(manifest);
+      spaShellCache = { key, shell };
+      return shell;
     }
-    return renderSpaShell(appDir, manifest, moduleRegistry);
+    return renderShellWithPlaceholder(manifest);
   }
 
   /** Prerendered file for a clean (query-free, dot-free) document path — embedded in a binary, or on disk — or null. */
@@ -315,6 +329,14 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   async function dispatch(request: Request, context: Record<string, unknown>): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
+    // A render for a cache (prerender, ISR regeneration) carries its nonce
+    // PLACEHOLDER, never a real nonce: everything downstream that reads the
+    // nonce (the document render, app code via getCspNonce) gets the token the
+    // cached copy is served with. Runs inside the global pipeline, after csp().
+    const renderPlaceholder = cachedRenderPlaceholder(request);
+    if (renderPlaceholder) context[CSP_NONCE_KEY] = renderPlaceholder;
+    // Cached documents served below get THIS request's nonce (or none).
+    const nonce = getCspNonce(context);
 
     // Dev-only: on-demand module compilation for HMR module swap.
     // SECURITY(high): use isExplicitDev() (NODE_ENV === "development") rather
@@ -415,7 +437,8 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     const spaMatchPath = localeMatch ? localeMatch.pathname : pathname;
     if (!ssrEnabled && isDocGet && canonical && matchRoute(spaMatchPath, trie)) {
       const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
-      return new Response(await getSpaShell(manifest), {
+      const shell = await getSpaShell(manifest);
+      return new Response(applyCspNonce(shell.body, shell.placeholder, nonce), {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-cache",
@@ -431,12 +454,25 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
         const target = url.searchParams.get("path") ?? "/";
         const [targetPathname, targetSearch] = target.split("?");
         if (!targetSearch) {
-          const fromIsr = await isr.serve(targetPathname, "data");
+          const fromIsr = await isr.serve(targetPathname, "data", nonce);
           if (fromIsr) return fromIsr;
           const rel = targetPathname === "/" ? "_data.json" : targetPathname.slice(1) + "/_data.json";
           const f = await prerenderFile(rel);
           if (f) {
-            return new Response(f, {
+            // The page's placeholder is stamped on its document, not the JSON;
+            // only an app that put the nonce in loader data needs it here.
+            let text = await f.text();
+            if (text.includes("__BRACTJS_NONCE_")) {
+              const doc = await prerenderFile(
+                targetPathname === "/" ? "index.html" : targetPathname.slice(1) + "/index.html",
+              );
+              text = applyCspNonce(
+                text,
+                doc ? readNonceStamp(await doc.text()).placeholder : undefined,
+                nonce,
+              );
+            }
+            return new Response(text, {
               headers: {
                 ...DOCUMENT_SECURITY_HEADERS,
                 "Content-Type": "application/json",
@@ -446,12 +482,13 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
           }
         }
       } else if (!url.search) {
-        const fromIsr = await isr.serve(pathname, "html");
+        const fromIsr = await isr.serve(pathname, "html", nonce);
         if (fromIsr) return fromIsr;
         const rel = pathname === "/" ? "index.html" : pathname.slice(1) + "/index.html";
         const f = await prerenderFile(rel);
         if (f) {
-          return new Response(f, {
+          const { body, placeholder } = readNonceStamp(await f.text());
+          return new Response(applyCspNonce(body, placeholder, nonce), {
             headers: {
               ...DOCUMENT_SECURITY_HEADERS,
               "Content-Type": "text/html; charset=utf-8",
@@ -484,11 +521,19 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     load: async (rel) => (await prerenderFile(rel))?.text() ?? null,
     render: async (path) => {
       const headers = { [ISR_REGEN_HEADER]: isrToken };
+      // Rendered for the cache, with a fresh, unguessable nonce placeholder
+      // (markCachedRender) the cached copy is served through.
+      const placeholder = createNoncePlaceholder();
       const [html, data] = await Promise.all([
-        handler(new Request(`${renderOrigin}${path}`, { headers })),
-        handler(new Request(`${renderOrigin}/_data?path=${encodeURIComponent(path)}`, { headers })),
+        handler(markCachedRender(new Request(`${renderOrigin}${path}`, { headers }), placeholder)),
+        handler(
+          markCachedRender(
+            new Request(`${renderOrigin}/_data?path=${encodeURIComponent(path)}`, { headers }),
+            placeholder,
+          ),
+        ),
       ]);
-      return { html, data };
+      return { html, data, placeholder };
     },
   });
   unregisterIsr?.();
@@ -524,7 +569,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
         ),
       );
       // After global middleware, so a cookie it sets is covered too.
-      return privateWhenSettingCookies(res, request);
+      return privateWhenNonced(privateWhenSettingCookies(res, request), ctx.context);
     } catch (err) {
       console.error("[bract] unhandled request error:", err);
       await fireOnError(onError, err, request);

@@ -10,6 +10,7 @@ All notable changes to BractJS are documented here.
 
 - `bractjs start` now **refuses to start** when `app/server.ts` fails to import (it used to warn and serve without that file's global middleware). Set `NODE_ENV=development` to keep the old warn-and-continue while debugging.
 - `/_data` redirects are delivered as `204 No Content` + `X-BractJS-Redirect` (the envelope `/_action` already used), never as a raw 3xx. Only the framework's own client reads `/_data`; the `@bractjs/bractjs/testing` `data()` helper now throws "redirected to …" for a gated route.
+- **With `csp()`, HTML documents are never shared-cacheable:** a nonced HTML response a shared cache could store (`public`, `s-maxage` or a plain `max-age=N` — prerendered and ISR pages, or your own `headers()`) is sent as `private, max-age=0, must-revalidate`, and `CDN-Cache-Control` / `Surrogate-Control` are dropped, so a CDN can't hand one visitor's nonce to everyone. Use a hash- or host-based policy if you need edge-cached documents.
 - **Route params are percent-decoded**, as in React Router: `/posts/a%20b` gives `params.id === "a b"`, so `generatePath()` / `buildPath()` round-trip. A malformed escape is left as written. Remove any `decodeURIComponent(params.x)` of your own, or it will decode twice. **A decoded value can now contain `/`, `..`, `?` or a NUL** (`/files/..%2Fsecret` gives `"../secret"`): validate a param before using it in a filesystem path. The generated `routes[...]` builders now encode their params, like `buildPath()`. (Typed `/api` and WebSocket `:param` values stay raw, as before.)
 
 ### Added
@@ -44,6 +45,7 @@ All notable changes to BractJS are documented here.
 - **Dev server:** file-change bursts are handled together (a save touching `x.server.ts` and a route in the same instant no longer loses the restart), rebuilds never overlap, and the route manifest is written atomically, so a request during a rebuild can't read a half-written file. Route edits hot-swap the module again — the swap message pointed at a chunk URL that didn't exist, so every edit fell back to a full reload.
 - **`useFetchers()` ghost entries:** an unkeyed fetcher, `<Form navigate={false}>` or `useSubmit({ navigate: false })` whose component unmounted mid-request no longer reappears when the request finishes.
 - **`getClientAddress(request)` in actions and soft-navigation loaders** returned `undefined`: the request those receive is derived from the incoming one, and the address didn't carry over.
+- **`csp()` broke prerendered pages, ISR pages and the SPA shell:** they are rendered once, so their scripts carried no nonce (prerender, SPA shell) or one stale nonce shared by every visitor (ISR) while each response's header had a fresh one — under `'strict-dynamic'` they never hydrated. They are now rendered with a random, per-render placeholder nonce and served with each request's own. The placeholder is unguessable, so HTML injected into a cached page can't claim it (a fixed token would have handed injected scripts a valid nonce), and the render-for-cache signal is internal (never the `X-BractJS-Prerender` header), so a client can't obtain a placeholder page.
 
 ---
 
