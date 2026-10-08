@@ -62,6 +62,12 @@ export function updateRole(
   id: string,
   input: { name: string; description: string },
 ): { ok: boolean; reason?: string } {
+  // The system role is found by name ("Administrator") — at boot, where it is
+  // re-granted every permission, and by the last-admin guards. Renaming it would
+  // let a newly created role take that name (and those permissions).
+  const current = getRole(id);
+  if (current?.isSystem && current.name !== input.name)
+    return { ok: false, reason: "The Administrator role can't be renamed." };
   const clash = db.query<{ id: string }, [string]>("SELECT id FROM roles WHERE name = ?").get(input.name);
   if (clash && clash.id !== id) return { ok: false, reason: "A role with that name exists." };
   db.run("UPDATE roles SET name = ?, description = ? WHERE id = ?", [input.name, input.description, id]);

@@ -1,15 +1,21 @@
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
 import { Form, HttpError, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
-import { loginCookie, requirePermission } from "../../../auth.server.ts";
+import { requirePermission } from "../../../auth.server.ts";
+import {
+  addedIds,
+  canGrantGroup,
+  canGrantRole,
+  canManageUser,
+  leavesNoAdministrator,
+  sameIds,
+} from "../../../authz.server.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { type FormState, fromValidationError } from "../../../form.ts";
 import {
-  directRoleMemberCount,
   type Group,
   listGroups,
   listRoles,
   type Role,
-  roleByName,
   setUserGroups,
   setUserRoles,
   userGroupIds,
@@ -42,21 +48,21 @@ export async function loader({ request, params }: LoaderArgs): Promise<Data> {
   };
 }
 
-// Never let the last directly-assigned Administrator be removed or deleted.
-function lastAdminBlocks(userId: string, keepsAdmin: boolean): boolean {
-  const admin = roleByName("Administrator");
-  if (!admin) return false;
-  return userRoleIds(userId).includes(admin.id) && !keepsAdmin && directRoleMemberCount(admin.id) <= 1;
-}
-
 export async function action({ request, params, formData }: ActionArgs): Promise<FormState | Response> {
   const me = await requirePermission(request, "users.manage");
   const user = getUserById(params.id);
   if (!user) throw new HttpError(404, "User not found.");
+  const isSelf = me.id === user.id;
+  // A limited admin can't edit or delete someone with access they lack (an
+  // Administrator's email is where their sign-in codes go).
+  if (!canManageUser(me, user.id)) {
+    return flashFail({ error: "You can’t change a user who has access you don’t have." });
+  }
 
   if (String(formData.get("intent")) === "delete") {
-    if (me.id === user.id) return flashFail({ error: "You can’t delete your own account while signed in." });
-    if (lastAdminBlocks(user.id, false)) return flashFail({ error: "Can’t delete the last administrator." });
+    if (isSelf) return flashFail({ error: "You can’t delete your own account while signed in." });
+    if (leavesNoAdministrator({ kind: "deleteUser", userId: user.id }))
+      return flashFail({ error: "Can’t delete the last administrator." });
     const res = deleteUser(params.id);
     if (!res.ok) return flashFail({ error: res.reason });
     return flashRedirect("/admin/users", "User deleted");
@@ -68,23 +74,40 @@ export async function action({ request, params, formData }: ActionArgs): Promise
   } catch (err) {
     return flashFail(await fromValidationError(err));
   }
-  const roleIds = formData.getAll("roles").map(String);
-  const admin = roleByName("Administrator");
-  if (admin && lastAdminBlocks(user.id, roleIds.includes(admin.id))) {
+  const currentRoles = userRoleIds(user.id);
+  const currentGroups = userGroupIds(user.id);
+  // Your own form doesn't send roles/groups (they're shown read-only): absent
+  // means unchanged there. For anyone else, absent means none ticked.
+  const roleIds = isSelf && !formData.has("roles") ? currentRoles : formData.getAll("roles").map(String);
+  const groupIds = isSelf && !formData.has("groups") ? currentGroups : formData.getAll("groups").map(String);
+
+  if (isSelf) {
+    const changed =
+      !sameIds(roleIds, currentRoles) ||
+      !sameIds(groupIds, currentGroups) ||
+      data.email !== (user.email ?? "").toLowerCase() ||
+      data.password.length > 0;
+    if (changed) {
+      return flashFail({
+        error: "You can’t change your own roles, groups, email or password here — ask another administrator.",
+      });
+    }
+  }
+  // Subset rule: grant only roles/groups whose permissions you hold yourself.
+  const grantable =
+    addedIds(roleIds, currentRoles).every((r) => canGrantRole(me, r)) &&
+    addedIds(groupIds, currentGroups).every((g) => canGrantGroup(me, g));
+  if (!grantable) {
+    return flashFail({ error: "You can only grant roles and groups whose permissions you hold yourself." });
+  }
+  if (leavesNoAdministrator({ kind: "user", userId: user.id, roleIds, groupIds })) {
     return flashFail({ error: "At least one user must keep the Administrator role." });
   }
   const res = await updateUser(params.id, data);
   if (!res.ok) return flashFail({ error: res.reason });
   setUserRoles(user.id, roleIds);
-  setUserGroups(user.id, formData.getAll("groups").map(String));
-  const response = await flashRedirect("/admin/users", "User saved");
-  // Changing a password bumps the user's session epoch, revoking their existing
-  // cookies. If that user is ME, re-issue my cookie so I stay signed in (my
-  // OTHER sessions remain revoked); for anyone else, leave them logged out.
-  if (me.id === user.id && data.password.length > 0) {
-    response.headers.append("Set-Cookie", await loginCookie(me));
-  }
-  return response;
+  setUserGroups(user.id, groupIds);
+  return flashRedirect("/admin/users", "User saved");
 }
 
 export function ErrorBoundary({ error }: { error: unknown }) {
@@ -124,8 +147,21 @@ export default function EditUser() {
             <input name="displayName" defaultValue={user.displayName} required className={input} />
           </Field>
           {fe.displayName ? <ErrorNote>{fe.displayName[0]}</ErrorNote> : null}
+          {isSelf ? (
+            <p style={{ margin: 0, fontSize: ".85rem", color: "var(--admin-muted)" }}>
+              This is your account: your email, roles, groups and password can only be changed by another
+              administrator.
+            </p>
+          ) : null}
           <Field label="Email" hint="The 2FA sign-in code is sent here.">
-            <input name="email" type="email" defaultValue={user.email ?? ""} required className={input} />
+            <input
+              name="email"
+              type="email"
+              defaultValue={user.email ?? ""}
+              required
+              readOnly={isSelf}
+              className={isSelf ? `${input} bg-slate-100 text-slate-500` : input}
+            />
           </Field>
           {fe.email ? <ErrorNote>{fe.email[0]}</ErrorNote> : null}
           <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr 1fr" }}>
@@ -146,6 +182,7 @@ export default function EditUser() {
                       name="roles"
                       value={r.id}
                       defaultChecked={roleIds.includes(r.id)}
+                      disabled={isSelf}
                     />{" "}
                     {r.name}
                   </label>
@@ -172,6 +209,7 @@ export default function EditUser() {
                         name="groups"
                         value={g.id}
                         defaultChecked={groupIds.includes(g.id)}
+                        disabled={isSelf}
                       />{" "}
                       {g.name}
                     </label>
@@ -180,9 +218,11 @@ export default function EditUser() {
               </div>
             </fieldset>
           </div>
-          <Field label="New password" hint="Leave blank to keep the current password.">
-            <input name="password" type="password" autoComplete="new-password" className={input} />
-          </Field>
+          {isSelf ? null : (
+            <Field label="New password" hint="Leave blank to keep the current password.">
+              <input name="password" type="password" autoComplete="new-password" className={input} />
+            </Field>
+          )}
           {fe.password ? <ErrorNote>{fe.password[0]}</ErrorNote> : null}
           {state?.error ? <ErrorNote>{state.error}</ErrorNote> : null}
           <div>

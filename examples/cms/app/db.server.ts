@@ -457,15 +457,28 @@ await seed();
     for (const p of EDITOR_PERMISSIONS)
       db.run("INSERT OR IGNORE INTO role_permissions (roleId, permission) VALUES (?,?)", [editorRoleId, p]);
 
-  const orphans = db
-    .query<{ id: string; role: string }, []>(
-      "SELECT u.id, u.role FROM users u WHERE NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.userId = u.id)",
-    )
-    .all();
+  // Back-fill from the legacy `users.role` column ONCE — for a pre-RBAC
+  // database, or a fresh one whose seeded admin has no assignment yet (both:
+  // no role assignments at all) — then never again, recorded in SQLite's
+  // `user_version`. Re-running it promoted any later user without roles to
+  // Administrator on the next restart, and a database whose access is all
+  // granted through groups (no direct assignments) would re-run it too.
+  const BACKFILLED = 1;
+  const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
+  const hasAssignments = !!db.query("SELECT 1 FROM user_roles LIMIT 1").get();
+  const orphans =
+    version >= BACKFILLED || hasAssignments
+      ? []
+      : db
+          .query<{ id: string; role: string }, []>(
+            "SELECT u.id, u.role FROM users u WHERE NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.userId = u.id)",
+          )
+          .all();
   for (const u of orphans) {
     db.run("INSERT OR IGNORE INTO user_roles (userId, roleId) VALUES (?,?)", [
       u.id,
       u.role === "editor" ? editorRoleId : adminRoleId,
     ]);
   }
+  if (version < BACKFILLED) db.run(`PRAGMA user_version = ${BACKFILLED}`);
 }

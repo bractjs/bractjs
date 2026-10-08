@@ -1,6 +1,7 @@
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
 import { Form, HttpError, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
+import { canEditPermissions } from "../../../authz.server.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { type FormState, fromValidationError } from "../../../form.ts";
 import {
@@ -24,9 +25,18 @@ export async function loader({ request, params }: LoaderArgs): Promise<Data> {
 }
 
 export async function action({ request, params, formData }: ActionArgs): Promise<FormState | Response> {
-  await requirePermission(request, "roles.manage");
+  const me = await requirePermission(request, "roles.manage");
   const role = getRole(params.id);
   if (!role) throw new HttpError(404, "Role not found.");
+  // Subset rule: a role's permissions — now and after the save — must all be
+  // ones you hold (no adding `users.manage` to a role you belong to).
+  const permissions = formData.getAll("permissions").map(String);
+  if (
+    !role.isSystem &&
+    (!canEditPermissions(me, rolePermissions(role.id)) || !canEditPermissions(me, permissions))
+  ) {
+    return flashFail({ error: "You can only grant permissions you hold yourself." });
+  }
   let data: NamedInput;
   try {
     data = await validate<NamedInput>(RoleSchema, formData);
@@ -35,7 +45,7 @@ export async function action({ request, params, formData }: ActionArgs): Promise
   }
   const res = updateRole(role.id, data);
   if (!res.ok) return flashFail({ error: res.reason });
-  if (!role.isSystem) setRolePermissions(role.id, formData.getAll("permissions").map(String));
+  if (!role.isSystem) setRolePermissions(role.id, permissions);
   return flashRedirect("/admin/roles", "Role saved");
 }
 

@@ -325,7 +325,9 @@ export const UserCreateSchema: SchemaLike<UserInput> = {
     const username = trimmed(o, "username");
     const displayName = trimmed(o, "displayName") || username;
     const email = trimmed(o, "email").toLowerCase();
-    const role = str(o, "role") === "editor" ? "editor" : "admin";
+    // Legacy column (pre-RBAC). Never default to "admin": a user created without
+    // an explicit admin role must not become one (see the RBAC bootstrap).
+    const role = str(o, "role") === "admin" ? "admin" : "editor";
     const password = str(o, "password");
     if (!username) issues.push({ path: ["username"], message: "Username is required." });
     if (username.length > 64) issues.push({ path: ["username"], message: "Username is too long." });

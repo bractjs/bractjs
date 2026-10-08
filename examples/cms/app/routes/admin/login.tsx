@@ -1,5 +1,13 @@
-import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
-import { Form, redirect, useActionData, useLoaderData, useNavigation, validate } from "@bractjs/bractjs";
+import type { ActionArgs, DataWithResponseInit, LoaderArgs } from "@bractjs/bractjs";
+import {
+  data,
+  Form,
+  redirect,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  validate,
+} from "@bractjs/bractjs";
 import { LockKeyhole, LogIn } from "lucide-react";
 import {
   authenticatePassword,
@@ -13,7 +21,7 @@ import { AuthShell } from "../../components/AuthShell.tsx";
 import { OAuthButtons } from "../../components/OAuthButtons.tsx";
 import { issueLoginCode } from "../../mfa.server.ts";
 import { configuredProviders } from "../../oauth.server.ts";
-import { clientIp } from "../../ratelimit.server.ts";
+import { clientIp, lockoutIp } from "../../ratelimit.server.ts";
 import { type LoginInput, LoginSchema } from "../../validation.ts";
 
 const OAUTH_ERRORS: Record<string, string> = {
@@ -41,7 +49,10 @@ export async function loader({ request }: LoaderArgs): Promise<LoaderData | Resp
 
 type ActionData = { error?: string };
 
-export async function action({ request, formData }: ActionArgs): Promise<ActionData | Response> {
+export async function action({
+  request,
+  formData,
+}: ActionArgs): Promise<ActionData | DataWithResponseInit<ActionData> | Response> {
   let creds: LoginInput;
   try {
     creds = await validate<LoginInput>(LoginSchema, formData);
@@ -49,16 +60,23 @@ export async function action({ request, formData }: ActionArgs): Promise<ActionD
     return { error: "Enter your username and password." };
   }
   // Throttle the password factor itself (the MFA limiters only apply after a
-  // correct password). Keyed by username so it can't be sidestepped by IP churn.
+  // correct password). The per-user lock is keyed by username + client, so one
+  // client's junk attempts can't lock the real user out from elsewhere; a
+  // per-username ceiling still bounds attempts spread over many addresses.
   const ip = clientIp(request);
-  if (!(await checkLoginRate(creds.username, ip)).ok) {
-    return { error: "Too many sign-in attempts. Please wait a few minutes and try again." };
+  const client = lockoutIp(request);
+  const rate = await checkLoginRate(creds.username, ip, client);
+  if (!rate.ok) {
+    return data(
+      { error: "Too many sign-in attempts. Please wait a few minutes and try again." },
+      { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil(rate.retryAfterMs / 1000))) } },
+    );
   }
   const user = await authenticatePassword(creds.username, creds.password);
   // Same message + same work whether the username or the password was wrong, so
   // the form can't be used to enumerate valid usernames.
   if (!user) return { error: "Invalid username or password." };
-  await clearLoginRate(creds.username); // legit sign-in — reset the counter
+  await clearLoginRate(creds.username, client); // legit sign-in — reset this client's counter
   const issued = await issueLoginCode(user, ip);
   if (!issued.ok) return { error: issued.reason };
   // Factor 1 passed: hold the user id in the signed pending cookie and move to

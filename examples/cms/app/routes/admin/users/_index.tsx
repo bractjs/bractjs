@@ -1,14 +1,10 @@
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
 import { Form, Link, useActionData, useLoaderData } from "@bractjs/bractjs";
 import { type AdminUser, requirePermission } from "../../../auth.server.ts";
+import { canManageUser, leavesNoAdministrator } from "../../../authz.server.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import type { FormState } from "../../../form.ts";
-import {
-  directRoleMemberCount,
-  roleByName,
-  userRoleIds,
-  userRoleNames,
-} from "../../../models/rbac.server.ts";
+import { userRoleNames } from "../../../models/rbac.server.ts";
 import { deleteUser, listUsers, type User } from "../../../models/users.server.ts";
 import { Badge, dangerButton, ErrorNote, ghostButton, primaryButton } from "../../../ui.tsx";
 
@@ -25,8 +21,9 @@ export async function action({ request, formData }: ActionArgs): Promise<FormSta
   if (String(formData.get("intent")) === "delete") {
     const id = String(formData.get("id") ?? "");
     if (id === me.id) return flashFail({ error: "You can’t delete your own account while signed in." });
-    const admin = roleByName("Administrator");
-    if (admin && userRoleIds(id).includes(admin.id) && directRoleMemberCount(admin.id) <= 1)
+    if (!canManageUser(me, id))
+      return flashFail({ error: "You can’t delete a user who has access you don’t have." });
+    if (leavesNoAdministrator({ kind: "deleteUser", userId: id }))
       return flashFail({ error: "Can’t delete the last administrator." });
     const res = deleteUser(id);
     if (!res.ok) return flashFail({ error: res.reason });
