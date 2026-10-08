@@ -285,62 +285,70 @@ async function route(
       // returned promise rejects *after* this try block, so the catch below never
       // runs isRedirect() and the redirect escapes to the top-level handler as a
       // 500 instead of being returned as a 302 for the soft-nav client.
-      return await runRoutePipeline(loaderRequest, match.params, chain, search, context, async (args) => {
-        const results = await runLoaders(chain, args, onError);
-        // A failed root loader leaves nothing to render client-side: answer with
-        // its status, and the router falls back to a document load, which
-        // renders the root error document. Layout and route failures ride along
-        // in their slots — <Outlet> renders the nearest ErrorBoundary.
-        const failure = firstLoaderFailure(results);
-        if (failure?.scope === "root") {
-          return json({ error: failure.error.message }, { status: routeErrorStatus(failure.error) });
-        }
-        // Merged meta must ride along: ClientRouter re-renders the document head
-        // from this payload on soft navigation, and the initial __BRACTJS_DATA__
-        // already carries the merged shape.
-        const headChain = withoutFailedHead(chain, failure);
-        const meta = mergeMeta(
-          resolveMeta(headChain, results, match.params, {
-            pathname: targetPathname,
-            search: targetUrl.search,
-            error: failure?.error,
-          }),
-        );
-        const links = resolveLinks(chain);
-        const matches = buildMatches(chain, results, match.params, targetPathname);
-        // defer() fields are awaited and inlined: JSON can't stream them, and a
-        // Deferred would otherwise serialize as an empty object.
-        const dataRes = json(
-          await settleDeferred(
-            {
-              root: results.root,
-              layouts: results.layouts,
-              route: results.route,
-              params: match.params,
-              meta,
-              links,
-              search,
-              matches,
-              requestId: getRequestId(),
-              locale: dataLocale?.locale,
-            },
-            streamTimeout,
-          ),
-        );
-        // Apply the route `headers()` chain so a soft navigation gets the same
-        // Cache-Control/ETag/Vary as the full document load (renderRoute applies
-        // them there). Content-Type stays application/json.
-        const dataHeaders = resolveHeaders(headChain, results, match.params, loaderRequest);
-        if (dataHeaders) {
-          dataHeaders.forEach((value, key) => {
-            if (key.toLowerCase() === "content-type") return;
-            dataRes.headers.set(key, value);
-          });
-        }
-        return dataRes;
-      });
+      // Envelope here, not in runRoutePipeline: it sees `loaderRequest` (the
+      // target URL), and a redirect *returned* by middleware/beforeLoad comes
+      // back as its Response rather than through the catch below.
+      return redirectEnvelope(
+        await runRoutePipeline(loaderRequest, match.params, chain, search, context, async (args) => {
+          const results = await runLoaders(chain, args, onError);
+          // A failed root loader leaves nothing to render client-side: answer with
+          // its status, and the router falls back to a document load, which
+          // renders the root error document. Layout and route failures ride along
+          // in their slots — <Outlet> renders the nearest ErrorBoundary.
+          const failure = firstLoaderFailure(results);
+          if (failure?.scope === "root") {
+            return json({ error: failure.error.message }, { status: routeErrorStatus(failure.error) });
+          }
+          // Merged meta must ride along: ClientRouter re-renders the document head
+          // from this payload on soft navigation, and the initial __BRACTJS_DATA__
+          // already carries the merged shape.
+          const headChain = withoutFailedHead(chain, failure);
+          const meta = mergeMeta(
+            resolveMeta(headChain, results, match.params, {
+              pathname: targetPathname,
+              search: targetUrl.search,
+              error: failure?.error,
+            }),
+          );
+          const links = resolveLinks(chain);
+          const matches = buildMatches(chain, results, match.params, targetPathname);
+          // defer() fields are awaited and inlined: JSON can't stream them, and a
+          // Deferred would otherwise serialize as an empty object.
+          const dataRes = json(
+            await settleDeferred(
+              {
+                root: results.root,
+                layouts: results.layouts,
+                route: results.route,
+                params: match.params,
+                meta,
+                links,
+                search,
+                matches,
+                requestId: getRequestId(),
+                locale: dataLocale?.locale,
+              },
+              streamTimeout,
+            ),
+          );
+          // Apply the route `headers()` chain so a soft navigation gets the same
+          // Cache-Control/ETag/Vary as the full document load (renderRoute applies
+          // them there). Content-Type stays application/json.
+          const dataHeaders = resolveHeaders(headChain, results, match.params, loaderRequest);
+          if (dataHeaders) {
+            dataHeaders.forEach((value, key) => {
+              const k = key.toLowerCase();
+              if (k === "content-type") return;
+              // Several Set-Cookie values must all survive (set() keeps only the last).
+              if (k === "set-cookie") dataRes.headers.append(key, value);
+              else dataRes.headers.set(key, value);
+            });
+          }
+          return dataRes;
+        }),
+      );
     } catch (err) {
-      if (isRedirect(err)) return sanitizeRedirect(err as Response, request.url);
+      if (isRedirect(err)) return redirectEnvelope(sanitizeRedirect(err as Response, request.url));
       // A non-redirect Response (e.g. the 400 thrown by search validation)
       // is the intended reply — pass it through verbatim.
       if (err instanceof Response) return err;
@@ -405,22 +413,23 @@ async function route(
     throw err;
   }
 
+  // SECURITY(medium): the CSRF gate runs before route middleware, the context
+  // factory and beforeLoad — a cross-site POST must not execute any of their
+  // side effects (or be answered by a beforeLoad redirect instead of the 403).
+  // /_action and /api already check first; this keeps route mutations in step.
+  if (MUTATING_METHODS.has(request.method) && !isAllowedMutation(request)) return csrfForbiddenResponse();
+
   // Middleware → context → args → beforeLoad run in runRoutePipeline (the
   // shared gate sequence with the /_data branch); everything below is the
   // document-specific work: actions, selective SSR, and the HTML render.
-  const response = await runRoutePipeline(
-    request,
-    match.params,
-    chain,
-    search,
-    context,
-    async (args, mwCtx) => {
+  let response: Response;
+  try {
+    response = await runRoutePipeline(request, match.params, chain, search, context, async (args, mwCtx) => {
       // ── Action (mutating methods) ─────────────────────────────────────────
       let actionData: unknown = null;
       // data(value, init) from the action: status/headers for the response.
       let actionInit: ResponseInit | null = null;
       if (MUTATING_METHODS.has(request.method)) {
-        if (!isAllowedMutation(request)) return csrfForbiddenResponse();
         // Reject up front if the client advertises an oversized body.
         const clRaw = request.headers.get("Content-Length");
         if (clRaw) {
@@ -647,8 +656,33 @@ async function route(
         document.headers.set(REVALIDATE_HEADER, String(revalidate));
       }
       return document;
-    },
-  );
+    });
+  } catch (err) {
+    // Parity with the /_data and /_action branches: a gate (route middleware,
+    // the context factory, beforeLoad) that *throws* `redirect()` or an
+    // HttpError must answer with that redirect / status on a full document
+    // load too — not fall through to the catch-all 500. Any other Response is
+    // the intended reply; everything else is a real failure for the outer handler.
+    if (isRedirect(err))
+      return envelopeActionRedirect(sanitizeRedirect(err as Response, request.url), request);
+    if (err instanceof Response) return err;
+    if (isHttpError(err)) {
+      return renderRootErrorDocument({
+        Boundary: pickBoundaryForFailure(undefined, [], 0, chain.root.ErrorBoundary),
+        Layout: chain.root.Layout,
+        error: err,
+        params: match.params,
+        pathname,
+        search: url.search,
+        manifest,
+        nonce: getCspNonce(context),
+        status: err.status,
+        locale,
+        i18n,
+      });
+    }
+    throw err;
+  }
   // With detect, remember the locale this page is in — a visitor who follows
   // a link to another locale keeps it instead of being redirected back.
   return i18n?.detect && locale && isDocumentRequest(request) ? withLocaleCookie(response, locale) : response;

@@ -88,6 +88,15 @@ function chunkPathFor(url: string, clientOutDir: string): string | null {
   return inside(clientOutDir, path) ? path : null;
 }
 
+/** Files a stack frame can legitimately point into: code and styles, not data. */
+const SOURCE_FILE_RE = /\.(?:[cm]?[jt]sx?|css|mdx?|html?)$/i;
+
+export function isSourceFile(path: string): boolean {
+  const name = basename(path);
+  if (name.startsWith(".env")) return false;
+  return SOURCE_FILE_RE.test(name);
+}
+
 export function framesForStack(stack: string, opts: OverlayEndpointOptions): OverlayFrame[] {
   const root = real(opts.root);
   const out: OverlayFrame[] = [];
@@ -108,6 +117,10 @@ export function framesForStack(stack: string, opts: OverlayEndpointOptions): Ove
     if (!source) continue;
     const abs = real(source);
     if (!inside(root, abs)) continue;
+    // SECURITY(medium): a stack is caller-supplied, and with `--host` the
+    // caller can be anyone on the network. Only source files are ever
+    // excerpted — never .env, keys, databases or other data under the root.
+    if (!isSourceFile(abs)) continue;
     let onDisk: string | undefined;
     try {
       onDisk = readFileSync(abs, "utf8");

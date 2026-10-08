@@ -162,10 +162,14 @@ export function redirectEnvelope(res: Response): Response {
 }
 
 export function json<T>(data: T, init?: ResponseInit): Response {
-  const body = JSON.stringify(data);
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
-  return new Response(body, { ...init, headers });
+  // A 204/205/304 cannot carry a body: Bun silently drops it, but Node and
+  // Deno throw from the Response constructor (→ 500). `data(null, { status: 204 })`
+  // from an action is the common way to get here.
+  const status = init?.status;
+  if (status === 204 || status === 205 || status === 304) return new Response(null, { ...init, headers });
+  return new Response(JSON.stringify(data), { ...init, headers });
 }
 
 export function error(message: string, status: number = 500): Response {

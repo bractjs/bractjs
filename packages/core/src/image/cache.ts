@@ -76,8 +76,12 @@ export async function setOnDisk(
   const key = await cacheKey(src, params);
   const jsonFinal = join(dir, `${key}.json`);
   const binFinal = join(dir, `${key}.bin`);
-  const jsonTmp = `${jsonFinal}.tmp`;
-  const binTmp = `${binFinal}.tmp`;
+  // Unique per writer: two concurrent misses for the same variant must not
+  // share a temp file (one would rename the other's half-written bytes into
+  // place, and its cleanup would unlink the file the other is still writing).
+  const tmpId = crypto.randomUUID();
+  const jsonTmp = `${jsonFinal}.${tmpId}.tmp`;
+  const binTmp = `${binFinal}.${tmpId}.tmp`;
   // Write both temp files, then atomically rename. Readers see either both
   // files present or neither — never a half-written pair.
   try {

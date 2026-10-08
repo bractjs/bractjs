@@ -6,7 +6,32 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+**Upgrading** — behavior changes to check:
+
+- `bractjs start` now **refuses to start** when `app/server.ts` fails to import (it used to warn and serve without that file's global middleware). Set `NODE_ENV=development` to keep the old warn-and-continue while debugging.
+- `/_data` redirects are delivered as `204 No Content` + `X-BractJS-Redirect` (the envelope `/_action` already used), never as a raw 3xx. Only the framework's own client reads `/_data`; the `@bractjs/bractjs/testing` `data()` helper now throws "redirected to …" for a gated route.
+
+### Fixed
+
+- **Security (critical): compiled binaries ran in development mode.** `bractjs compile` forced `NODE_ENV=development` into the `bun build --compile` environment (a workaround for a JSX transform issue) and Bun baked that literal into the executable, so `process.env.NODE_ENV` was `"development"` at runtime no matter what the deployment set. Every NODE_ENV-gated production guard — the framework's error-message redaction, and in apps things like secret-strength checks, `Secure` cookies and seed-account refusal — was off in deployed binaries. The compile step now pins `process.env.NODE_ENV` to `"production"` with `--define`; `compile-smoke.test.ts` boots the binary and asserts it.
+- **Security (dev): `POST /_bractjs/stack` only excerpts source files.** The dev overlay's stack-frame endpoint could be pointed at any file under the project root (`.env`, keys, a SQLite database) and would return lines around any requested line number — reachable from the network with `--host`. Only code/style files are read now, never `.env*`.
+- **Soft navigation to a route whose loader, middleware or `beforeLoad` redirects.** `/_data` answered a raw 302, which `fetch()` followed to the target _HTML document_; the router then failed to parse it as JSON, logged a SyntaxError, and left the old page on screen under the new URL (e.g. clicking an admin link after the session expired). Redirects are now enveloped and the router, revalidation, hydration, `fetcher.load()`, prefetch and the deprecated `reloadLoaders()` all follow them.
+- **A navigation that fails client-side no longer changes the URL.** A route chunk that 404s after a deploy, a network error or a throwing client hook used to leave the page unchanged while `pushState` moved the URL (and a `beforeLoad` redirect pushed the original target on top of the redirect). The router now returns `false` and hands the navigation to the browser as a document load.
+- **Out-of-order navigations.** A slow navigation resolving after a faster later one committed its data and location over the newer page; a revalidation or stale-while-revalidate refresh resolving after the user navigated away did the same. Navigations carry a sequence id and superseded results are dropped.
+- **Typed `/api` handlers that return a `Response`** (an OAuth start's 302 with its state cookie, a download) were serialized to `200 {}`; a handler returning nothing answered 500 ("not JSON serializable"); a thrown `HttpError` became a logged 500. Responses pass through, void answers `null`, `HttpError` maps to its status. The CMS example's Google/Microsoft sign-in works again.
+- **Document loads of a route whose middleware, `context` factory or `beforeLoad` throws** `redirect()` or an `HttpError` returned 500 (the soft-nav and action paths already handled both). They now answer the redirect, or render the root error document with the error's status.
+- **Several `Set-Cookie` headers collapsed to one.** The route `headers()` chain and the document/`/_data` header copy used `Headers.set`, so a layout's flash-clear cookie plus a route cookie (or two cookies from one `headers()`) kept only the last. Set-Cookie values now accumulate.
+- **Client and server route matching could disagree.** The client scorer let `[...slug]` match zero segments and ranked `[org]/[repo]/[branch]` above `docs/[...slug]` for `/docs/a/b`, so the wrong chunk hydrated against the server's data. The client now runs the server's trie walk; parity holds by construction.
+- **Static files and prerendered pages with percent-encoded names 404'd** (`/public/my%20file.png`, non-ASCII slugs): the request pathname is decoded before the lookup, and every traversal guard runs on the decoded path.
+- **`buildDir` was honoured only partially by `bractjs build`:** server/client outputs and `route-manifest.json` were always written to `build/`, so `bractjs start` with `buildDir: "dist"` found no manifest and answered 500. Chunk URLs keep the fixed `/build/client/` prefix the server maps onto `<buildDir>/client`.
+- **SPA mode + i18n:** `/fr/about` was SSR'd with its loaders instead of getting the static shell (the locale prefix wasn't stripped before the route match).
+- **`useSearchParams()` went stale** after `<Link to="?page=2">`, `navigate()` or a GET `<Form>` (it only listened for `popstate`) and returned empty params during SSR. It now derives from the router location.
+- **Prefetched routes with `clientLoader` / `clientMiddleware`:** a hover-prefetched `/_data` payload was committed straight from cache on the click, skipping both hooks (on the route and on its root/layouts). Prefetched entries are now marked as raw server data, and the navigation that consumes one runs the client chain over it exactly as a fetch would.
+- Route mutations: the CSRF check runs before route middleware, the `context` factory and `beforeLoad`, so a cross-site POST executes none of their side effects (parity with `/_action` and `/api`).
+- `json(value, { status: 204 })` (and `data(null, { status: 204 })` from an action) sends no body — Node and Deno reject a 204 with content, which surfaced as a 500 on `--target node`.
+- `/_image` disk cache: concurrent cold misses for the same variant shared one temp file (a truncated image could be renamed into place and served `immutable`). Temp names are unique per writer, and a failing disk cache is now logged once instead of silently re-running ImageMagick after every restart.
+- `examples/cms`: the rich-text sanitizer's regexes backtracked quadratically on an unclosed tag or a long attribute run — an editor could block the server for hours with one 5 MB body. Both scans are linear now.
+- `validate()` docs: it throws a `400 Response` (as it always did), not a `ValidationError` instance.
 
 ---
 

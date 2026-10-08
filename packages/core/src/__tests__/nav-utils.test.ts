@@ -66,6 +66,10 @@ describe("matchPatternForPath agrees with the server matcher", () => {
     "[[lang]]/pricing",
     "[[lang]]/posts/[id]",
     "[[lang]]/[[region]]/shop",
+    // Regression: the old scorer let [...slug] match zero segments and ranked
+    // three params above a static-prefixed catch-all.
+    "[page]",
+    "[org]/[repo]/[branch]",
   ];
   const manifest = {
     routes: Object.fromEntries(patterns.map((p) => [p, { chunk: `/${p}.js`, pattern: p }])),
@@ -90,6 +94,10 @@ describe("matchPatternForPath agrees with the server matcher", () => {
     "/en/shop",
     "/en/us/shop",
     "/nope/nope/nope/nope",
+    "/docs",
+    "/docs/a/b",
+    "/x",
+    "/a/b/c",
   ];
   for (const path of paths) {
     test(path, () => {

@@ -1,4 +1,4 @@
-import type { I18nConfig } from "../shared/i18n.ts";
+import { type I18nConfig } from "../shared/i18n.ts";
 import { type BractAdapter } from "./adapter.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { type OnErrorHook } from "./lifecycle.ts";

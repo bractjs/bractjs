@@ -1,6 +1,7 @@
-import { startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useContext, useMemo, useState } from "react";
 import type { SearchFor } from "../registry.ts";
 import { NavigationContext } from "../router.tsx";
+import { useLocation } from "./useLocation.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -76,25 +77,28 @@ export function useSearchParams<
 >(): SearchParamsResult<T>;
 export function useSearchParams(): SearchParamsResult<Record<string, string>> {
   const navCtx = useContext(NavigationContext);
+  // The router's location is the source of truth: it reflects the request URL
+  // during SSR (so hydration matches) and updates on EVERY navigation — a
+  // <Link to="?page=2">, navigate(), a GET <Form> — none of which fire
+  // `popstate`, which is all the old window.location-based state listened for.
+  const { search: locationSearch, key: locationKey } = useLocation();
 
-  function readCurrent(): URLSearchParams {
-    if (typeof window === "undefined") return new URLSearchParams();
-    return new URLSearchParams(window.location.search);
-  }
-
-  const [searchParams, setSearchParamsState] = useState<URLSearchParams>(readCurrent);
-
-  // Track whether we triggered the change ourselves to avoid double re-run.
-  const selfTriggerRef = useRef(false);
-
-  // Sync when the browser's history changes (back/forward, external pushState).
-  useEffect(() => {
-    function onPopState() {
-      setSearchParamsState(new URLSearchParams(window.location.search));
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  // The setter applies its value optimistically (the navigate() it triggers
+  // lands a render later). The override is tagged with the location KEY it was
+  // set from — every navigation mints a new key, so it drops out as soon as
+  // the router moves anywhere (even back to the same search string). Derived,
+  // not synced: no effect, no stale copy.
+  const [optimistic, setOptimistic] = useState<{ fromKey: string; params: URLSearchParams } | null>(null);
+  // Clear it once the router has moved (adjusting state during render), so a
+  // later Back onto the entry it was set from doesn't resurrect it.
+  if (optimistic && optimistic.fromKey !== locationKey) setOptimistic(null);
+  const searchParams = useMemo(
+    () =>
+      optimistic && optimistic.fromKey === locationKey
+        ? optimistic.params
+        : new URLSearchParams(locationSearch),
+    [optimistic, locationKey, locationSearch],
+  );
 
   const setSearchParams: SetSearchParams = useCallback(
     (updater, options) => {
@@ -108,8 +112,7 @@ export function useSearchParams(): SearchParamsResult<Record<string, string>> {
       // Update the browser URL now so reads during the transition see it.
       if (options?.replace) history.replaceState({}, "", newUrl);
       else history.pushState({}, "", newUrl);
-      selfTriggerRef.current = true;
-      startTransition(() => setSearchParamsState(next));
+      startTransition(() => setOptimistic({ fromKey: locationKey, params: next }));
 
       // Trigger a loader re-run via the NavigationContext navigate so the full
       // soft-nav fetch path is exercised (meta update, module swap, etc.).
@@ -122,7 +125,7 @@ export function useSearchParams(): SearchParamsResult<Record<string, string>> {
         });
       }
     },
-    [navCtx],
+    [navCtx, locationKey],
   );
 
   const getParam = useCallback(

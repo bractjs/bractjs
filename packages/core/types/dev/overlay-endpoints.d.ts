@@ -24,6 +24,7 @@ export interface OverlayFrame {
  * when it doesn't occur or is too generic to place (blank, a lone brace).
  */
 export declare function relocate(rewritten: string, original: string, line: number): number | null;
+export declare function isSourceFile(path: string): boolean;
 export declare function framesForStack(stack: string, opts: OverlayEndpointOptions): OverlayFrame[];
 export declare function handleStackRequest(request: Request, opts: OverlayEndpointOptions): Promise<Response>;
 /**

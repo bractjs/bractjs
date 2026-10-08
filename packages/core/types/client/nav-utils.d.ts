@@ -46,7 +46,16 @@ export declare function pathToString(to: string | Partial<PathObject>): string;
 export declare function resolveHref(to: string): string;
 /** Random short key identifying a history entry (scroll restoration identity). */
 export declare function createLocationKey(): string;
-/** Returns the highest-priority manifest pattern that matches pathname, or null. */
+/**
+ * The redirect target of a `/_data` (or action) response, or `null` when it
+ * is a normal payload. The server never answers a fetch()-driven endpoint with
+ * a raw 3xx — fetch would follow it opaquely to an HTML document — but with
+ * `204 No Content` + `X-BractJS-Redirect: <location>`. Callers must check this
+ * BEFORE `res.json()` (a 204 is `ok` and has no body) and route the target
+ * through `toSamePath`/`assignExternal`, never straight into the router.
+ */
+export declare function dataRedirectTarget(res: Response): string | null;
+/** Returns the manifest pattern the server would match for pathname, or null. */
 export declare function matchPatternForPath(pathname: string, manifest: ServerManifest): string | null;
 /** Called by the client entry with the payload's `i18n`. Not part of the public API. */
 export declare function setClientI18n(i18n: I18nConfig | null | undefined): void;

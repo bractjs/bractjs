@@ -110,6 +110,19 @@ export default function Index() {
 `,
   );
   await writeFile(join(APP, "routes", "index.module.css"), ".card { color: rebeccapurple; }\n");
+  // Bun inlines process.env.NODE_ENV at bundle time: this loader reports what
+  // the compiled code actually sees, and a throwing one proves the redaction
+  // gate (isExplicitDev) is off in the binary.
+  await writeFile(
+    join(APP, "routes", "mode.tsx"),
+    `export function loader() { return { mode: process.env.NODE_ENV ?? "unset" }; }\n` +
+      `export default function Mode() { return <p>mode</p>; }\n`,
+  );
+  await writeFile(
+    join(APP, "routes", "boom.tsx"),
+    `export function loader() { throw new Error("secret-internal-detail"); }\n` +
+      `export default function Boom() { return <p>boom</p>; }\n`,
+  );
 
   await writeFile(
     join(APP, "server.ts"),
@@ -305,6 +318,19 @@ describe.skipIf(!compileAvailable)("bun build --compile single-binary", () => {
     const html = await res.text();
     expect(html).toContain("__BRACTJS_DATA__");
     expect(html).toContain("compiled-hello");
+  });
+
+  test("compiled binary runs in production mode regardless of the compile env", async () => {
+    // Regression: `bractjs compile` forced NODE_ENV=development into the
+    // `bun build --compile` env and Bun baked that literal into the binary, so
+    // every NODE_ENV-gated production guard was off in deployed executables.
+    const data = (await (await fetch(`http://localhost:${PORT}/_data?path=/mode`)).json()) as {
+      route: { mode: string };
+    };
+    expect(data.route.mode).toBe("production");
+    // Loader errors must be redacted (isExplicitDev() false), not echoed.
+    const boom = await (await fetch(`http://localhost:${PORT}/boom`)).text();
+    expect(boom).not.toContain("secret-internal-detail");
   });
 
   test("compiled binary did not fall back to a runtime fs scan (registry mode)", async () => {

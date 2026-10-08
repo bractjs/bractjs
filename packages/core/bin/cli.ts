@@ -400,9 +400,20 @@ switch (command) {
     const lifecycle = await loadLifecycleModule(appDir);
     const entry = await loadServerEntry(appDir);
     if (entry.error) {
+      // SECURITY(medium): app/server.ts is where csp()/auth/rate-limit
+      // middleware is registered. Serving production WITHOUT it because the
+      // file failed to import is fail-open; refuse to start instead. Only an
+      // explicit NODE_ENV=development keeps the old warn-and-continue.
+      const detail = entry.error instanceof Error ? entry.error.message : String(entry.error);
+      if (process.env.NODE_ENV !== "development") {
+        console.error(
+          `[bractjs] app/server.ts failed to load — refusing to start without its global middleware:\n${detail}`,
+        );
+        process.exit(1);
+      }
       console.warn(
         "[bractjs] app/server.ts failed to load — global middleware registered there is INACTIVE:",
-        entry.error instanceof Error ? entry.error.message : entry.error,
+        detail,
       );
     }
     // --port > PORT > config `port` > 3000; --host > HOST > config `hostname` >
@@ -524,6 +535,15 @@ switch (command) {
         "--outfile",
         outFile,
         ...assets.flatMap((dir) => ["--asset", dir]),
+        // SECURITY(critical): Bun inlines `process.env.NODE_ENV` at bundle time,
+        // so whatever the compile step sees is baked into the binary and the
+        // runtime environment can never change it. Pin it to "production" (as
+        // `bractjs build` does) — otherwise the dev value forced below would
+        // ship, and every NODE_ENV-gated production guard in the app and the
+        // framework (secret strength, Secure cookies, error-message redaction)
+        // would be off in the deployed executable.
+        "--define",
+        'process.env.NODE_ENV="production"',
       ],
       {
         cwd: process.cwd(),
@@ -532,8 +552,9 @@ switch (command) {
           ...process.env,
           // Bun executable compile currently miscompiles React TSX under
           // NODE_ENV=production (emits jsxDEV calls against a runtime that
-          // doesn't provide jsxDEV). Force a safe compile-time env while still
-          // keeping Bract's client/server build phase in production mode.
+          // doesn't provide jsxDEV). Keep the compile-time env on development
+          // for the JSX transform only; the --define above decides what the
+          // compiled code reads from process.env.NODE_ENV.
           NODE_ENV: "development",
         },
       },

@@ -223,10 +223,45 @@ test("full-page GET of a loader that throws redirect returns the 3xx", async () 
   expect(res.headers.get("location")).toBe("/login");
 });
 
-test("/_data of a loader that throws redirect returns the 3xx (not 500)", async () => {
+test("/_data of a loader that throws redirect answers the 204 envelope (not a 3xx, not 500)", async () => {
+  // fetch() would follow a raw 3xx to the /login *document* — a 200 HTML body
+  // the client router cannot parse as JSON. The envelope lets it soft-navigate.
   const res = await fetch(`${BASE}/_data?path=/redirect-loader`, { redirect: "manual" });
+  expect(res.status).toBe(204);
+  expect(res.headers.get("X-BractJS-Redirect")).toBe("/login");
+  expect(res.headers.get("location")).toBeNull();
+});
+
+test("/_data of a route whose beforeLoad RETURNS redirect() answers the 204 envelope too", async () => {
+  const res = await fetch(`${BASE}/_data?path=/redirect-beforeload-return`, { redirect: "manual" });
+  expect(res.status).toBe(204);
+  expect(res.headers.get("X-BractJS-Redirect")).toBe("/login");
+  const doc = await fetch(`${BASE}/redirect-beforeload-return`, { redirect: "manual" });
+  expect(doc.status).toBe(302);
+  expect(doc.headers.get("location")).toBe("/login");
+});
+
+test("a client Form submit whose middleware throws redirect() gets the action envelope", async () => {
+  const res = await fetch(`${BASE}/redirect-beforeload-throw`, {
+    method: "POST",
+    headers: { "X-BractJS-Action": "1", Origin: BASE },
+    body: new FormData(),
+    redirect: "manual",
+  });
+  expect(res.status).toBe(204);
+  expect(res.headers.get("X-BractJS-Redirect")).toBe("/login");
+});
+
+test("a document load of a route whose beforeLoad throws redirect() gets the 3xx (not 500)", async () => {
+  const res = await fetch(`${BASE}/redirect-beforeload-throw`, { redirect: "manual" });
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("/login");
+});
+
+test("a document load of a route whose middleware throws HttpError renders the error document with its status", async () => {
+  const res = await fetch(`${BASE}/forbidden-middleware`);
+  expect(res.status).toBe(403);
+  expect(res.headers.get("content-type")).toContain("text/html");
 });
 
 // ── Route headers / useMatches / nested middleware (Phases 1, 2, 4) ──────────

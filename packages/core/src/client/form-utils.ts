@@ -9,7 +9,8 @@ export async function reloadLoaders(
   setLoaderData: (data: Record<string, unknown>) => void,
 ): Promise<void> {
   const res = await fetch(`/_data?path=${encodeURIComponent(pathname)}`);
-  if (!res.ok) return;
+  // A redirect arrives as 204 + X-BractJS-Redirect (no body): nothing to apply.
+  if (!res.ok || res.headers.has("X-BractJS-Redirect")) return;
   const data = (await res.json()) as Record<string, unknown>;
   setLoaderData(data);
 }

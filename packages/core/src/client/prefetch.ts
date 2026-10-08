@@ -1,7 +1,7 @@
 import type { ServerManifest } from "../server/render.ts";
 import { cacheKey, loaderCache } from "./cache.ts";
 import { reviveDeferred } from "./deferred-revive.ts";
-import { matchPatternForPath, parseTo } from "./nav-utils.ts";
+import { dataRedirectTarget, matchPatternForPath, parseTo } from "./nav-utils.ts";
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -84,13 +84,18 @@ async function doPrefetch(path: string, manifest: ServerManifest): Promise<void>
     const res = await fetch(`/_data?path=${encodeURIComponent(dataPath)}`, {
       priority: "low",
     } as RequestInit);
-    if (!res.ok) return;
+    // Never cache a redirect (204 envelope) — and never parse its empty body.
+    if (!res.ok || dataRedirectTarget(res) !== null) return;
     const data = reviveDeferred((await res.json()) as Record<string, unknown>);
+    // `raw`: this is the server payload only. The navigation that consumes it
+    // still runs root/layout/route clientMiddleware and clientLoader over it,
+    // exactly as a fetch would — a hover must not bypass a client-side gate.
     loaderCache.set(
       key,
       data,
       Math.max(routeConfig?.staleTime ?? 0, PREFETCH_STALE_TIME),
       Math.max(routeConfig?.gcTime ?? 0, PREFETCH_GC_TIME),
+      true,
     );
   } finally {
     activeDataPrefetches--;

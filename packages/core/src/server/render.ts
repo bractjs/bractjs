@@ -170,7 +170,9 @@ export async function renderRoute(options: RenderOptions): Promise<Response> {
     options.headers.forEach((value, key) => {
       const k = key.toLowerCase();
       if (k === "content-type" || k === "transfer-encoding") return;
-      headers.set(key, value);
+      // Every Set-Cookie the chain produced must survive; set() keeps one.
+      if (k === "set-cookie") headers.append(key, value);
+      else headers.set(key, value);
     });
   }
 

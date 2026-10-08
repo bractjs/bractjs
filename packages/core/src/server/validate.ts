@@ -85,12 +85,14 @@ export async function runSchema<T>(schema: Schema<T>, plain: Record<string, unkn
 /**
  * Validate `input` against a Zod-compatible or Valibot-compatible schema.
  *
- * - If the schema has `.safeParse()`: uses it to collect field errors and throws
- *   a typed `ValidationError` on failure (which the framework converts to a 400).
- * - If the schema only has `.parse()`: wraps it and re-throws the error as a
- *   `ValidationError` with a single `_` field containing the error message.
+ * - If the schema has `.safeParse()`: uses it to collect field errors and, on
+ *   failure, throws a `400 Response` whose JSON body is `{ errors: FieldErrors }`.
+ * - If the schema only has `.parse()`: wraps it and throws the same `400
+ *   Response` with a single `_` field containing the error message.
  *
- * Returns the parsed (coerced) data on success.
+ * It throws a `Response`, not a `ValidationError` instance — catch with
+ * `err instanceof Response` (or use `safeValidate()` to get the errors back
+ * as a value). Returns the parsed (coerced) data on success.
  */
 export async function validate<T>(schema: Schema<T>, input: FormData | Record<string, unknown>): Promise<T> {
   return runSchema(schema, toPlainObject(input));

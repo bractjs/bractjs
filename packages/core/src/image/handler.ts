@@ -90,6 +90,16 @@ function imageResponse(result: { data: ArrayBuffer; contentType: string }, cache
   });
 }
 
+// A disk cache that cannot be written (read-only FS, disk full, bad permissions)
+// is still served from memory, but silently re-running ImageMagick after every
+// restart is a cost the operator should know about. Say so once.
+let diskCacheWarned = false;
+function warnDiskCacheOnce(err: unknown): void {
+  if (diskCacheWarned) return;
+  diskCacheWarned = true;
+  console.warn("[bractjs] image disk cache write failed (further failures not logged):", err);
+}
+
 export async function handleImageRequest(
   request: Request,
   publicDir: string,
@@ -118,7 +128,7 @@ export async function handleImageRequest(
   try {
     const result = await transformImage(filePath, params);
     setInMemory(src, params, result).catch(() => {});
-    setOnDisk(cacheDir, src, params, result).catch(() => {});
+    setOnDisk(cacheDir, src, params, result).catch(warnDiskCacheOnce);
     return imageResponse(result, "MISS");
   } catch (err) {
     console.error("[bractjs] image optimization error:", err);

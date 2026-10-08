@@ -5,18 +5,20 @@ interface CacheEntry {
   timestamp: number;
   staleTime: number;
   gcTime: number;
+  /** A server payload the client hooks (clientMiddleware / clientLoader) have not run over yet. */
+  raw: boolean;
 }
 
 class LoaderCache {
   private store = new Map<string, CacheEntry>();
   private gcTimer: ReturnType<typeof setInterval> | null = null;
 
-  set(key: string, data: Record<string, unknown>, staleTime: number, gcTime: number): void {
-    this.store.set(key, { data, timestamp: Date.now(), staleTime, gcTime });
+  set(key: string, data: Record<string, unknown>, staleTime: number, gcTime: number, raw = false): void {
+    this.store.set(key, { data, timestamp: Date.now(), staleTime, gcTime, raw });
     this.ensureGc();
   }
 
-  get(key: string): { data: Record<string, unknown>; fresh: boolean } | null {
+  get(key: string): { data: Record<string, unknown>; fresh: boolean; raw: boolean } | null {
     const entry = this.store.get(key);
     if (!entry) return null;
     const age = Date.now() - entry.timestamp;
@@ -24,7 +26,7 @@ class LoaderCache {
       this.store.delete(key);
       return null;
     }
-    return { data: entry.data, fresh: age < entry.staleTime };
+    return { data: entry.data, fresh: age < entry.staleTime, raw: entry.raw };
   }
 
   delete(key: string): void {

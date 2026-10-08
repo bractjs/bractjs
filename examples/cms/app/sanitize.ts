@@ -46,7 +46,11 @@ function safeUrl(value: string): boolean {
  */
 export function sanitizeHtml(raw: string): string {
   let out = "";
-  const re = /<\/?([a-zA-Z0-9]+)((?:\s+[^<>]*?)?)\/?>/g;
+  // Linear in the input: `\s[^<>]*` is a single greedy run with nothing to
+  // backtrack into. The previous `(?:\s+[^<>]*?)?` overlapped (`\s+` vs a lazy
+  // `[^<>]*?`) and went quadratic on an unclosed tag — `<a` + a few MB of
+  // spaces blocked the event loop for hours (ReDoS from an authenticated editor).
+  const re = /<\/?([a-zA-Z0-9]+)(\s[^<>]*)?\/?>/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -72,15 +76,36 @@ export function sanitizeHtml(raw: string): string {
   return out;
 }
 
+// Sticky tokenizer: at each position either consume one attribute (name, with
+// an optional quoted value) or skip one character. Every step advances, so the
+// scan is linear — a scanning `/name\s*=\s*"…"/g` re-tried the name match from
+// every offset of a long unquoted run and went quadratic.
+const ATTR_TOKEN = /([a-zA-Z][a-zA-Z0-9-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'))?/y;
+const WS = /\s/;
+
 function parseAttrs(attrString: string, tag: string): string {
   const allowed = ALLOWED_ATTRS[tag];
   if (!allowed) return "";
   let result = "";
-  const re = /([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*("([^"]*)"|'([^']*)')/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(attrString)) !== null) {
+  let i = 0;
+  while (i < attrString.length) {
+    // Skip whitespace by hand (a leading `\s*` in the regex would re-scan a
+    // long run from every offset once the name after it fails to match).
+    if (WS.test(attrString[i])) {
+      i += 1;
+      continue;
+    }
+    ATTR_TOKEN.lastIndex = i;
+    const m = ATTR_TOKEN.exec(attrString);
+    if (!m) {
+      i += 1;
+      continue;
+    }
+    i = ATTR_TOKEN.lastIndex;
+    // An attribute without a quoted value is dropped (as before).
+    if (m[2] === undefined && m[3] === undefined) continue;
     const name = m[1].toLowerCase();
-    const value = m[3] ?? m[4] ?? "";
+    const value = m[2] ?? m[3] ?? "";
     if (!allowed.has(name)) continue;
     if (URL_ATTRS.has(name) && !safeUrl(value)) continue;
     result += ` ${name}="${escapeAttr(value)}"`;

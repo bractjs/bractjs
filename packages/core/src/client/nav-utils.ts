@@ -1,5 +1,7 @@
 import { type I18nConfig, splitLocale } from "../shared/i18n.ts";
 import type { ServerManifest } from "../server/render.ts";
+import { buildTrie, matchRoute, type TrieNode } from "../server/matcher.ts";
+import type { RouteFile, Segment } from "../server/scanner.ts";
 
 // ── Redirect normalization ─────────────────────────────────────────────────
 
@@ -104,78 +106,70 @@ export function createLocationKey(): string {
   }
 }
 
+// ── /_data redirect envelope ───────────────────────────────────────────────
+
+/**
+ * The redirect target of a `/_data` (or action) response, or `null` when it
+ * is a normal payload. The server never answers a fetch()-driven endpoint with
+ * a raw 3xx — fetch would follow it opaquely to an HTML document — but with
+ * `204 No Content` + `X-BractJS-Redirect: <location>`. Callers must check this
+ * BEFORE `res.json()` (a 204 is `ok` and has no body) and route the target
+ * through `toSamePath`/`assignExternal`, never straight into the router.
+ */
+export function dataRedirectTarget(res: Response): string | null {
+  return res.headers.get("X-BractJS-Redirect");
+}
+
 // ── Pattern Matching ───────────────────────────────────────────────────────
 
 /**
- * Tests whether a pathname matches a manifest route pattern.
- * Pattern segments: "static", "[param]", "[[optional]]", "[...catchAll]"
+ * The client picks a route for a pathname with the SAME trie walk the server
+ * uses (`server/matcher.ts` is pure: a type-only import of scanner.ts). A
+ * separately-maintained scorer drifted — it let `[...slug]` match zero segments
+ * and ranked `[org]/[repo]/[branch]` above `docs/[...slug]` for /docs/a/b — so
+ * the wrong chunk hydrated against the server's data. Parity by construction.
  */
-function patternMatches(pathname: string, pattern: string): boolean {
-  const pathSegs = pathname.replace(/^\//, "").split("/").filter(Boolean);
-  const patSegs = pattern === "" ? [] : pattern.split("/");
-  return segmentsMatch(pathSegs, 0, patSegs, 0);
+
+/** Manifest pattern syntax → scanner segments ("" is the index route). */
+function patternSegments(pattern: string): Segment[] {
+  if (pattern === "") return [];
+  return pattern.split("/").map((seg) => {
+    if (seg.startsWith("[...") && seg.endsWith("]")) return { catchAll: seg.slice(4, -1) };
+    if (seg.startsWith("[[") && seg.endsWith("]]")) return { optional: seg.slice(2, -2) };
+    if (seg.startsWith("[") && seg.endsWith("]")) return { param: seg.slice(1, -1) };
+    return seg;
+  });
 }
 
-function segmentsMatch(pathSegs: string[], p: number, patSegs: string[], i: number): boolean {
-  if (i === patSegs.length) return p === pathSegs.length;
-  const seg = patSegs[i];
-  if (seg.startsWith("[...") && seg.endsWith("]")) return true; // catch-all: rest matches
-  if (seg.startsWith("[[") && seg.endsWith("]]")) {
-    // optional: consume one segment, or skip it (mirrors the server trie)
-    return (
-      (p < pathSegs.length && segmentsMatch(pathSegs, p + 1, patSegs, i + 1)) ||
-      segmentsMatch(pathSegs, p, patSegs, i + 1)
-    );
-  }
-  if (p >= pathSegs.length) return false;
-  const isParam = seg.startsWith("[") && seg.endsWith("]");
-  if (!isParam && seg !== pathSegs[p]) return false; // static: must be exact
-  return segmentsMatch(pathSegs, p + 1, patSegs, i + 1);
-}
+// One trie per manifest, rebuilt when its route table changes (the dev server
+// swaps routes in place on add/remove, so key on the pattern list, not identity).
+const trieCache = new WeakMap<ServerManifest, { key: string; trie: TrieNode }>();
 
-/**
- * Specificity score for a matching pattern, used to pick the best match the
- * same way the server's trie does: static > dynamic > optional > catch-all.
- * Higher wins. Object key order is not reliable for priority, so we must
- * score, not first-match (otherwise `[...slug]` can shadow `_index` / static routes).
- */
-function patternScore(pattern: string): number {
-  if (pattern === "") return 1_000_000; // index route — most specific for "/"
-  let score = 0;
-  for (const seg of pattern.split("/")) {
-    score *= 10;
-    if (seg.startsWith("[...") && seg.endsWith("]"))
-      score += 1; // catch-all
-    else if (seg.startsWith("[[") && seg.endsWith("]]"))
-      score += 2; // optional
-    else if (seg.startsWith("[") && seg.endsWith("]"))
-      score += 3; // dynamic
-    else score += 4; // static
-  }
-  return score;
+function trieFor(manifest: ServerManifest): TrieNode {
+  const patterns = Object.keys(manifest.routes);
+  const key = patterns.join("\n");
+  const cached = trieCache.get(manifest);
+  if (cached && cached.key === key) return cached.trie;
+  const routes: RouteFile[] = patterns.map((p) => ({
+    filePath: manifest.routes[p]?.file ?? p,
+    urlPattern: p,
+    segments: patternSegments(p),
+  }));
+  const trie = buildTrie(routes);
+  trieCache.set(manifest, { key, trie });
+  return trie;
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────
 
-/** Returns the highest-priority manifest pattern that matches pathname, or null. */
+/** Returns the manifest pattern the server would match for pathname, or null. */
 export function matchPatternForPath(pathname: string, manifest: ServerManifest): string | null {
   // i18n: routes match the path without its locale prefix (as on the server).
   if (clientI18n) pathname = splitLocale(pathname, clientI18n).pathname;
   // Exact static match wins outright (most specific) — also a fast path.
   const normalized = pathname.replace(/^\//, "");
   if (normalized in manifest.routes) return normalized;
-
-  let best: string | null = null;
-  let bestScore = -1;
-  for (const pattern of Object.keys(manifest.routes)) {
-    if (!patternMatches(pathname, pattern)) continue;
-    const score = patternScore(pattern);
-    if (score > bestScore) {
-      best = pattern;
-      bestScore = score;
-    }
-  }
-  return best;
+  return matchRoute(pathname, trieFor(manifest))?.routeFile.urlPattern ?? null;
 }
 
 // The app's i18n config, from the bootstrap payload (set once by the client entry).
