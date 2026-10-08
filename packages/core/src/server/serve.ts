@@ -176,9 +176,18 @@ const DEFAULT_MANIFEST: ServerManifest = {
  * The manifest is written by rebuildClient() in src/dev/rebuilder.ts.
  */
 async function readDevManifest(buildDir: string): Promise<ServerManifest> {
-  const f = Bun.file(join(buildDir, "route-manifest.json"));
-  if (!(await f.exists())) return DEFAULT_MANIFEST;
-  const m = (await f.json()) as {
+  const path = join(buildDir, "route-manifest.json");
+  if (!(await fileExists(path))) return DEFAULT_MANIFEST;
+  // The rebuilder writes it atomically; a parse failure can still happen if
+  // something else rewrites it, so retry once before failing the request.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readText(path));
+  } catch {
+    await new Promise((r) => setTimeout(r, 50));
+    raw = JSON.parse(await readText(path));
+  }
+  const m = raw as {
     clientEntry?: string;
     rootChunk?: string;
     entryCss?: string[];

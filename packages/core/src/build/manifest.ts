@@ -1,3 +1,4 @@
+import { rename } from "node:fs/promises";
 import { join } from "node:path";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -79,7 +80,12 @@ export async function writeManifest(
   outDir: string,
 ): Promise<void> {
   const dest = join(outDir, "route-manifest.json");
-  await Bun.write(dest, JSON.stringify(manifest, null, 2));
+  // Write-then-rename: the dev server reads this file on every request, and an
+  // in-place write can be observed half-written (a JSON parse error → 500).
+  // rename() within one directory is atomic.
+  const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
+  await Bun.write(tmp, JSON.stringify(manifest, null, 2));
+  await rename(tmp, dest);
 }
 
 /**

@@ -103,6 +103,33 @@ describe("safeRun", () => {
 });
 
 describe("runLoaders", () => {
+  test("a RETURNED redirect rejects like a thrown one; outermost wins", async () => {
+    const to = (loc: string) => new Response(null, { status: 302, headers: { Location: loc } });
+    const chain: LayoutChain = {
+      root: { ...emptyModule, loader: async () => ({ root: true }) },
+      layouts: [{ ...emptyModule, loader: async () => to("/from-layout") }],
+      route: { ...emptyModule, loader: async () => to("/from-route") },
+    };
+    let caught: unknown;
+    try {
+      await runLoaders(chain, stubArgs);
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as Response).headers.get("Location")).toBe("/from-layout");
+  });
+
+  test("a returned non-redirect Response is still slot data", async () => {
+    const body = new Response("x", { status: 200 });
+    const chain: LayoutChain = {
+      root: emptyModule,
+      layouts: [],
+      route: { ...emptyModule, loader: async () => body },
+    };
+    const results = await runLoaders(chain, stubArgs);
+    expect(results.route).toBe(body);
+  });
+
   test("runs all loaders in parallel and returns results", async () => {
     const chain: LayoutChain = {
       root: { ...emptyModule, loader: async () => ({ root: true }) },

@@ -1,5 +1,6 @@
 import { compileMdxRoutes } from "./mdx.ts";
 import { join, resolve } from "node:path";
+import { resolveRootFile } from "../server/root-file.ts";
 import { layoutDirsFromFilePath, type RouteFile, scanRoutes } from "../server/scanner.ts";
 import { hasServerDirective, isActionModulePath } from "../shared/directives.ts";
 
@@ -101,13 +102,16 @@ export interface RouteRegistryInput {
   appDir: string;
   routes: RouteFile[];
   layoutRelPaths: string[]; // e.g. ["routes/blog/layout.tsx"]
-  hasRoot: boolean; // true if appDir/root.tsx exists
+  hasRoot: boolean; // true if appDir has a root module
+  /** Which root module the app has; `root.tsx` when only `hasRoot` is given. */
+  rootFile?: "root.tsx" | "root.ts";
   /** appDir/env.ts exists: imported first, so its defineEnv() validates at startup. */
   hasEnv?: boolean;
 }
 
 export function generateRouteRegistry(input: RouteRegistryInput): string {
   const { routes, layoutRelPaths, hasRoot } = input;
+  const rootFile = input.rootFile ?? (hasRoot ? "root.tsx" : undefined);
 
   // ── Build the import statements ──
   const imports: string[] = [];
@@ -117,11 +121,11 @@ export function generateRouteRegistry(input: RouteRegistryInput): string {
   // binary / Node build before any route module runs (see defineEnv).
   if (input.hasEnv) imports.push(`import "../env.ts";`);
 
-  if (hasRoot) {
-    assertSafeFilePath("root.tsx");
-    const ident = pathToIdent("mod", "root_tsx");
-    imports.push(`import * as ${ident} from "../root.tsx";`);
-    entries.push(`  ${JSON.stringify("root.tsx")}: ${ident},`);
+  if (rootFile) {
+    assertSafeFilePath(rootFile);
+    const ident = pathToIdent("mod", rootFile);
+    imports.push(`import * as ${ident} from ${JSON.stringify("../" + rootFile)};`);
+    entries.push(`  ${JSON.stringify(rootFile)}: ${ident},`);
   }
 
   for (const rel of layoutRelPaths) {
@@ -300,13 +304,19 @@ export async function writeModuleRegistries(appDir: string): Promise<CodegenResu
   await compileMdxRoutes(absAppDir); // .mdx routes → .mdx.tsx route modules
   const routes = await scanRoutes(absAppDir);
   const layoutRelPaths = await collectLayouts(absAppDir, routes);
-  const hasRoot =
-    (await Bun.file(resolve(join(absAppDir, "root.tsx"))).exists()) ||
-    (await Bun.file(resolve(join(absAppDir, "root.ts"))).exists());
+  const rootFile = (await resolveRootFile(absAppDir)) ?? undefined;
+  const hasRoot = rootFile !== undefined;
   const actionRelPaths = await collectActionFiles(absAppDir);
   const hasEnv = await Bun.file(resolve(join(absAppDir, "env.ts"))).exists();
 
-  const routesSrc = generateRouteRegistry({ appDir: absAppDir, routes, layoutRelPaths, hasRoot, hasEnv });
+  const routesSrc = generateRouteRegistry({
+    appDir: absAppDir,
+    routes,
+    layoutRelPaths,
+    hasRoot,
+    rootFile,
+    hasEnv,
+  });
   const actionsSrc = generateActionRegistry({ appDir: absAppDir, actionRelPaths });
 
   const outDir = resolve(join(absAppDir, "_generated"));

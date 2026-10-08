@@ -148,6 +148,9 @@ export async function* sseStream<T>(actionId: string): AsyncGenerator<T> {
       }
     }
   } finally {
+    // Cancel, not just release: when the consumer stops early (`break`, an
+    // unmount) this aborts the HTTP body, so the server stops the generator.
+    await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 }
@@ -306,10 +309,28 @@ export async function fetcherLoad(key: string, path: string): Promise<void> {
       });
       return json.route;
     });
-    if (data !== undefined) fetcherStore.update(key, { data });
+    if (data !== undefined) fetcherStore.patch(key, { data });
+  } catch (err) {
+    // A redirect thrown (or returned) by the route's clientMiddleware or
+    // clientLoader: follow it like a navigation would, load nothing.
+    if (!followThrownRedirect(err)) throw err;
   } finally {
-    fetcherStore.update(key, { state: "idle" });
+    fetcherStore.patch(key, { state: "idle" });
   }
+}
+
+/**
+ * Follow a `throw redirect(…)` from client code (a Response with a Location).
+ * Same-origin targets navigate; anything else goes through `assignExternal`,
+ * which refuses script URLs. Returns false when `err` is not a redirect.
+ */
+function followThrownRedirect(err: unknown): boolean {
+  const loc = err instanceof Response ? err.headers.get("Location") : null;
+  if (!loc) return false;
+  const safe = toSamePath(loc);
+  if (safe) window.location.assign(safe);
+  else assignExternal(loc);
+  return true;
 }
 
 /**
@@ -380,16 +401,14 @@ export async function fetcherSubmit(key: string, req: FetcherRequest): Promise<v
       );
     } catch (err) {
       // `throw redirect(...)` from clientMiddleware or a clientAction.
-      const loc = err instanceof Response ? err.headers.get("Location") : null;
-      if (!loc) throw err;
-      window.location.assign(toSamePath(loc) ?? loc);
+      if (!followThrownRedirect(err)) throw err;
       return;
     }
     if (data === REDIRECTED) return;
-    fetcherStore.update(key, { data });
+    fetcherStore.patch(key, { data });
     // Mutations invalidate loader data — re-run the active route's loaders
     // (gated by its shouldRevalidate) so the page reflects the change.
-    fetcherStore.update(key, { state: "loading" });
+    fetcherStore.patch(key, { state: "loading" });
     await triggerRevalidation({
       formMethod,
       actionStatus,
@@ -399,6 +418,6 @@ export async function fetcherSubmit(key: string, req: FetcherRequest): Promise<v
       defaultShouldRevalidate: req.defaultShouldRevalidate,
     });
   } finally {
-    fetcherStore.update(key, { state: "idle", formData: undefined });
+    fetcherStore.patch(key, { state: "idle", formData: undefined });
   }
 }

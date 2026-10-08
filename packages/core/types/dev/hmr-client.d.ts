@@ -7,8 +7,8 @@
  *   hmr:reload — full page reload (root/layout/non-route file changed)
  *
  * Module swap flow:
- *   1. Receive { type:"hmr:route", pattern, file }
- *   2. Fetch /_hmr/module?file=<file>&t=<now> — server compiles it fresh
+ *   1. Receive { type:"hmr:route", pattern, chunkUrl, file }
+ *   2. import(<chunkUrl>?t=<now>) — the route chunk the dev rebuild just wrote
  *   3. Call window.__BRACTJS_HMR_ACCEPT__(pattern, module)
  *   4. ClientRouter swaps currentModule → React re-renders <Outlet>
  */

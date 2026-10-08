@@ -12,6 +12,7 @@ import {
   applyClientLoaders,
   type ClientChain,
   createClientContext,
+  redirectOf,
   registerClientChainResolver,
   runClientMiddleware,
 } from "./client-data.ts";
@@ -112,6 +113,22 @@ export async function loadLayoutModules(
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
+
+/**
+ * A `clientLoader.hydrate` that threw or returned `redirect()` on first load:
+ * leave the page for the target (a document load, as the SPA hydration path
+ * does for a gated route) instead of rendering the Response as data. Returns
+ * whether it navigated.
+ */
+function followHydrationRedirect(value: unknown): boolean {
+  const res = redirectOf(value);
+  const loc = res?.headers.get("Location");
+  if (!loc) return false;
+  const safe = toSamePath(loc);
+  if (safe) window.location.assign(safe);
+  else assignExternal(loc);
+  return true;
+}
 
 export function ClientRouter({
   children,
@@ -668,10 +685,12 @@ export function ClientRouter({
           serverLoader: async () => serverSlice,
         });
         if (cancelled) return;
+        if (followHydrationRedirect(next)) return;
         startTransition(() => {
           setLoaderData((prev) => ({ ...prev, route: next }));
         });
       } catch (err) {
+        if (followHydrationRedirect(err)) return;
         console.error("[bractjs] clientLoader (hydrate) error:", err);
       }
     })();
@@ -703,11 +722,13 @@ export function ClientRouter({
               context: createClientContext(),
               serverLoader: async () => serverSlice,
             });
+            if (followHydrationRedirect(next)) return;
             startTransition(() => {
               setLoaderData((prev) => ({ ...prev, route: next }));
               setHydrationPending(false);
             });
           } catch (err) {
+            if (followHydrationRedirect(err)) return;
             console.error("[bractjs] clientLoader (hydrate) error:", err);
             startTransition(() => setHydrationPending(false));
           }
@@ -795,7 +816,7 @@ export function ClientRouter({
 
   // Module-level HMR: swap the current route module without a full reload.
   // The injected HMR client script calls window.__BRACTJS_HMR_ACCEPT__(pattern, mod)
-  // after importing the freshly-built chunk from /_hmr/module.
+  // after importing the route chunk the dev rebuild just wrote (its chunkUrl).
   // Dev gate: prod builds inject __BRACT_DEV__ = false; absence in browser also
   // counts as prod since we never reference `process` here.
   useEffect(() => {

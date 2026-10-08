@@ -3,7 +3,14 @@ import { type MiddlewareContext, type MiddlewareFn } from "./middleware.ts";
 export interface BractWebSocket<Data = unknown> {
     /** What `upgrade()` returned for this connection. */
     readonly data: Data;
-    send(message: string | ArrayBuffer | Uint8Array): void;
+    /**
+     * Send a message. `true` when the runtime accepted it (on Bun it may be
+     * queued under backpressure — see `bufferedAmount()`), `false` when it was
+     * dropped: the socket is closing or closed.
+     */
+    send(message: string | ArrayBuffer | Uint8Array): boolean;
+    /** Bytes queued but not yet sent: throttle producers while this grows. */
+    bufferedAmount(): number;
     close(code?: number, reason?: string): void;
     /** The runtime's own socket (Bun's ServerWebSocket, Deno's WebSocket). */
     readonly raw: unknown;
@@ -49,6 +56,12 @@ export declare function registerUpgrader(request: Request, upgrade: Upgrader): v
 export declare function wrapSocket<Data>(raw: {
     send(m: string | ArrayBuffer | Uint8Array): unknown;
     close(code?: number, reason?: string): unknown;
+    /** Bun's ServerWebSocket. */
+    getBufferedAmount?(): number;
+    /** Deno's (standard) WebSocket. */
+    readonly bufferedAmount?: number;
+    /** 0 connecting, 1 open, 2 closing, 3 closed (both runtimes). */
+    readonly readyState?: number;
 }, data: Data): BractWebSocket<Data>;
 /** Adapters: run a handler, logging (never throwing) on failure. */
 export declare function runSocketHandler(what: string, fn: () => unknown): void;

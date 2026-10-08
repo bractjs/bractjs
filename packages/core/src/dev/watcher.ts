@@ -13,6 +13,12 @@ export interface WatchChangeInfo {
    * across the debounce window; the codegen trigger keys on it.
    */
   renameSeen: boolean;
+  /**
+   * Every watched file the burst touched, in first-seen order (the reported
+   * `file` is the last one). A save that touches `x.server.ts` and a route in
+   * the same 50ms window must not lose the server-side change.
+   */
+  files: string[];
 }
 
 /** Handle returned by {@link watchApp} so callers can release the watcher. */
@@ -34,6 +40,7 @@ export function watchApp(
 ): AppWatcher {
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingFile = "";
+  const pendingFiles = new Set<string>();
   let lastEvent: "rename" | "change" = "change";
   let renameSeen = false;
   let closed = false;
@@ -50,6 +57,7 @@ export function watchApp(
     if (path.basename(filename).startsWith(".")) return;
 
     pendingFile = filename;
+    pendingFiles.add(filename);
     lastEvent = eventType === "rename" ? "rename" : "change";
     // OR-accumulate across the debounce window: a save (change) immediately
     // followed by a create (rename) must not lose the rename signal.
@@ -62,8 +70,12 @@ export function watchApp(
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
       if (closed) return;
-      console.log(`✓ ${path.basename(pendingFile)} changed`);
-      const info: WatchChangeInfo = { event: lastEvent, renameSeen };
+      const files = [...pendingFiles];
+      pendingFiles.clear();
+      console.log(
+        files.length > 1 ? `✓ ${files.length} files changed` : `✓ ${path.basename(pendingFile)} changed`,
+      );
+      const info: WatchChangeInfo = { event: lastEvent, renameSeen, files };
       renameSeen = false;
       try {
         const result = onChange(pendingFile, info);

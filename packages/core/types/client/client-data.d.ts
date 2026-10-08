@@ -23,10 +23,17 @@ export declare function createClientContext(): RouterContextProvider;
  */
 export declare function runClientMiddleware<T>(chain: ClientChain, args: ClientDataArgs, work: () => Promise<T>): Promise<T>;
 /**
+ * `value` when it is a redirect a loader meant to follow — a 3xx Response
+ * carrying a `Location` (a returned 304 Not Modified is not one) — else null.
+ */
+export declare function redirectOf(value: unknown): Response | null;
+/**
  * Run each module's `clientLoader` over its own slice of a `/_data` payload
  * (root → `data.root`, layout i → `data.layouts[i]`, route → `data.route`),
  * in parallel. Each gets `serverLoader()` resolving to its server slice.
- * A failing clientLoader is logged and leaves the server slice in place.
+ * A failing clientLoader is logged and leaves the server slice in place —
+ * except a redirect, thrown or returned (React Router honours both), which
+ * propagates so the navigation / revalidation / fetcher follows it.
  */
 export declare function applyClientLoaders(chain: ClientChain, data: Record<string, unknown>, args: ClientDataArgs & {
     search: Record<string, unknown>;

@@ -143,4 +143,45 @@ describe("applyClientLoaders", () => {
     }
     expect(data.route).toEqual({ server: 1 });
   });
+
+  test("a redirect thrown OR returned by a clientLoader propagates (React Router parity)", async () => {
+    for (const clientLoader of [
+      async () => {
+        throw new Response(null, { status: 302, headers: { Location: "/login" } });
+      },
+      async () => new Response(null, { status: 302, headers: { Location: "/login" } }),
+    ]) {
+      const data: Record<string, unknown> = { root: null, layouts: [], route: { server: 1 } };
+      const chain: ClientChain = { root: null, layouts: [], route: mod({ clientLoader }) };
+      let caught: unknown;
+      try {
+        await applyClientLoaders(chain, data, { ...args(), search: {} });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Response);
+      expect((caught as Response).headers.get("Location")).toBe("/login");
+    }
+  });
+
+  test("a thrown non-redirect Response is still logged and keeps the server slice", async () => {
+    const data: Record<string, unknown> = { root: null, layouts: [], route: { server: 1 } };
+    const chain: ClientChain = {
+      root: null,
+      layouts: [],
+      route: mod({
+        clientLoader: async () => {
+          throw new Response("nope", { status: 404 });
+        },
+      }),
+    };
+    const err = console.error;
+    console.error = () => {};
+    try {
+      await applyClientLoaders(chain, data, { ...args(), search: {} });
+    } finally {
+      console.error = err;
+    }
+    expect(data.route).toEqual({ server: 1 });
+  });
 });

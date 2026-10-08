@@ -8,6 +8,12 @@ export interface WatchChangeInfo {
      * across the debounce window; the codegen trigger keys on it.
      */
     renameSeen: boolean;
+    /**
+     * Every watched file the burst touched, in first-seen order (the reported
+     * `file` is the last one). A save that touches `x.server.ts` and a route in
+     * the same 50ms window must not lose the server-side change.
+     */
+    files: string[];
 }
 /** Handle returned by {@link watchApp} so callers can release the watcher. */
 export interface AppWatcher {

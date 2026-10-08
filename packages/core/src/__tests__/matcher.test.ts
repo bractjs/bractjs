@@ -125,3 +125,41 @@ describe("optional segments [[id]]", () => {
     expect(r?.params.rest).toBe("1/2");
   });
 });
+
+describe("param values are percent-decoded (React Router parity)", () => {
+  test("[param]: spaces and non-ASCII", () => {
+    const trie = buildTrie([makeRoute("posts/[id]")]);
+    expect(matchRoute("/posts/a%20b", trie)?.params).toEqual({ id: "a b" });
+    expect(matchRoute("/posts/%C3%BCber", trie)?.params).toEqual({ id: "über" });
+  });
+
+  test("a malformed escape is left as written instead of failing the match", () => {
+    const trie = buildTrie([makeRoute("posts/[id]")]);
+    expect(matchRoute("/posts/%E0%A4%A", trie)?.params).toEqual({ id: "%E0%A4%A" });
+  });
+
+  test("[[optional]] is decoded when present", () => {
+    const trie = buildTrie([makeRoute("users/[[id]]")]);
+    expect(matchRoute("/users/j%C3%B8rn", trie)?.params).toEqual({ id: "jørn" });
+    expect(matchRoute("/users", trie)?.params).toEqual({});
+  });
+
+  test("[...splat]: each segment decoded, real slashes stay the separators", () => {
+    const trie = buildTrie([makeRoute("docs/[...slug]")]);
+    expect(matchRoute("/docs/a%20b/c", trie)?.params).toEqual({ slug: "a b/c" });
+    // An encoded slash inside one segment becomes a literal "/" in the value.
+    expect(matchRoute("/docs/a%2Fb/c", trie)?.params).toEqual({ slug: "a/b/c" });
+  });
+
+  test("static segments are compared raw (no decoding of the route itself)", () => {
+    const trie = buildTrie([makeRoute("about")]);
+    expect(matchRoute("/%61bout", trie)).toBeNull();
+  });
+
+  test("buildPath → matchRoute round-trips a value that needs encoding", async () => {
+    const { buildPath } = await import("../client/build-path.ts");
+    const trie = buildTrie([makeRoute("search/[q]")]);
+    const value = "a b/c ü?&#";
+    expect(matchRoute(buildPath("/search/:q", { q: value }), trie)?.params).toEqual({ q: value });
+  });
+});

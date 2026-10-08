@@ -1,4 +1,4 @@
-import { basename, extname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { extractApiRouteDefs } from "../build/route-lint.ts";
 import { compileMdxRoutes } from "../codegen/mdx.ts";
 import { explainStalenessForApp, writeRouteTypes } from "../codegen/route-codegen.ts";
@@ -14,7 +14,7 @@ import type { BractJSConfig } from "../server/serve.ts";
 import { createServer } from "../server/serve.ts";
 import { installUseClientServerStub } from "../server/use-client-runtime.ts";
 import { createHmrServer } from "./hmr-server.ts";
-import { rebuildClient } from "./rebuilder.ts";
+import { rebuildClient, serializeRebuilds } from "./rebuilder.ts";
 import { collectRouteRows, formatRouteTable, type RouteTableRow } from "./route-table.ts";
 import { watchApp } from "./watcher.ts";
 
@@ -265,26 +265,31 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
       );
     });
 
-  const watcher = watchApp(appDir, async (rawFile, info) => {
+  // One change batch per watcher burst. Batches never run concurrently: one
+  // arriving mid-rebuild is merged with any other waiting batch and handled
+  // once the current rebuild finishes (see serializeRebuilds).
+  type ChangeBatch = { files: string[]; renameSeen: boolean };
+  const handleChange = async ({ files: rawFiles, renameSeen }: ChangeBatch): Promise<void> => {
     // fs.watch yields backslash-separated paths on Windows; the checks and
     // pattern derivation below assume POSIX form (action-registry and the
-    // codegen normalize the same way).
-    const file = rawFile.split("\\").join("/");
-
-    // Our own codegen writes here (type-only output) — reacting would loop.
-    if (file.startsWith("_generated/")) return;
+    // codegen normalize the same way). Our own codegen writes to _generated/
+    // (type-only output) — reacting would loop.
+    const all = [...new Set(rawFiles.map((f) => f.split("\\").join("/")))].filter(
+      (f) => !f.startsWith("_generated/"),
+    );
 
     // An MDX route: recompile it to its .mdx.tsx sibling. That write is a
     // route-module change the code below handles like any other (a live
     // edit, or a restart when the route set changed).
-    if (file.endsWith(".mdx")) {
+    if (all.some((f) => f.endsWith(".mdx"))) {
       try {
         await compileMdxRoutes(appDir);
       } catch (err) {
         console.error(err instanceof Error ? err.message : err);
       }
-      return;
     }
+    const files = all.filter((f) => !f.endsWith(".mdx"));
+    if (files.length === 0) return;
 
     // ── Changes the running process cannot absorb ─────────────────────────
     // Route-module CONTENT edits are handled in-process below (cache-busted
@@ -293,33 +298,37 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
     // specifiers inside route modules; `server.ts`/`lifecycle.ts` ran their
     // side effects at boot; and the route trie/manifest is built once, so an
     // added or removed route file would 404 / linger until restart.
-    const isScript = file.endsWith(".ts") || file.endsWith(".tsx");
-    const isRouteModule = file.startsWith("routes/") || file === "root.tsx" || file === "root.ts";
-    const isServerEntry = file === "server.ts" || file === "lifecycle.ts" || /\.server\.tsx?$/.test(file);
+    const isScript = (f: string) => f.endsWith(".ts") || f.endsWith(".tsx");
+    const isRouteModule = (f: string) => f.startsWith("routes/") || f === "root.tsx" || f === "root.ts";
+    const isServerEntry = (f: string) =>
+      f === "server.ts" || f === "lifecycle.ts" || /\.server\.tsx?$/.test(f);
 
-    // A rename under routes/ is a route-set change only when file existence
-    // disagrees with the known set: added (exists, unknown) or removed
-    // (missing, known). Atomic saves (exists, known) and editor temp files
-    // (missing, unknown — e.g. sed's `.!1234!x.tsx`) are not set changes.
-    let routeSetChanged = false;
-    if (info.renameSeen && file.startsWith("routes/")) {
-      const exists = await Bun.file(resolve(process.cwd(), appDir, file)).exists();
-      routeSetChanged = exists !== knownRouteFiles.has(file);
-      if (exists) knownRouteFiles.add(file);
-      else knownRouteFiles.delete(file);
+    for (const file of files) {
+      // A rename under routes/ is a route-set change only when file existence
+      // disagrees with the known set: added (exists, unknown) or removed
+      // (missing, known). Atomic saves (exists, known) and editor temp files
+      // (missing, unknown — e.g. sed's `.!1234!x.tsx`) are not set changes.
+      let routeSetChanged = false;
+      if (renameSeen && file.startsWith("routes/")) {
+        const exists = await Bun.file(resolve(process.cwd(), appDir, file)).exists();
+        routeSetChanged = exists !== knownRouteFiles.has(file);
+        if (exists) knownRouteFiles.add(file);
+        else knownRouteFiles.delete(file);
+      }
+      if (isServerEntry(file) || routeSetChanged || (isScript(file) && !isRouteModule(file))) {
+        // Under `bractjs dev` this exits for the supervisor to respawn us and
+        // never returns. Programmatic callers get the warning default; fall
+        // through so they keep the previous best-effort in-process behavior.
+        requestRestart(file);
+      }
     }
 
-    if (isServerEntry || routeSetChanged || (isScript && !isRouteModule)) {
-      // Under `bractjs dev` this exits for the supervisor to respawn us and
-      // never returns. Programmatic callers get the warning default; fall
-      // through so they keep the previous best-effort in-process behavior.
-      requestRestart(file);
-    }
+    const touchesRoutes = files.some((f) => f.startsWith("routes/"));
 
     // Add/remove/rename of a route file changes the route set → regenerate
     // typed routes. Saves (content changes) never alter the generated output
     // (it uses type-only `typeof import(...)`), so skip codegen on those.
-    if (info.renameSeen && file.startsWith("routes/")) {
+    if (renameSeen && touchesRoutes) {
       await syncRouteTypes(appDir);
     }
 
@@ -327,49 +336,65 @@ export async function createDevServer(options?: DevServerOptions): Promise<DevSe
     // re-imports fresh loader/action/beforeLoad code instead of Bun's cached
     // copy, then re-register "use server" bodies so /_action resolves the
     // fresh function refs (the registry holds references from the old import).
-    if (isScript && (isRouteModule || (info.renameSeen && /\.server\.tsx?$/.test(file)))) {
+    if (files.some((f) => isScript(f) && (isRouteModule(f) || (renameSeen && /\.server\.tsx?$/.test(f))))) {
       bumpDevModuleGeneration();
       clearActionRegistry();
       await loadServerActions(appDir);
     }
 
     // Re-lint changed route modules (warn-once dedupes repeats).
-    if (file.startsWith("routes/")) await inspectRoutes(appDir);
+    if (touchesRoutes) await inspectRoutes(appDir);
 
-    const { duration } = await rebuildClient(merged);
-
-    // Route files (not layout): do a fine-grained module swap without full reload.
-    // Root, layouts, and other files: fall back to full page reload.
-    const isRoute = file.startsWith("routes/") && !file.endsWith("layout.tsx") && !file.endsWith("layout.ts");
+    const { duration, routeChunks } = await rebuildClient(merged);
 
     // A CSS Module whose class set changed: the server's imported map (and the
     // client JS's) are stale, and only a restart re-imports them. Rule edits
     // keep the names, so they fall through to the stylesheet hot-swap below.
-    if (
-      file.endsWith(".module.css") &&
-      (await cssModuleClassesChanged(resolve(process.cwd(), appDir, file)))
-    ) {
-      requestRestart(file);
+    for (const file of files) {
+      if (
+        file.endsWith(".module.css") &&
+        (await cssModuleClassesChanged(resolve(process.cwd(), appDir, file)))
+      ) {
+        requestRestart(file);
+      }
     }
 
-    if (file.endsWith(".css")) {
+    const [only] = files;
+    // Route files (not layout): do a fine-grained module swap without full reload.
+    // Root, layouts, and other files: fall back to full page reload.
+    const isRoute =
+      files.length === 1 &&
+      only.startsWith("routes/") &&
+      !only.endsWith(".css") &&
+      !only.endsWith("layout.tsx") &&
+      !only.endsWith("layout.ts");
+    const chunkUrl = isRoute ? routeChunks.get(filePathToPattern(only)) : undefined;
+
+    if (files.every((f) => f.endsWith(".css"))) {
       // Styles are extracted to real files, so a CSS edit needs no JS swap and
-      // no reload — the browser just re-fetches the rebuilt stylesheet. Checked
-      // before `isRoute` because a .css file living under routes/ would
-      // otherwise be mistaken for a route module.
-      hmr.broadcast({ type: "hmr:css", file, duration });
-      console.log(`✓ ${file} → style update in ${duration}ms`);
-    } else if (isRoute) {
-      const pattern = filePathToPattern(file);
-      // Chunk URL = same basename as route file; splitting build puts it in build/client/
-      const chunkUrl = `/build/client/${basename(file, extname(file))}.js`;
-      hmr.broadcast({ type: "hmr:route", pattern, chunkUrl, file, duration });
-      console.log(`✓ ${file} → module swap (pattern="${pattern}") in ${duration}ms`);
+      // no reload — the browser just re-fetches every rebuilt stylesheet.
+      // Checked before `isRoute` because a .css file living under routes/
+      // would otherwise be mistaken for a route module.
+      hmr.broadcast({ type: "hmr:css", file: only, duration });
+      console.log(`✓ ${files.join(", ")} → style update in ${duration}ms`);
+    } else if (isRoute && chunkUrl) {
+      const pattern = filePathToPattern(only);
+      // The chunk the rebuild actually wrote for this route (its path mirrors
+      // the source tree under build/client/, e.g. /build/client/app/routes/x.js).
+      hmr.broadcast({ type: "hmr:route", pattern, chunkUrl, file: only, duration });
+      console.log(`✓ ${only} → module swap (pattern="${pattern}") in ${duration}ms`);
     } else {
-      hmr.broadcast({ type: "hmr:reload", file, duration });
-      console.log(`✓ ${file} → full reload in ${duration}ms`);
+      hmr.broadcast({ type: "hmr:reload", file: only, duration });
+      console.log(`✓ ${files.join(", ")} → full reload in ${duration}ms`);
     }
-  });
+  };
+  const scheduleChange = serializeRebuilds<ChangeBatch>(handleChange, (queued, next) => ({
+    files: [...queued.files, ...next.files],
+    renameSeen: queued.renameSeen || next.renameSeen,
+  }));
+  const watcher = watchApp(appDir, (_file, info) =>
+    scheduleChange({ files: info.files, renameSeen: info.renameSeen }),
+  );
 
   console.log(formatRouteTable(routeRows));
   console.log(`BractJS dev server on http://localhost:${appPort} (HMR ws://localhost:${hmrPort})`);

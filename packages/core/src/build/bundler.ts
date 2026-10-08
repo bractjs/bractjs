@@ -1,6 +1,7 @@
 import { join, basename, extname, relative, resolve } from "node:path";
 import { rename, rm } from "node:fs/promises";
 import type { BunPlugin } from "bun";
+import { resolveRootFileSync } from "../server/root-file.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import { contentHash } from "./hash.ts";
 import { generateManifest, writeManifest } from "./manifest.ts";
@@ -36,7 +37,9 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   await writeRouteTypes(appDir);
   const routes = await scanRoutes(appDir);
   const routeFilePaths = routes.map((r) => join(appDir, r.filePath));
-  const rootFilePath = join(appDir, "root.tsx");
+  // root.tsx or root.ts; an app without one simply has no root chunk.
+  const rootName = resolveRootFileSync(appDir);
+  const rootFilePath = rootName ? join(appDir, rootName) : null;
   const layoutFilesByPattern = await routeLayoutFiles(appDir, routes);
   const layoutSources = [...new Set([...layoutFilesByPattern.values()].flat())];
 
@@ -93,7 +96,12 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   let clientResult: Awaited<ReturnType<typeof Bun.build>>;
   try {
     clientResult = await Bun.build({
-      entrypoints: [shimPath, rootFilePath, ...routeFilePaths, ...layoutSources.map((f) => join(appDir, f))],
+      entrypoints: [
+        shimPath,
+        ...(rootFilePath ? [rootFilePath] : []),
+        ...routeFilePaths,
+        ...layoutSources.map((f) => join(appDir, f)),
+      ],
       target: "browser",
       splitting: true,
       outdir: join(buildDir, "client"),
@@ -128,7 +136,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   let rootCss: string[] | undefined;
   const outdirAbs = resolve(buildDir, "client");
   const appDirClean = appDir.replace(/^\.\//, "");
-  const rootBase = basename(rootFilePath, extname(rootFilePath)); // "root"
+  const rootBase = rootFilePath ? basename(rootFilePath, extname(rootFilePath)) : null; // "root"
 
   // Entry-point → its extracted CSS bundles, keyed by the PRE-rename absolute
   // JS path (that's what the metafile reports).

@@ -59,6 +59,20 @@ export function buildTrie(routes: RouteFile[]): TrieNode {
 
 // ── Match ──────────────────────────────────────────────────────────────────
 
+/**
+ * A param value as the app sees it: percent-decoded, like React Router (so
+ * `generatePath("/posts/:id", { id: "a b" })` round-trips to `"a b"`). A
+ * malformed escape is left as written rather than failing the match. Static
+ * segments are compared raw — only bound values are decoded.
+ */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function matchRoute(pathname: string, trie: TrieNode): MatchResult {
   const parts = pathname.split("/").filter(Boolean);
   return walk(trie, parts, 0, {});
@@ -102,7 +116,7 @@ function walk(node: TrieNode, parts: string[], idx: number, params: Record<strin
   if (node.paramChild) {
     const result = walk(node.paramChild.node, parts, idx + 1, {
       ...params,
-      [node.paramChild.name]: part,
+      [node.paramChild.name]: decodeSegment(part),
     });
     if (result) return result;
   }
@@ -111,7 +125,7 @@ function walk(node: TrieNode, parts: string[], idx: number, params: Record<strin
   //    case), then the "absent" case mid-path ("/42" for [[lang]]/[id].tsx).
   //    Param-before-catch-all keeps optional more specific than splat.
   if (opt) {
-    const result = walk(opt.node, parts, idx + 1, { ...params, [opt.name]: part });
+    const result = walk(opt.node, parts, idx + 1, { ...params, [opt.name]: decodeSegment(part) });
     if (result) return result;
     if (!triedSkip) {
       const skipped = skipOptional();
@@ -119,9 +133,11 @@ function walk(node: TrieNode, parts: string[], idx: number, params: Record<strin
     }
   }
 
-  // 4. Try catch-all — consumes remaining segments
+  // 4. Try catch-all — consumes remaining segments. Each segment is decoded on
+  //    its own: segment boundaries are the URL's real slashes, and an encoded
+  //    `%2F` inside a segment becomes a literal "/" in the value.
   if (node.catchAllChild) {
-    const remaining = parts.slice(idx).join("/");
+    const remaining = parts.slice(idx).map(decodeSegment).join("/");
     const catchNode = node.catchAllChild.node;
     if (catchNode.routeFile) {
       return {

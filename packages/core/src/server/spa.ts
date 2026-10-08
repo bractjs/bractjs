@@ -4,7 +4,7 @@ import { BractJSProvider, type RouteManifest } from "../shared/context.ts";
 import { devBustedSpecifier } from "./env.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { renderRoute, type ServerManifest } from "./render.ts";
-import { fileExists } from "./runtime.ts";
+import { resolveRootFile, rootKeyIn } from "./root-file.ts";
 
 /**
  * Render the SPA-mode document shell: the app's root component around an
@@ -26,12 +26,14 @@ export async function renderSpaShell(
   let RootLayout: ComponentType<{ children?: ReactNode }> | undefined;
   type RootExports = { default?: ComponentType; Layout?: ComponentType<{ children?: ReactNode }> };
   if (registry) {
-    const rootMod = (registry["root.tsx"] ?? registry["root.ts"]) as RootExports | undefined;
+    const rootKey = rootKeyIn(registry);
+    const rootMod = (rootKey ? registry[rootKey] : undefined) as RootExports | undefined;
     if (rootMod?.default) RootComponent = rootMod.default;
     RootLayout = rootMod?.Layout;
   } else {
-    const rootPath = resolve(join(appDir, "root.tsx"));
-    if (await fileExists(rootPath)) {
+    const rootName = await resolveRootFile(appDir);
+    if (rootName) {
+      const rootPath = resolve(join(appDir, rootName));
       // Dev: cache-busted so an edited root shell is live without a restart.
       const spec = devBustedSpecifier(rootPath);
       const mod = (await import(spec)) as RootExports;

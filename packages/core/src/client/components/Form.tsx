@@ -1,4 +1,5 @@
-import { type FormEvent, type FormHTMLAttributes, type ReactNode, useContext, useId } from "react";
+import { type FormEvent, type FormHTMLAttributes, type ReactNode, useContext, useEffect, useId } from "react";
+import { fetcherStore } from "../fetcher-store.ts";
 import { fetcherSubmit } from "../hooks/useFetcher.ts";
 import { NavigationContext, RouterContext } from "../router.tsx";
 import { normalizeSubmission, type SubmitEncType } from "../submission.ts";
@@ -70,6 +71,10 @@ export function Form({
   const routerCtx = useContext(RouterContext);
   const navCtx = useContext(NavigationContext);
   const autoKey = useId();
+  // A `navigate={false}` form without a fetcherKey submits through an
+  // auto-keyed fetcher: drop it from useFetchers() with the form, as an
+  // unkeyed useFetcher() does. (Before the early return: hooks run always.)
+  useEffect(() => () => fetcherStore.remove(`__form${autoKey}`), [autoKey]);
   // The hidden intent input, rendered first so it's part of every submission
   // (JS and native). `key` keeps React happy alongside arbitrary children.
   const intentInput =

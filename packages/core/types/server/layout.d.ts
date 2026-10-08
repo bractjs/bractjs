@@ -16,7 +16,14 @@ export interface LayoutChain {
     };
 }
 export interface ResolvedRoute extends RouteFile {
+    /** Root first (when the app has one), then layouts outermost → innermost. */
     layoutFiles: string[];
+    /**
+     * The root module's entry in `layoutFiles` (same form: absolute path or
+     * registry key), or undefined when the app has no root module — so callers
+     * never mistake the first layout for root.
+     */
+    rootFile?: string;
 }
 /**
  * Pre-loaded module map keyed by appDir-relative path (e.g. "root.tsx",

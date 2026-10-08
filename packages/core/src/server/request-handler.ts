@@ -16,6 +16,7 @@ import {
   routeErrorStatus,
 } from "../shared/route-error.ts";
 import { getCspNonce } from "./csp.ts";
+import { inheritClientAddress } from "./client-address.ts";
 import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
 import { settleDeferred } from "./deferred-wire.ts";
 import { isExplicitDev } from "./env.ts";
@@ -202,7 +203,7 @@ function withRootLayout(
 
 /** `request` with `formData()` answering from an already-parsed body (callable repeatedly). */
 function withParsedFormData(request: Request, formData: FormData): Request {
-  return new Proxy(request, {
+  const proxy = new Proxy(request, {
     get(target, prop) {
       if (prop === "formData") return () => Promise.resolve(formData);
       // Receiver = target: Request's native getters (url, headers, …) need the real object.
@@ -210,6 +211,9 @@ function withParsedFormData(request: Request, formData: FormData): Request {
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+  // The proxy is a different object: keep getClientAddress(request) working in actions.
+  inheritClientAddress(request, proxy);
+  return proxy;
 }
 
 export async function handleRequest(
@@ -270,6 +274,8 @@ async function route(
         headers: request.headers,
         method: "GET",
       });
+      // Soft navigations: loaders/gates see the client address a document load would.
+      inheritClientAddress(request, loaderRequest);
       // Validate search params before any route work runs — loaders must
       // never see unvalidated input, and a 400 here is cheaper than a wasted
       // context-factory/loader run. The thrown 400 Response propagates below.
@@ -627,29 +633,68 @@ async function route(
       // from the leaf loader, then the action (React Router parity).
       const dataStatus = loaderResults.inits?.route?.status ?? actionInit?.status;
 
-      const document = await renderRoute({
-        shell,
-        loaderData,
-        actionData,
-        params: match.params,
-        pathname,
-        search,
-        manifest,
-        meta,
-        links: resolveLinks(chain),
-        matches,
-        headers: documentHeaders,
-        routeFile: match.routeFile?.filePath,
-        // Manifest key for this route — selects its extracted CSS bundles.
-        routePattern: match.routeFile?.urlPattern,
-        // Set by the opt-in csp() middleware; undefined otherwise.
-        nonce: getCspNonce(mwCtx.context),
-        ssrMode,
-        streamTimeout,
-        locale,
-        i18n,
-        status: statusFailure ? routeErrorStatus(statusFailure.error) : dataStatus,
-      });
+      // Root, its Layout and layout components render outside every error
+      // boundary, so a throw there rejects the stream before any HTML exists.
+      // Answer with the root error document (an HTML 500 that hydrates), not
+      // the catch-all JSON error. Route components are inside a boundary
+      // (<Outlet>) and never reach this.
+      const renderShellFailure = async (err: unknown): Promise<Response> => {
+        console.error(`[bractjs] render error in ${chain.files?.route ?? match.routeFile?.filePath}:`, err);
+        await fireOnError(onError, err, request);
+        // The message is serialized into the page: only dev sees the real one.
+        const shown = isExplicitDev()
+          ? err instanceof Error
+            ? err
+            : new Error(String(err))
+          : new Error("Internal Server Error");
+        return renderRootErrorDocument({
+          Boundary: pickBoundaryForFailure(undefined, [], 0, chain.root.ErrorBoundary),
+          Layout: chain.root.Layout,
+          error: shown,
+          params: match.params,
+          pathname,
+          search: url.search,
+          manifest,
+          nonce: getCspNonce(mwCtx.context),
+          status: 500,
+          locale,
+          i18n,
+        });
+      };
+
+      let document: Response;
+      try {
+        document = await renderRoute({
+          shell,
+          loaderData,
+          actionData,
+          params: match.params,
+          pathname,
+          search,
+          manifest,
+          meta,
+          links: resolveLinks(chain),
+          matches,
+          headers: documentHeaders,
+          routeFile: match.routeFile?.filePath,
+          // Manifest key for this route — selects its extracted CSS bundles.
+          routePattern: match.routeFile?.urlPattern,
+          // Set by the opt-in csp() middleware; undefined otherwise.
+          nonce: getCspNonce(mwCtx.context),
+          ssrMode,
+          streamTimeout,
+          locale,
+          i18n,
+          status: statusFailure ? routeErrorStatus(statusFailure.error) : dataStatus,
+        });
+      } catch (err) {
+        // React rejects with the thrown value itself: a component's
+        // `throw redirect()` / HttpError / Response is still the intended answer
+        // — the outer catch turns it into a 3xx (or envelope), an error
+        // document with its status, or the Response verbatim.
+        if (err instanceof Response || isHttpError(err)) throw err;
+        return renderShellFailure(err);
+      }
       // Prerendering asks which pages are ISR pages (route `config.revalidate`).
       const revalidate = chain.route.config?.revalidate;
       if (request.headers.has(PRERENDER_HEADER) && typeof revalidate === "number") {

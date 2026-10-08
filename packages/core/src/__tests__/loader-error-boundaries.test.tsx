@@ -212,6 +212,107 @@ describe("layout loader errors (/_data)", () => {
   });
 });
 
+describe("shell render failures (root / layout components throw while rendering)", () => {
+  const quiet = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    const prev = console.error;
+    console.error = () => {};
+    try {
+      return await fn();
+    } finally {
+      console.error = prev;
+    }
+  };
+
+  for (const [what, override] of [
+    [
+      "a layout component",
+      {
+        // No loader here: the fixture's d/ loader fails, which would render
+        // a boundary in place of the component instead of rendering it.
+        "routes/d/layout.tsx": {
+          default: () => {
+            throw new Error("db password is hunter2");
+          },
+        },
+      },
+    ],
+    [
+      "the root component",
+      {
+        "routes/d/layout.tsx": { default: layout("layout-d") },
+        "root.tsx": {
+          ...rootModule,
+          default: () => {
+            throw new Error("db password is hunter2");
+          },
+        },
+      },
+    ],
+  ] as const) {
+    test(`${what}: an HTML root error document (500), onError fired, message redacted`, async () => {
+      const seen: unknown[] = [];
+      const res = await quiet(() =>
+        handleRequest(
+          req("http://x/d/page"),
+          trie,
+          {
+            ...config,
+            moduleRegistry: { ...moduleRegistry, ...override },
+            onError: (err: unknown) => {
+              seen.push(err);
+            },
+          },
+          {},
+        ),
+      );
+      expect(res.status).toBe(500);
+      expect(res.headers.get("Content-Type")).toContain("text/html");
+      const html = await res.text();
+      expect(html).toContain("<html");
+      expect(html).toContain("root-boundary:500:Internal Server Error");
+      // Not a dev process: the real message never reaches the page or payload.
+      expect(html).not.toContain("hunter2");
+      expect((seen[0] as Error).message).toBe("db password is hunter2");
+    });
+  }
+});
+
+describe("a redirect / HttpError THROWN while rendering the shell is still honoured", () => {
+  test("root component throws redirect() → 302 with Location; HttpError → its status", async () => {
+    const render = (thrown: unknown) =>
+      handleRequest(
+        req("http://x/d/page"),
+        trie,
+        {
+          ...config,
+          moduleRegistry: {
+            ...moduleRegistry,
+            "routes/d/layout.tsx": { default: layout("layout-d") },
+            "root.tsx": {
+              ...rootModule,
+              default: () => {
+                throw thrown;
+              },
+            },
+          },
+        },
+        {},
+      );
+    const prev = console.error;
+    console.error = () => {};
+    try {
+      const r = await render(redirect("/login"));
+      expect(r.status).toBe(302);
+      expect(r.headers.get("Location")).toBe("/login");
+      const h = await render(new HttpError(403, "nope"));
+      expect(h.status).toBe(403);
+      expect(await h.text()).toContain("root-boundary:403:nope");
+    } finally {
+      console.error = prev;
+    }
+  });
+});
+
 describe("root loader errors", () => {
   const rootFails = {
     ...moduleRegistry,

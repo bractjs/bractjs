@@ -12,6 +12,8 @@ export interface RouteRegistryInput {
     routes: RouteFile[];
     layoutRelPaths: string[];
     hasRoot: boolean;
+    /** Which root module the app has; `root.tsx` when only `hasRoot` is given. */
+    rootFile?: "root.tsx" | "root.ts";
     /** appDir/env.ts exists: imported first, so its defineEnv() validates at startup. */
     hasEnv?: boolean;
 }

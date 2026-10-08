@@ -37,6 +37,19 @@ class FetcherStore {
     this.emit();
   }
 
+  /**
+   * `update`, but only while the entry still exists. Every write after an
+   * operation's first one goes through this: an unkeyed fetcher removes its
+   * entry on unmount, and an in-flight load/submit finishing afterwards must
+   * not resurrect it as a ghost in `useFetchers()`.
+   */
+  patch(key: string, partial: Partial<Omit<FetcherEntry, "key">>): void {
+    const prev = this.entries.get(key);
+    if (!prev) return;
+    this.entries.set(key, { ...prev, ...partial });
+    this.emit();
+  }
+
   remove(key: string): void {
     if (this.entries.delete(key)) this.emit();
   }

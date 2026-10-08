@@ -149,6 +149,16 @@ export async function runLoaders(
     ...layoutLoaders,
   ]);
 
+  // A loader may RETURN a redirect instead of throwing it (React Router
+  // honours both). Treat it exactly like a thrown one — the document and
+  // /_data branches already answer a rejected redirect — rather than letting
+  // the Response object fall through as slot data. Outermost wins, as a
+  // thrown root/layout redirect gates everything beneath it.
+  // (A returned 3xx without a Location — a 304 Not Modified — is not one.)
+  for (const value of [root, ...layoutResults, route]) {
+    if (isRedirect(value) && value.headers.has("Location")) throw value;
+  }
+
   // data(value, init): the slot gets the value; the init rides alongside.
   const r = unwrapData(root);
   const rt = unwrapData(route);

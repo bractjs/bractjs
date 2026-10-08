@@ -2,6 +2,7 @@ import { compileMdxRoutes } from "./mdx.ts";
 import { join } from "node:path";
 import { hashString } from "../build/hash.ts";
 import type { Segment } from "../server/scanner.ts";
+import { resolveRootFile } from "../server/root-file.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import { collectLayouts } from "./module-registry.ts";
 
@@ -34,12 +35,18 @@ function paramsFromSegments(segments: Segment[]): string[] {
   );
 }
 
-// Replace each :paramName segment with ${params.paramName} for template literals.
+// Replace each :paramName segment with ${encodeURIComponent(String(params.paramName))}
+// for template literals — like buildPath()/generatePath(), so a decoded param
+// ("a b", "a/b") builds a URL that matches back to the same value.
 function substituteParams(pattern: string, params: string[]): string {
   const set = new Set(params);
   return pattern
     .split("/")
-    .map((seg) => (seg.startsWith(":") && set.has(seg.slice(1)) ? "${params." + seg.slice(1) + "}" : seg))
+    .map((seg) =>
+      seg.startsWith(":") && set.has(seg.slice(1))
+        ? "${encodeURIComponent(String(params." + seg.slice(1) + "))}"
+        : seg,
+    )
     .join("/");
 }
 
@@ -387,11 +394,7 @@ export async function generateRouteTypes(appDir: string): Promise<string> {
 
   // Every module a route id can name: root, layouts, routes.
   const layoutFiles = await collectLayouts(appDir, routeFiles);
-  const rootFile = (await Bun.file(join(appDir, "root.tsx")).exists())
-    ? "root.tsx"
-    : (await Bun.file(join(appDir, "root.ts")).exists())
-      ? "root.ts"
-      : undefined;
+  const rootFile = (await resolveRootFile(appDir)) ?? undefined;
   const modules = [
     ...(rootFile ? [{ id: "root", file: rootFile }] : []),
     ...layoutFiles.map((file) => ({ id: routeIdOf(file), file })),
