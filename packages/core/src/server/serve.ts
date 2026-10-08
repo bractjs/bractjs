@@ -3,7 +3,7 @@ import { loadManifest } from "../build/manifest.ts";
 import { handleImageRequest } from "../image/handler.ts";
 import { handleActionRequest } from "./action-handler.ts";
 import { loadServerActions, loadServerActionsFromRegistry } from "./action-registry.ts";
-import type { I18nConfig } from "../shared/i18n.ts";
+import { type I18nConfig, splitLocale } from "../shared/i18n.ts";
 import { DenoAdapter } from "../adapters/deno.ts";
 import { NodeAdapter } from "../adapters/node.ts";
 import { type BractAdapter, BunAdapter } from "./adapter.ts";
@@ -25,7 +25,7 @@ import { error } from "./response.ts";
 import { type RouteFile, scanRoutes } from "./scanner.ts";
 import { renderSpaShell } from "./spa.ts";
 import { embeddedFile } from "./embedded.ts";
-import { serveStatic } from "./static.ts";
+import { decodePathname, serveStatic } from "./static.ts";
 import { installCssModulesRuntime } from "./css-modules-runtime.ts";
 import { installUseClientServerStub } from "./use-client-runtime.ts";
 import { fileBody, fileExists, readText } from "./runtime.ts";
@@ -284,7 +284,11 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   }
 
   /** Prerendered file for a clean (query-free, dot-free) document path — embedded in a binary, or on disk — or null. */
-  async function prerenderFile(relHtmlOrJson: string): Promise<Blob | null> {
+  async function prerenderFile(rawRel: string): Promise<Blob | null> {
+    // Prerendered paths with spaces / non-ASCII live decoded on disk; the
+    // request pathname arrives percent-encoded. Decode, then guard.
+    const relHtmlOrJson = decodePathname(rawRel);
+    if (relHtmlOrJson === null) return null;
     if (relHtmlOrJson.split("/").some((s) => s === ".." || s === ".")) return null;
     const path = join(buildDir, "client", "_prerender", relHtmlOrJson);
     const embedded = embeddedFile(join(buildDir, "client"), `_prerender/${relHtmlOrJson}`);
@@ -393,7 +397,14 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // SPA mode: every document GET that matches a route gets the static
     // shell. /_data (no trie match) and mutations fall through to the normal
     // handler, so loaders/actions/CSRF behave exactly as in SSR mode.
-    if (!ssrEnabled && isDocGet && matchRoute(pathname, trie)) {
+    // i18n: routes match the path without its locale prefix (as handleRequest
+    // does) — otherwise /fr/about misses the trie and gets SSR'd instead.
+    // A default-locale prefix (/en/about) is non-canonical: leave it to
+    // handleRequest, which answers the 308 to /about.
+    const localeMatch = config.i18n ? splitLocale(pathname, config.i18n) : null;
+    const canonical = !localeMatch || localeMatch.prefix !== config.i18n!.defaultLocale;
+    const spaMatchPath = localeMatch ? localeMatch.pathname : pathname;
+    if (!ssrEnabled && isDocGet && canonical && matchRoute(spaMatchPath, trie)) {
       const manifest = isDevRuntime() ? await readDevManifest(buildDir) : await manifestReady;
       return new Response(await getSpaShell(manifest), {
         headers: {

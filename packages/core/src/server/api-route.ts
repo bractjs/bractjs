@@ -7,6 +7,7 @@ import {
   runRouteMiddleware,
 } from "./middleware.ts";
 import { hasForbiddenKey } from "./proto-guard.ts";
+import { isHttpError } from "../shared/errors.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -181,7 +182,13 @@ export async function handleApiRequest(
       }
 
       const result = await def.handler(input, request, ctx);
-      return Response.json(result);
+      // A handler may *return* a Response (an OAuth start's 302 with its state
+      // cookie, a file download…). Response.json(response) would serialize the
+      // object itself to `{}` and drop its status and headers.
+      if (result instanceof Response) return result;
+      // Response.json(undefined) throws ("not JSON serializable"): a void
+      // handler (DELETE with no body) answers `null`, not a 500.
+      return Response.json(result === undefined ? null : result);
     };
 
     try {
@@ -193,6 +200,8 @@ export async function handleApiRequest(
         : await invoke();
     } catch (err) {
       if (err instanceof Response) return err;
+      // HttpError carries its own status (parity with /_action and route handlers).
+      if (isHttpError(err)) return Response.json({ error: err.message }, { status: err.status });
       // SECURITY(high): never leak internal error details in production.
       // Dev mode keeps the message for DX; prod returns a generic 500.
       console.error("[bractjs] api route error:", err);

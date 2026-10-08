@@ -112,6 +112,12 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
     },
     async data<T>(path: string): Promise<T> {
       const res = await send(`/_data?path=${encodeURIComponent(path)}`);
+      // Redirects are enveloped (204 + X-BractJS-Redirect), so a gate that
+      // sends the client elsewhere is reported as such, not as a parse error.
+      const redirectTo = res.headers.get("X-BractJS-Redirect");
+      if (redirectTo !== null) {
+        throw new Error(`[bractjs/testing] /_data for ${path} redirected to ${redirectTo}`);
+      }
       if (!res.ok) throw new Error(`[bractjs/testing] /_data for ${path} answered ${res.status}`);
       return (await res.json()) as T;
     },

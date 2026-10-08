@@ -49,10 +49,23 @@ export function resolveHeaders(
       }),
     );
     // `set` (not `append`) so an inner route overrides an ancestor's value for
-    // the same key rather than accumulating duplicates.
-    produced.forEach((value, key) => merged.set(key, value));
+    // the same key rather than accumulating duplicates — except Set-Cookie,
+    // which is multi-valued: a layout's flash-clear cookie and a route's own
+    // cookie must BOTH reach the response (set() would keep only the last).
+    produced.forEach((value, key) => setOrAppendCookie(merged, key, value));
   }
   return merged;
+}
+
+/** `headers.set(key, value)`, but Set-Cookie values accumulate instead of overwriting. */
+export function setOrAppendCookie(headers: Headers, key: string, value: string): void {
+  if (key.toLowerCase() !== "set-cookie") {
+    headers.set(key, value);
+    return;
+  }
+  // A headers() that forwards `parentHeaders` re-emits the ancestors' cookies;
+  // an identical value is the same cookie, not a second one.
+  if (!headers.getSetCookie().includes(value)) headers.append(key, value);
 }
 
 /**
@@ -60,6 +73,6 @@ export function resolveHeaders(
  * same-key defaults. Mutates and returns `base`. No-op when `resolved` is null.
  */
 export function applyRouteHeaders(base: Headers, resolved: Headers | null): Headers {
-  if (resolved) resolved.forEach((value, key) => base.set(key, value));
+  if (resolved) resolved.forEach((value, key) => setOrAppendCookie(base, key, value));
   return base;
 }

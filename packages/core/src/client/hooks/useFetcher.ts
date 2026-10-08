@@ -289,6 +289,13 @@ export async function fetcherLoad(key: string, path: string): Promise<void> {
     const context = createClientContext();
     const data = await runClientMiddleware(chain, { request, params: {}, context }, async () => {
       const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+      // A gate redirect (204 envelope) or a raw 3xx: follow it, load nothing.
+      if (followRedirectResponse(res)) return undefined;
+      // A 404/5xx body is not a payload — leave the fetcher's data untouched.
+      if (!res.ok) {
+        console.error(`[bractjs] fetcher.load /_data ${res.status} for ${path}`);
+        return undefined;
+      }
       const json = reviveDeferred((await res.json()) as Record<string, unknown>);
       // Only the route's own clientLoader applies — a fetcher reads one route.
       await applyClientLoaders({ root: null, layouts: [], route: chain.route }, json, {
@@ -299,7 +306,7 @@ export async function fetcherLoad(key: string, path: string): Promise<void> {
       });
       return json.route;
     });
-    fetcherStore.update(key, { data });
+    if (data !== undefined) fetcherStore.update(key, { data });
   } finally {
     fetcherStore.update(key, { state: "idle" });
   }
@@ -354,6 +361,8 @@ export async function fetcherSubmit(key: string, req: FetcherRequest): Promise<v
       const res = await fetch(req.url, { method: formMethod, body: req.body, headers });
       actionStatus = res.status;
       if (followRedirectResponse(res)) return REDIRECTED;
+      // data(null, { status: 204 }) — no body to parse.
+      if (res.status === 204) return null;
       return res.json();
     };
     let data: unknown;

@@ -1,10 +1,11 @@
 declare class LoaderCache {
     private store;
     private gcTimer;
-    set(key: string, data: Record<string, unknown>, staleTime: number, gcTime: number): void;
+    set(key: string, data: Record<string, unknown>, staleTime: number, gcTime: number, raw?: boolean): void;
     get(key: string): {
         data: Record<string, unknown>;
         fresh: boolean;
+        raw: boolean;
     } | null;
     delete(key: string): void;
     /**

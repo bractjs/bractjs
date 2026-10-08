@@ -1,4 +1,4 @@
-import { join, basename, extname, resolve } from "node:path";
+import { join, basename, extname, relative, resolve } from "node:path";
 import { rename, rm } from "node:fs/promises";
 import type { BunPlugin } from "bun";
 import { scanRoutes } from "../server/scanner.ts";
@@ -51,6 +51,9 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   }
 
   // ── 1. Clean stale artefacts ────────────────────────────────────────────
+  // Every output honours `buildDir` (default "build"). Chunk URLs always use the
+  // fixed /build/client/ prefix: that is the URL namespace serve.ts maps onto
+  // `<buildDir>/client`, independent of where the directory lives on disk.
   const buildDir = config.buildDir ?? "build";
   await Promise.all([
     rm(join(buildDir, "client"), { recursive: true, force: true }),
@@ -62,7 +65,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   const serverResult = await Bun.build({
     entrypoints: [join(pkgRoot, "src/server/index.ts")],
     target: "bun",
-    outdir: "build/server",
+    outdir: join(buildDir, "server"),
     sourcemap: config.sourcemap ?? "external",
     // Force production so Bun picks the `jsx`/`jsxs` runtime instead of
     // `jsxDEV` — `jsxDEV` only exists on react/jsx-dev-runtime, which is a
@@ -93,7 +96,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
       entrypoints: [shimPath, rootFilePath, ...routeFilePaths, ...layoutSources.map((f) => join(appDir, f))],
       target: "browser",
       splitting: true,
-      outdir: "build/client",
+      outdir: join(buildDir, "client"),
       // No publicPath: relative chunk refs work correctly when files are served
       // at URLs matching their outdir structure (e.g. /build/client/chunk-xxx.js).
       minify: config.minify ?? true,
@@ -123,7 +126,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
   let rootChunk: string | undefined;
   let entryCss: string[] | undefined;
   let rootCss: string[] | undefined;
-  const outdirAbs = resolve("build/client");
+  const outdirAbs = resolve(buildDir, "client");
   const appDirClean = appDir.replace(/^\.\//, "");
   const rootBase = basename(rootFilePath, extname(rootFilePath)); // "root"
 
@@ -148,10 +151,9 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     await rename(outPath, hashedPath);
 
     const hashedAbs = resolve(hashedPath);
-    const cwdAbs = resolve(".");
-    return hashedAbs.startsWith(cwdAbs + "/")
-      ? "/" + hashedAbs.slice(cwdAbs.length + 1).replace(/\\/g, "/")
-      : "/" + hashedPath.replace(/^build\//, "build/");
+    // Served at /build/client/<path relative to the client outdir>, whatever
+    // `buildDir` is (serve.ts maps that URL prefix onto `<buildDir>/client`).
+    return "/build/client/" + relative(outdirAbs, hashedAbs).replace(/\\/g, "/");
   }
 
   async function publishCss(absCssPaths: string[] | undefined): Promise<string[] | undefined> {
@@ -230,7 +232,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     rootCss,
     mode: "production",
   });
-  await writeManifest(manifest, "build");
+  await writeManifest(manifest, buildDir);
 
   // ── 6. SPA shell (ssr: false) ───────────────────────────────────────────
   // Emit the static document shell every document GET will serve in SPA mode.
@@ -257,7 +259,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     };
     const html = await renderSpaShell(appDir, serverManifest);
     await Bun.write(join(buildDir, "client", "__spa.html"), html);
-    console.log("[bract] SPA shell → build/client/__spa.html");
+    console.log(`[bract] SPA shell → ${join(buildDir, "client", "__spa.html")}`);
   }
 
   console.log("[bract] build complete →", Object.keys(manifest.routes).length, "routes");

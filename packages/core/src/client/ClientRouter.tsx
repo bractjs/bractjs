@@ -31,7 +31,14 @@ import { type HistoryAction, findBlocker } from "./blocker-store.ts";
 import { cacheKey, loaderCache } from "./cache.ts";
 import { moduleView, parseDataPayload } from "./data-payload.ts";
 import { reviveDeferred } from "./deferred-revive.ts";
-import { assignExternal, createLocationKey, matchPatternForPath, parseTo, toSamePath } from "./nav-utils.ts";
+import {
+  assignExternal,
+  createLocationKey,
+  dataRedirectTarget,
+  matchPatternForPath,
+  parseTo,
+  toSamePath,
+} from "./nav-utils.ts";
 import { type RevalidationInfo, registerNavigator, registerRevalidator } from "./revalidation.ts";
 import { commitWithTransition } from "./view-transition.ts";
 import {
@@ -138,6 +145,11 @@ export function ClientRouter({
 
   // Stable ref to navigate so loadRoute can call it without a circular dep.
   const navigateRef = useRef<(to: string, options?: NavigateOptions) => Promise<void>>(null!);
+  // Monotonic navigation id. Each loadRoute takes the next one; any await that
+  // resolves after a newer navigation started is "superseded" and must not
+  // commit, push history, or reset the nav state — otherwise a slow A landing
+  // after a fast B puts A's data and URL over B's page.
+  const navSeqRef = useRef(0);
 
   // Refs mirroring state that the stable revalidate/submit callbacks need.
   const locationRef = useRef(location);
@@ -200,16 +212,38 @@ export function ClientRouter({
    */
   const loadRoute = useCallback(
     async (to: string, locInit?: LocationInit): Promise<false | void> => {
+      const seq = ++navSeqRef.current;
+      const superseded = () => seq !== navSeqRef.current;
       setNavState("loading");
       setNavDetail((prev) => ({ ...prev, location: toLocation(to, locInit) }));
       // Follow a redirect Location from client-side beforeLoad. Same-origin
       // targets stay in the SPA; an off-origin/protocol-relative Location is NOT
       // fed to the router — we do a full-page navigation so the browser's own
       // cross-origin handling applies and we never open-redirect via pushState.
-      const followRedirect = (loc: string) => {
+      // Hand the navigation to the browser. A target that differs from the
+      // current URL only by its hash would be a fragment navigation (which
+      // fires popstate → loadRoute again → the same failure → a loop), so that
+      // case reloads the document at the target instead.
+      const hardNavigate = (target: string) => {
+        const next = new URL(target, window.location.href);
+        if (next.pathname === window.location.pathname && next.search === window.location.search) {
+          history.replaceState(history.state, "", next.href);
+          window.location.reload();
+          return;
+        }
+        window.location.assign(next.href);
+      };
+      // `res` carries the redirect's markers when it came from the server:
+      // redirectDocument() asks for a full document load, replace() for a
+      // history replace — the same contract the action submit path honours.
+      const followRedirect = (loc: string, res?: Response) => {
         const safe = toSamePath(loc);
         if (safe) {
-          void navigateRef.current(safe);
+          if (res?.headers.has("X-BractJS-Reload-Document")) {
+            window.location.assign(safe);
+            return;
+          }
+          void navigateRef.current(safe, { replace: res?.headers.has("X-BractJS-Replace") ?? false });
           return;
         }
         assignExternal(loc);
@@ -236,6 +270,7 @@ export function ClientRouter({
           chunkUrl ? (import(/* @vite-ignore */ chunkUrl) as Promise<RouteModuleClient>) : null,
           loadLayoutModules(pattern !== null ? manifest.routes[pattern]?.layouts : undefined),
         ]);
+        if (superseded()) return false;
         const view = moduleView(routeModule);
         // One context per navigation: clientMiddleware, beforeLoad and the
         // client loaders share it (context.set in middleware → .get in loaders).
@@ -252,19 +287,23 @@ export function ClientRouter({
               context: clientContext,
               location: { pathname: url.pathname, search: url.search },
             });
+            if (superseded()) return false;
             if (result instanceof Response) {
               const loc = result.headers.get("Location");
               if (loc) {
-                followRedirect(loc);
-                return;
+                // `false`: the redirect target's navigation owns history now;
+                // navigate() must not push `to` on top of it.
+                followRedirect(loc, result);
+                return false;
               }
             }
           } catch (err) {
+            if (superseded()) return false;
             if (err instanceof Response) {
               const loc = (err as Response).headers.get("Location");
               if (loc) {
-                followRedirect(loc);
-                return;
+                followRedirect(loc, err as Response);
+                return false;
               }
             }
             throw err;
@@ -291,13 +330,42 @@ export function ClientRouter({
         const key = cacheKey(toPathname, deps);
 
         const cached = loaderCache.get(key);
-        if (cached?.fresh) {
+        if (cached?.fresh && !cached.raw) {
           // Serve from cache immediately; skip fetch.
           commit(cached.data, routeModule);
           setNavState("idle");
           return;
         }
-        if (cached && !cached.fresh) {
+        if (cached?.fresh && cached.raw) {
+          // A prefetched server payload: run the client chain over it exactly
+          // as the fetch path does (clientMiddleware gates, clientLoader
+          // slices for root/layouts/route), then cache the finished data.
+          // applyClientLoaders works in place, so drop the raw entry first — a
+          // gate that short-circuits or throws must not leave a half-processed
+          // payload behind that a later hit would process twice.
+          loaderCache.delete(key);
+          const data = await runClientMiddleware(
+            chain,
+            { request: dataRequest, params: {}, context: clientContext },
+            async () => {
+              await applyClientLoaders(chain, cached.data, {
+                request: dataRequest,
+                params: (cached.data.params as Record<string, string>) ?? {},
+                search: (cached.data.search as Record<string, unknown>) ?? {},
+                context: clientContext,
+              });
+              return cached.data;
+            },
+          );
+          if (!data) return false;
+          loaderCache.set(key, data, staleTime, gcTime);
+          if (superseded()) return false;
+          commit(data, routeModule);
+          return;
+        }
+        // A stale RAW entry is not worth showing (the client hooks haven't run
+        // over it): fall through to a normal fetch.
+        if (cached && !cached.fresh && !cached.raw) {
           // Stale-while-revalidate: render stale data immediately, then refresh.
           commit(cached.data, routeModule);
           setNavState("idle");
@@ -316,7 +384,9 @@ export function ClientRouter({
           // Revalidate in background.
           void fetch(`/_data?path=${encodeURIComponent(dataPath)}`)
             .then((r) => {
-              if (r.ok) return r.json();
+              // A redirect (204 + X-BractJS-Redirect) means the page no longer
+              // loads here either (e.g. the session expired): same as a failure.
+              if (r.ok && dataRedirectTarget(r) === null) return r.json();
               // The page no longer loads (e.g. a root loader now fails): drop
               // the stale entry and let the server render it, if still here.
               loaderCache.delete(key);
@@ -329,6 +399,8 @@ export function ClientRouter({
               if (!fresh) return;
               const freshData = reviveDeferred(fresh as Record<string, unknown>);
               loaderCache.set(key, freshData, staleTime, gcTime);
+              // The cache is warm either way; only the page still on screen renders it.
+              if (superseded()) return;
               startTransition(() => applyPayload(freshData));
             })
             // A background refresh: on a network error, keep the stale page.
@@ -342,14 +414,23 @@ export function ClientRouter({
           { request: dataRequest, params: {}, context: clientContext },
           async () => {
             const res = await fetch(`/_data?path=${encodeURIComponent(dataPath)}`);
+            // A loader / middleware / beforeLoad redirect arrives enveloped
+            // (204 + X-BractJS-Redirect): a raw 3xx would have been followed by
+            // fetch() to an HTML document that is not JSON.
+            const redirectTo = dataRedirectTarget(res);
+            if (redirectTo !== null) {
+              if (!superseded()) followRedirect(redirectTo, res);
+              return null;
+            }
             // Layout and route loader errors arrive as a 200 with the error in
             // their slot. Anything else (a failed root loader, an unmatched
             // path, a search-validation 400, a 5xx) has no client-side
             // rendering: hand the navigation to the browser so the server
             // renders the real response. (Never parse a non-ok body as JSON.)
             if (!res.ok) {
+              if (superseded()) return null;
               console.error(`[bractjs] /_data ${res.status} for ${to}`);
-              window.location.assign(to);
+              hardNavigate(to);
               return null;
             }
             const payload = reviveDeferred((await res.json()) as Record<string, unknown>);
@@ -366,8 +447,8 @@ export function ClientRouter({
           },
         );
         if (!data) return false;
-
         if (staleTime > 0) loaderCache.set(key, data, staleTime, gcTime);
+        if (superseded()) return false;
 
         // Update DevTools state (dev-only — no-op in prod since the import fails).
         const w = window as unknown as { __BRACT_DEV__?: boolean };
@@ -393,16 +474,26 @@ export function ClientRouter({
         }
         commit(data, routeModule);
       } catch (err) {
+        if (superseded()) return false;
         // `throw redirect(...)` from clientMiddleware or a clientLoader.
         const loc = err instanceof Response ? err.headers.get("Location") : null;
         if (loc) {
-          followRedirect(loc);
+          followRedirect(loc, err as Response);
           return false;
         }
+        // The route could not be loaded client-side (a chunk 404 after a
+        // deploy, a network error, a client hook that threw). Returning
+        // `false` keeps navigate() from pushing a URL the page never reached;
+        // the document load lets the server render the target for real.
         console.error("[bractjs] loadRoute error:", err);
+        hardNavigate(to);
+        return false;
       } finally {
-        setNavState("idle");
-        setNavDetail({});
+        // A superseded navigation's bookkeeping belongs to the newer one.
+        if (!superseded()) {
+          setNavState("idle");
+          setNavDetail({});
+        }
       }
     },
     [manifest, applyPayload, rootModule],
@@ -476,6 +567,10 @@ export function ClientRouter({
         : byDefault;
       if (!allow) return;
       if (info?.formMethod) loaderCache.clear();
+      // A navigation that starts while we revalidate owns the page from then on
+      // — including one already in flight when we began (same seq, new location).
+      const seq = navSeqRef.current;
+      const stillHere = () => navSeqRef.current === seq && locationRef.current.key === loc.key;
       setRevalidationState("loading");
       try {
         const chain: ClientChain = {
@@ -490,7 +585,20 @@ export function ClientRouter({
           { request, params: paramsRef.current, context },
           async () => {
             const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
+            // Enveloped redirect (e.g. the session expired): go there instead.
+            const redirectTo = dataRedirectTarget(res);
+            if (redirectTo !== null) {
+              if (stillHere()) {
+                const safe = toSamePath(redirectTo);
+                if (safe && res.headers.has("X-BractJS-Reload-Document")) window.location.assign(safe);
+                else if (safe)
+                  void navigateRef.current(safe, { replace: res.headers.has("X-BractJS-Replace") });
+                else assignExternal(redirectTo);
+              }
+              return null;
+            }
             if (!res.ok) {
+              if (!stillHere()) return null;
               // The current page no longer renders client-side (see loadRoute).
               console.error(`[bractjs] revalidate /_data ${res.status} for ${path}`);
               window.location.assign(path);
@@ -507,7 +615,9 @@ export function ClientRouter({
             return payload;
           },
         );
-        if (data) commitWithTransition(info?.viewTransition, () => applyPayload(data));
+        if (data && stillHere()) {
+          commitWithTransition(info?.viewTransition, () => applyPayload(data));
+        }
       } catch (err) {
         const loc = err instanceof Response ? err.headers.get("Location") : null;
         if (loc) {
@@ -614,7 +724,15 @@ export function ClientRouter({
         const res = await fetch(`/_data?path=${encodeURIComponent(path)}`);
         // A redirect here is a beforeLoad gate (SPA shells skip server-side
         // gating on the document). Do a real navigation — never render a
-        // protected route around redirected data.
+        // protected route around redirected data. The server envelopes it
+        // (204 + X-BractJS-Redirect); `redirected` covers a raw 3xx too.
+        const redirectTo = dataRedirectTarget(res);
+        if (redirectTo !== null) {
+          const safe = toSamePath(redirectTo);
+          if (safe) window.location.assign(safe);
+          else assignExternal(redirectTo);
+          return;
+        }
         if (res.redirected) {
           const safe = toSamePath(res.url);
           window.location.assign(safe ?? res.url);
@@ -791,6 +909,8 @@ export function ClientRouter({
             assignExternal(envelope);
             return REDIRECTED;
           }
+          // data(null, { status: 204 }) — no body to parse.
+          if (res.status === 204) return null;
           if (res.redirected) {
             const safe = toSamePath(res.url);
             if (safe) {

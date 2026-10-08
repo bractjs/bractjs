@@ -206,7 +206,9 @@ describe("layout loader errors (/_data)", () => {
 
   test("a redirect still wins over a layout HttpError", async () => {
     const res = await handleRequest(req("http://x/_data?path=/g/page"), trie, config, {});
-    expect(res.status).toBe(302);
+    // /_data redirects travel as the 204 envelope (fetch() would follow a raw 3xx).
+    expect(res.status).toBe(204);
+    expect(res.headers.get("X-BractJS-Redirect")).not.toBeNull();
   });
 });
 

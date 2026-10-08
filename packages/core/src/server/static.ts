@@ -69,11 +69,32 @@ function hasDotDotSegment(pathname: string): boolean {
   return pathname.split("/").includes("..");
 }
 
+/**
+ * Percent-decode a request pathname for a filesystem lookup. `null` for a
+ * malformed escape or an embedded NUL (never a legitimate file name). Callers
+ * run every traversal guard on the DECODED value.
+ */
+export function decodePathname(pathname: string): string | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  // NUL is never a file name; a decoded backslash (`%5C`) is a path separator
+  // on Windows that the `/`-based segment guards would not see.
+  return decoded.includes("\0") || decoded.includes("\\") ? null : decoded;
+}
+
 export async function serveStatic(
-  pathname: string,
+  rawPathname: string,
   buildDir: string,
   publicDir: string,
 ): Promise<Response | null> {
+  // `url.pathname` keeps its percent-encoding: "/public/my%20file.png" must
+  // find "my file.png" on disk. Decode once, then guard the decoded path.
+  const pathname = decodePathname(rawPathname);
+  if (pathname === null) return null;
   if (hasDotDotSegment(pathname)) return null;
 
   if (pathname.startsWith("/build/client/")) {

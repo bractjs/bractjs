@@ -11,6 +11,8 @@ type Params = Record<string, string>;
  * their existing default headers untouched in that case.
  */
 export declare function resolveHeaders(chain: LayoutChain, loaderData: LoaderResults, params: Params, request: Request, actionInit?: ResponseInit | null): Headers | null;
+/** `headers.set(key, value)`, but Set-Cookie values accumulate instead of overwriting. */
+export declare function setOrAppendCookie(headers: Headers, key: string, value: string): void;
 /**
  * Copy resolved route headers onto a base headers object, overriding any
  * same-key defaults. Mutates and returns `base`. No-op when `resolved` is null.
