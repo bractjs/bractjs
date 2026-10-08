@@ -1,5 +1,13 @@
 /** Record the socket address for a request (the server adapter). Not part of the public API. */
 export declare function setClientAddress(request: Request, address: string): void;
+/**
+ * Carry the recorded socket address over to a request the framework derived
+ * from `from` (the `/_data` target request, the parsed-form proxy an action
+ * receives). Keyed by object identity, the address would otherwise be lost
+ * and `getClientAddress()` would answer undefined in loaders and actions.
+ * Not part of the public API.
+ */
+export declare function inheritClientAddress(from: Request, to: Request): void;
 export interface ClientAddressOptions {
     /**
      * Behind a reverse proxy / load balancer, the socket address is the proxy's.

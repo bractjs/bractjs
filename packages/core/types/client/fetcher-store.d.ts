@@ -15,6 +15,13 @@ declare class FetcherStore {
     private snapshot;
     get(key: string): FetcherEntry | undefined;
     update(key: string, partial: Partial<Omit<FetcherEntry, "key">>): void;
+    /**
+     * `update`, but only while the entry still exists. Every write after an
+     * operation's first one goes through this: an unkeyed fetcher removes its
+     * entry on unmount, and an in-flight load/submit finishing afterwards must
+     * not resurrect it as a ghost in `useFetchers()`.
+     */
+    patch(key: string, partial: Partial<Omit<FetcherEntry, "key">>): void;
     remove(key: string): void;
     /**
      * Back to a pristine idle entry: clears `data`, `formData` and `formMethod`

@@ -5,7 +5,7 @@ import { NodeAdapter } from "../adapters/node.ts";
 import { BunAdapter } from "../server/adapter.ts";
 import { withCompression } from "../server/compression.ts";
 import { buildFetchHandler } from "../server/serve.ts";
-import { clearWebSocketEndpoints, registerUpgrader, websocket } from "../server/websocket.ts";
+import { clearWebSocketEndpoints, registerUpgrader, websocket, wrapSocket } from "../server/websocket.ts";
 
 const TMP = resolve(import.meta.dir, ".tmp-websocket");
 const SRC = resolve(import.meta.dir, "..");
@@ -95,22 +95,89 @@ describe("websocket() dispatch", () => {
   });
 });
 
+describe("wrapSocket — send() reports whether the message was accepted", () => {
+  const raw = (send: () => unknown, extra: Record<string, unknown> = {}) => ({
+    send,
+    close: () => {},
+    ...extra,
+  });
+
+  test("Bun statuses: dropped (0) → false; queued (-1) or sent (>0) → true", () => {
+    expect(
+      wrapSocket(
+        raw(() => 0),
+        null,
+      ).send("x"),
+    ).toBe(false);
+    expect(
+      wrapSocket(
+        raw(() => -1),
+        null,
+      ).send("x"),
+    ).toBe(true);
+    expect(
+      wrapSocket(
+        raw(() => 5),
+        null,
+      ).send("x"),
+    ).toBe(true);
+  });
+
+  test("Deno: no return value → true; throws when not open → false", () => {
+    expect(
+      wrapSocket(
+        raw(() => undefined),
+        null,
+      ).send("x"),
+    ).toBe(true);
+    const closed = raw(() => {
+      throw new DOMException("not open", "InvalidStateError");
+    });
+    expect(wrapSocket(closed, null).send("x")).toBe(false);
+  });
+
+  test("bufferedAmount() reads Bun's getBufferedAmount() or Deno's property", () => {
+    expect(
+      wrapSocket(
+        raw(() => 1, { getBufferedAmount: () => 42 }),
+        null,
+      ).bufferedAmount(),
+    ).toBe(42);
+    expect(
+      wrapSocket(
+        raw(() => 1, { bufferedAmount: 7 }),
+        null,
+      ).bufferedAmount(),
+    ).toBe(7);
+    expect(
+      wrapSocket(
+        raw(() => 1),
+        null,
+      ).bufferedAmount(),
+    ).toBe(0);
+  });
+});
+
 describe("websocket() on a real Bun server", () => {
   test("open, message, close — with the data from upgrade()", async () => {
     const events: string[] = [];
     const closed = Promise.withResolvers<void>();
+    const sendResults: { open?: boolean; afterClose?: boolean; buffered?: number } = {};
     websocket<{ name: string }>("/ws/echo", {
       upgrade: ({ request }) => ({ name: new URL(request.url).searchParams.get("name") ?? "anon" }),
       open(ws) {
         events.push("open");
-        ws.send(`hello ${ws.data.name}`);
+        sendResults.open = ws.send(`hello ${ws.data.name}`);
+        sendResults.buffered = ws.bufferedAmount();
       },
       message(ws, message) {
         events.push(`message ${String(message)}`);
         ws.send(`echo: ${String(message)}`);
       },
-      close(_ws, code) {
+      close(ws, code) {
         events.push(`close ${code}`);
+        // The peer is gone: the runtime drops this, and send() says so.
+        sendResults.afterClose = ws.send("too late");
         closed.resolve();
       },
     });
@@ -132,6 +199,9 @@ describe("websocket() on a real Bun server", () => {
       client.close(1000);
       await closed.promise;
       expect(events).toEqual(["open", "message ping", "close 1000"]);
+      expect(sendResults.open).toBe(true);
+      expect(typeof sendResults.buffered).toBe("number");
+      expect(sendResults.afterClose).toBe(false);
     } finally {
       adapter.stop();
     }

@@ -10,6 +10,11 @@ All notable changes to BractJS are documented here.
 
 - `bractjs start` now **refuses to start** when `app/server.ts` fails to import (it used to warn and serve without that file's global middleware). Set `NODE_ENV=development` to keep the old warn-and-continue while debugging.
 - `/_data` redirects are delivered as `204 No Content` + `X-BractJS-Redirect` (the envelope `/_action` already used), never as a raw 3xx. Only the framework's own client reads `/_data`; the `@bractjs/bractjs/testing` `data()` helper now throws "redirected to …" for a gated route.
+- **Route params are percent-decoded**, as in React Router: `/posts/a%20b` gives `params.id === "a b"`, so `generatePath()` / `buildPath()` round-trip. A malformed escape is left as written. Remove any `decodeURIComponent(params.x)` of your own, or it will decode twice. **A decoded value can now contain `/`, `..`, `?` or a NUL** (`/files/..%2Fsecret` gives `"../secret"`): validate a param before using it in a filesystem path. The generated `routes[...]` builders now encode their params, like `buildPath()`. (Typed `/api` and WebSocket `:param` values stay raw, as before.)
+
+### Added
+
+- **`ws.send()` reports whether the message was accepted** (`false` when the socket is closing or closed), and **`ws.bufferedAmount()`** reports bytes still queued, so a WebSocket producer can slow down under backpressure. Same on Bun and Deno.
 
 ### Fixed
 
@@ -32,6 +37,13 @@ All notable changes to BractJS are documented here.
 - `/_image` disk cache: concurrent cold misses for the same variant shared one temp file (a truncated image could be renamed into place and served `immutable`). Temp names are unique per writer, and a failing disk cache is now logged once instead of silently re-running ImageMagick after every restart.
 - `examples/cms`: the rich-text sanitizer's regexes backtracked quadratically on an unclosed tag or a long attribute run — an editor could block the server for hours with one 5 MB body. Both scans are linear now.
 - `validate()` docs: it throws a `400 Response` (as it always did), not a `ValidationError` instance.
+- **A loader that _returns_ `redirect()` is honoured** like a thrown one (document 302, `/_data` envelope) — it used to be rendered as page data. A `clientLoader` redirect, thrown or returned, now navigates too (a thrown one was logged and swallowed), including from `fetcher.load()` and a `clientLoader.hydrate` on first load. A returned 3xx without a `Location` (a 304) is still data.
+- **A render error in `root.tsx`, its `Layout` or a layout component** answers the root ErrorBoundary in an HTML 500 document that hydrates, and fires `onError`, instead of a JSON `{"error":…}` body. Only an explicit dev process shows the real message. A `redirect()`, `HttpError` or `Response` thrown while rendering keeps its meaning.
+- **`root.ts` apps work in every mode.** Under `bractjs dev` / `start` the root module was only looked for as `root.tsx`, so a `root.ts` app (or an app with no root module) ran its first layout as "root", and codegen emitted an import of `../root.tsx`. One helper now resolves the root module everywhere.
+- **`/_stream` is pull-driven:** a generator advances only as the client reads (no unbounded server-side queue), a client disconnect stops it and runs its `finally`, and values yielded after the first still see the request (`getRequest()`). The client cancels the response body when a consumer stops early.
+- **Dev server:** file-change bursts are handled together (a save touching `x.server.ts` and a route in the same instant no longer loses the restart), rebuilds never overlap, and the route manifest is written atomically, so a request during a rebuild can't read a half-written file. Route edits hot-swap the module again — the swap message pointed at a chunk URL that didn't exist, so every edit fell back to a full reload.
+- **`useFetchers()` ghost entries:** an unkeyed fetcher, `<Form navigate={false}>` or `useSubmit({ navigate: false })` whose component unmounted mid-request no longer reappears when the request finishes.
+- **`getClientAddress(request)` in actions and soft-navigation loaders** returned `undefined`: the request those receive is derived from the incoming one, and the address didn't carry over.
 
 ---
 

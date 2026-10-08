@@ -2,6 +2,7 @@
 // module in the matched chain (root → layouts → route), shared by the router
 // (navigation, revalidation, submissions) and fetchers.
 import type { ClientMiddlewareFunction } from "../shared/route-types.ts";
+import { isRedirect } from "../shared/errors.ts";
 import { RouterContextProvider } from "../shared/router-context.ts";
 import type { RouteModuleClient } from "./router.tsx";
 
@@ -67,10 +68,20 @@ export async function runClientMiddleware<T>(
 }
 
 /**
+ * `value` when it is a redirect a loader meant to follow — a 3xx Response
+ * carrying a `Location` (a returned 304 Not Modified is not one) — else null.
+ */
+export function redirectOf(value: unknown): Response | null {
+  return isRedirect(value) && value.headers.has("Location") ? value : null;
+}
+
+/**
  * Run each module's `clientLoader` over its own slice of a `/_data` payload
  * (root → `data.root`, layout i → `data.layouts[i]`, route → `data.route`),
  * in parallel. Each gets `serverLoader()` resolving to its server slice.
- * A failing clientLoader is logged and leaves the server slice in place.
+ * A failing clientLoader is logged and leaves the server slice in place —
+ * except a redirect, thrown or returned (React Router honours both), which
+ * propagates so the navigation / revalidation / fetcher follows it.
  */
 export async function applyClientLoaders(
   chain: ClientChain,
@@ -80,12 +91,17 @@ export async function applyClientLoaders(
   const run = async (mod: RouteModuleClient | null, serverSlice: unknown): Promise<unknown> => {
     const clientLoader = mod?.clientLoader;
     if (typeof clientLoader !== "function") return serverSlice;
+    let value: unknown;
     try {
-      return await clientLoader({ ...args, serverLoader: () => Promise.resolve(serverSlice) });
+      value = await clientLoader({ ...args, serverLoader: () => Promise.resolve(serverSlice) });
     } catch (err) {
+      if (redirectOf(err)) throw err;
       console.error("[bractjs] clientLoader error:", err);
       return serverSlice;
     }
+    const redirect = redirectOf(value);
+    if (redirect) throw redirect;
+    return value;
   };
   const layouts = (data.layouts as unknown[] | undefined) ?? [];
   const [root, route, ...layoutSlices] = await Promise.all([

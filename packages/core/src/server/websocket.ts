@@ -21,7 +21,14 @@ import {
 export interface BractWebSocket<Data = unknown> {
   /** What `upgrade()` returned for this connection. */
   readonly data: Data;
-  send(message: string | ArrayBuffer | Uint8Array): void;
+  /**
+   * Send a message. `true` when the runtime accepted it (on Bun it may be
+   * queued under backpressure — see `bufferedAmount()`), `false` when it was
+   * dropped: the socket is closing or closed.
+   */
+  send(message: string | ArrayBuffer | Uint8Array): boolean;
+  /** Bytes queued but not yet sent: throttle producers while this grows. */
+  bufferedAmount(): number;
   close(code?: number, reason?: string): void;
   /** The runtime's own socket (Bun's ServerWebSocket, Deno's WebSocket). */
   readonly raw: unknown;
@@ -107,13 +114,35 @@ export function wrapSocket<Data>(
   raw: {
     send(m: string | ArrayBuffer | Uint8Array): unknown;
     close(code?: number, reason?: string): unknown;
+    /** Bun's ServerWebSocket. */
+    getBufferedAmount?(): number;
+    /** Deno's (standard) WebSocket. */
+    readonly bufferedAmount?: number;
+    /** 0 connecting, 1 open, 2 closing, 3 closed (both runtimes). */
+    readonly readyState?: number;
   },
   data: Data,
 ): BractWebSocket<Data> {
   return {
     data,
     raw,
-    send: (message) => void raw.send(message),
+    send: (message) => {
+      // A closing/closed standard WebSocket (Deno) discards silently rather
+      // than throwing, so ask it first. Bun returns a status (-1 queued under
+      // backpressure, 0 dropped, >0 bytes sent); a not-yet-open socket throws
+      // InvalidStateError. A TypeError (unsupported message type) is a bug in
+      // the caller and still surfaces.
+      if (typeof raw.readyState === "number" && raw.readyState !== 1) return false;
+      try {
+        const status = raw.send(message);
+        return typeof status === "number" ? status !== 0 : true;
+      } catch (err) {
+        if (err instanceof TypeError) throw err;
+        return false;
+      }
+    },
+    bufferedAmount: () =>
+      typeof raw.getBufferedAmount === "function" ? raw.getBufferedAmount() : (raw.bufferedAmount ?? 0),
     close: (code, reason) => void raw.close(code, reason),
   };
 }

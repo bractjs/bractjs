@@ -1054,7 +1054,7 @@ websocket<{ name: string }>("/ws/chat/:room", {
 });
 ```
 
-A handshake goes through the global pipeline, then the endpoint's `middleware`, then `upgrade()`, which returns the per-connection `ws.data` or a `Response` to refuse. **A handshake from another site is refused** (403): browsers let any page open a WebSocket to your host with the user's cookies, so the `Origin` must be yours. `ws.raw` is the runtime's own socket. The Node.js server refuses to start when an app defines endpoints (Node has no built-in WebSocket server); use Bun or Deno.
+A handshake goes through the global pipeline, then the endpoint's `middleware`, then `upgrade()`, which returns the per-connection `ws.data` or a `Response` to refuse. **A handshake from another site is refused** (403): browsers let any page open a WebSocket to your host with the user's cookies, so the `Origin` must be yours. `ws.send()` returns `false` when the message was dropped because the socket is closing or closed, and `ws.bufferedAmount()` reports bytes still queued, so a producer can slow down under backpressure. `ws.raw` is the runtime's own socket. The Node.js server refuses to start when an app defines endpoints (Node has no built-in WebSocket server); use Bun or Deno.
 
 ## 13. Input validation: `validate`
 

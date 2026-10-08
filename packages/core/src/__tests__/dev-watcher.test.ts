@@ -33,6 +33,37 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<bool
 }
 
 describe("watchApp", () => {
+  test("a burst reports every changed file, not just the last", async () => {
+    const dir = makeTempAppDir();
+    const bursts: string[][] = [];
+    trackedWatch(dir, (_file, info) => {
+      bursts.push(info.files);
+    });
+    // A fresh fs.watch (FSEvents on macOS) can miss writes made before it is
+    // armed: wait until one write is seen, then start from a clean slate.
+    let armed = false;
+    for (let attempt = 0; attempt < 5 && !armed; attempt++) {
+      writeFileSync(join(dir, "warmup.ts"), `export const n = ${attempt};`);
+      armed = await waitFor(() => bursts.flat().includes("warmup.ts"), 1500);
+    }
+    expect(armed).toBe(true);
+    await Bun.sleep(100);
+    bursts.length = 0;
+
+    // Two writes inside one 50ms debounce window: a server module and a route.
+    // Reporting only the last one used to drop the restart for x.server.ts.
+    // FSEvents can drop events on a busy machine, so re-write the pair (up to
+    // 3 times) until one burst reports both — the two writes are back-to-back,
+    // so with the fix they share a burst.
+    const bothInOneBurst = () => bursts.some((b) => b.includes("page.tsx") && b.includes("x.server.ts"));
+    for (let attempt = 0; attempt < 3 && !bothInOneBurst(); attempt++) {
+      writeFileSync(join(dir, "x.server.ts"), `export const x = ${attempt};`);
+      writeFileSync(join(dir, "page.tsx"), `export default function P() { return ${attempt}; }`);
+      await waitFor(bothInOneBurst, 3000);
+    }
+    expect(bothInOneBurst()).toBe(true);
+  });
+
   test("reports changes and stops reporting after close()", async () => {
     const dir = makeTempAppDir();
     const seen: string[] = [];

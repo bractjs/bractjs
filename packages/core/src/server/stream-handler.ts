@@ -1,3 +1,6 @@
+// Namespace import, as in request-context.ts: the client build resolves this
+// graph through the package barrel, where node:async_hooks is an empty shim.
+import * as asyncHooks from "node:async_hooks";
 import { type ActionGateOptions, runActionGate } from "./action-handler.ts";
 import { resolveActionEntry } from "./action-registry.ts";
 import { csrfHint } from "./csrf.ts";
@@ -76,10 +79,46 @@ export async function handleStreamRequest(
   return runActionGate(request, entry, gate, async () => streamAction(entry.fn));
 }
 
+/**
+ * Run `fn` later in the async context that is current NOW (the request's:
+ * getRequest(), request ids, tracing spans). The stream's pull() is invoked
+ * by whatever reads the body, outside that context, and an async generator
+ * resumes in its caller's context. Falls back to a direct call where the
+ * runtime has no AsyncLocalStorage.snapshot().
+ */
+function captureContext(): <R>(fn: () => R) => R {
+  const snapshot = (asyncHooks.AsyncLocalStorage as unknown as { snapshot?: () => <R>(fn: () => R) => R })
+    ?.snapshot;
+  return typeof snapshot === "function" ? snapshot() : (fn) => fn();
+}
+
 function streamAction(action: () => Promise<unknown>): Response {
-  const stream = new ReadableStream({
+  const encoder = new TextEncoder();
+  // Pull-driven: the generator advances one value per chunk the client reads,
+  // so a slow reader is backpressure, not an ever-growing server-side queue;
+  // a disconnect cancels the stream and runs the generator's `finally`.
+  let iterator: AsyncIterator<unknown> | null = null;
+  let single: { value: unknown } | null = null;
+  let cancelled = false;
+  let inContext: <R>(fn: () => R) => R = (fn) => fn();
+
+  const fail = (controller: ReadableStreamDefaultController<Uint8Array>, err: unknown): void => {
+    // The client went away: there is no one to tell, and it is not a server error.
+    if (cancelled) return;
+    // Never expose internal error details to clients in production.
+    const message = isExplicitDev()
+      ? err instanceof Error
+        ? err.message
+        : String(err)
+      : "Internal server error";
+    console.error("[bractjs] stream action error:", err);
+    controller.enqueue(encoder.encode(sseChunk("error", { message })));
+    controller.close();
+  };
+
+  const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const encoder = new TextEncoder();
+      inContext = captureContext();
       try {
         // SECURITY(medium): /_stream invokes the resolved action with NO
         // caller-supplied arguments (GET carries no body, and we deliberately
@@ -92,33 +131,56 @@ function streamAction(action: () => Promise<unknown>): Response {
         const result = await action();
         // If the action is an async generator, stream each value.
         if (result && typeof (result as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function") {
-          // SECURITY(medium): no per-stream yield cap. A malicious or buggy
-          // generator that yields forever holds a connection open and pegs
-          // serialization CPU. The Bun.serve runtime aborts when the client
-          // disconnects, so the worst case is a slow attacker keeping their
-          // own connection open — bounded by OS fd limits, not memory.
-          // Apps wanting hard bounds should wrap their generator with a
-          // count/time limit before exporting it as an action.
-          for await (const value of result as AsyncIterable<unknown>) {
-            controller.enqueue(encoder.encode(sseChunk("data", value)));
+          // No per-stream yield cap: a generator that yields forever holds
+          // its own connection open (bounded by fd limits, and by the client,
+          // which can disconnect — that cancels it). Apps wanting hard bounds
+          // should wrap their generator with a count/time limit.
+          iterator = (result as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+          // The client may have gone while the action was still running: the
+          // iterator then never gets a pull, so close it here.
+          if (cancelled) {
+            const it = iterator;
+            iterator = null;
+            if (it.return) await inContext(() => it.return!()).catch(() => {});
           }
         } else {
           // Plain return value: emit once then close.
-          controller.enqueue(encoder.encode(sseChunk("data", result)));
+          single = { value: result };
+        }
+      } catch (err) {
+        fail(controller, err);
+      }
+    },
+    async pull(controller) {
+      try {
+        if (single) {
+          const { value } = single;
+          single = null;
+          controller.enqueue(encoder.encode(sseChunk("data", value)));
+          return;
+        }
+        if (iterator) {
+          const it = iterator;
+          const { done, value } = await inContext(() => it.next());
+          if (cancelled) return;
+          if (!done) {
+            controller.enqueue(encoder.encode(sseChunk("data", value)));
+            return;
+          }
         }
         controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
-      } catch (err) {
-        // Never expose internal error details to clients in production.
-        const message = isExplicitDev()
-          ? err instanceof Error
-            ? err.message
-            : String(err)
-          : "Internal server error";
-        console.error("[bractjs] stream action error:", err);
-        controller.enqueue(encoder.encode(sseChunk("error", { message })));
-      } finally {
         controller.close();
+      } catch (err) {
+        fail(controller, err);
       }
+    },
+    async cancel() {
+      cancelled = true;
+      const it = iterator;
+      iterator = null;
+      // Let the generator clean up (its `finally` runs). Its own failure while
+      // closing is not the client's concern.
+      if (it?.return) await inContext(() => it.return!()).catch(() => {});
     },
   });
 

@@ -8,6 +8,7 @@ import { generateManifest, writeManifest } from "../build/manifest.ts";
 import { tailwindPlugins } from "../build/plugins/tailwind.ts";
 import { routeShakePlugin } from "../build/plugins/route-shake.ts";
 import { reactDedupePlugin } from "../build/react-dedupe.ts";
+import { resolveRootFileSync } from "../server/root-file.ts";
 import { scanRoutes } from "../server/scanner.ts";
 import type { BractJSConfig } from "../server/serve.ts";
 
@@ -19,7 +20,53 @@ import type { BractJSConfig } from "../server/serve.ts";
 // keeps all entrypoints under one root so chunk refs stay flat and correct.
 const SHIM = ".bractjs-entry.tsx";
 
-export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ duration: number }> {
+/**
+ * Run `run(batch)` one at a time. A batch scheduled while a run is in flight
+ * is merged (via `merge`) with any other waiting batch and runs exactly once
+ * after it — never concurrently. Two overlapping client rebuilds `rm` each
+ * other's output directory, delete the shared entry shim mid-build and
+ * interleave manifest writes. A failing run is logged; later batches still run.
+ * The returned promise settles when the queue has drained.
+ */
+export function serializeRebuilds<T>(
+  run: (batch: T) => Promise<void>,
+  merge: (queued: T, next: T) => T,
+): (batch: T) => Promise<void> {
+  let pending: { batch: T } | null = null;
+  let loop: Promise<void> | null = null;
+  return (batch: T): Promise<void> => {
+    pending = pending ? { batch: merge(pending.batch, batch) } : { batch };
+    loop ??= (async () => {
+      // Yield first: `run` must never execute synchronously inside this `??=`.
+      // A synchronous throw would otherwise finish the loop (and its `finally`
+      // clearing `loop`) before the assignment, leaving a settled promise in
+      // `loop` that blocks every later batch.
+      await null;
+      try {
+        while (pending) {
+          const next = pending.batch;
+          pending = null;
+          try {
+            await run(next);
+          } catch (err) {
+            console.error("[bractjs] watch handler error:", err);
+          }
+        }
+      } finally {
+        loop = null;
+      }
+    })();
+    return loop;
+  };
+}
+
+export interface RebuildResult {
+  duration: number;
+  /** Route pattern → its chunk URL (e.g. "blog/[id]" → "/build/client/app/routes/blog/[id].js"). Empty when the build failed. */
+  routeChunks: Map<string, string>;
+}
+
+export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<RebuildResult> {
   const start = Date.now();
   const appDir = config?.appDir ?? "./app";
   const pkgRoot = resolve(import.meta.dirname, "../..");
@@ -33,7 +80,8 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
 
   const routes = await scanRoutes(appDir);
   const routePaths = routes.map((r) => resolve(process.cwd(), appDir, r.filePath));
-  const rootPath = resolve(process.cwd(), appDir, "root.tsx");
+  const rootName = resolveRootFileSync(appDir);
+  const rootPath = rootName ? resolve(process.cwd(), appDir, rootName) : null;
   const layoutFilesByPattern = await routeLayoutFiles(appDir, routes);
   const layoutSources = [...new Set([...layoutFilesByPattern.values()].flat())];
   const appDirClean = appDir.replace(/^\.\//, ""); // "./app" → "app"
@@ -47,7 +95,7 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
     result = await Bun.build({
       entrypoints: [
         shimPath,
-        rootPath,
+        ...(rootPath ? [rootPath] : []),
         ...routePaths,
         ...layoutSources.map((f) => resolve(process.cwd(), appDir, f)),
       ],
@@ -84,7 +132,7 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
 
   if (!result.success) {
     for (const log of result.logs) console.error("[bractjs] build error:", log);
-    return { duration: Date.now() - start };
+    return { duration: Date.now() - start, routeChunks: new Map() };
   }
 
   const routeChunks = new Map<string, string>();
@@ -148,5 +196,5 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<{ 
     generateManifest({ clientEntry, rootChunk, routeChunks, routeCss, routeLayouts, entryCss, rootCss }),
     buildDir,
   );
-  return { duration: Date.now() - start };
+  return { duration: Date.now() - start, routeChunks };
 }

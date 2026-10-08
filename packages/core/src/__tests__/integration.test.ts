@@ -223,6 +223,15 @@ test("full-page GET of a loader that throws redirect returns the 3xx", async () 
   expect(res.headers.get("location")).toBe("/login");
 });
 
+test("a loader that RETURNS redirect() is honoured: document 302, /_data 204 envelope", async () => {
+  const doc = await fetch(`${BASE}/redirect-loader-return`, { redirect: "manual" });
+  expect(doc.status).toBe(302);
+  expect(doc.headers.get("location")).toBe("/login");
+  const data = await fetch(`${BASE}/_data?path=/redirect-loader-return`, { redirect: "manual" });
+  expect(data.status).toBe(204);
+  expect(data.headers.get("X-BractJS-Redirect")).toBe("/login");
+});
+
 test("/_data of a loader that throws redirect answers the 204 envelope (not a 3xx, not 500)", async () => {
   // fetch() would follow a raw 3xx to the /login *document* — a 200 HTML body
   // the client router cannot parse as JSON. The envelope lets it soft-navigate.

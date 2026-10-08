@@ -8,6 +8,18 @@ export function setClientAddress(request: Request, address: string): void {
   addresses.set(request, address);
 }
 
+/**
+ * Carry the recorded socket address over to a request the framework derived
+ * from `from` (the `/_data` target request, the parsed-form proxy an action
+ * receives). Keyed by object identity, the address would otherwise be lost
+ * and `getClientAddress()` would answer undefined in loaders and actions.
+ * Not part of the public API.
+ */
+export function inheritClientAddress(from: Request, to: Request): void {
+  const address = addresses.get(from);
+  if (address !== undefined) addresses.set(to, address);
+}
+
 export interface ClientAddressOptions {
   /**
    * Behind a reverse proxy / load balancer, the socket address is the proxy's.

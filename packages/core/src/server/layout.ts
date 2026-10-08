@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import type { RouteModule } from "../shared/route-types.ts";
 import { devBustedSpecifier } from "./env.ts";
 import { layoutDirsFromFilePath, type RouteFile } from "./scanner.ts";
+import { resolveRootFile, rootKeyIn } from "./root-file.ts";
 import { fileExists } from "./runtime.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -19,7 +20,14 @@ export interface LayoutChain {
 }
 
 export interface ResolvedRoute extends RouteFile {
+  /** Root first (when the app has one), then layouts outermost → innermost. */
   layoutFiles: string[];
+  /**
+   * The root module's entry in `layoutFiles` (same form: absolute path or
+   * registry key), or undefined when the app has no root module — so callers
+   * never mistake the first layout for root.
+   */
+  rootFile?: string;
 }
 
 /**
@@ -35,12 +43,12 @@ export type ModuleRegistry = Record<string, RouteModule | Record<string, unknown
 export async function resolveLayoutChain(routeFile: RouteFile, appDir: string): Promise<ResolvedRoute> {
   const layoutFiles: string[] = [];
 
-  // root.tsx is always first — resolve to absolute so dynamic import works
-  // regardless of which package file calls importRouteModule.
-  const rootPath = resolve(join(appDir, "root.tsx"));
-  if (await fileExists(rootPath)) {
-    layoutFiles.push(rootPath);
-  }
+  // The root module (root.tsx or root.ts) is always first — resolved to
+  // absolute so dynamic import works regardless of which package file calls
+  // importRouteModule.
+  const rootName = await resolveRootFile(appDir);
+  const rootPath = rootName ? resolve(join(appDir, rootName)) : undefined;
+  if (rootPath) layoutFiles.push(rootPath);
 
   // Intermediate layout.tsx / layout.ts files, outermost → innermost. Derived
   // from the file path so route-group folders ((marketing)/…) contribute their
@@ -59,7 +67,7 @@ export async function resolveLayoutChain(routeFile: RouteFile, appDir: string): 
     }
   }
 
-  return { ...routeFile, layoutFiles };
+  return { ...routeFile, layoutFiles, rootFile: rootPath };
 }
 
 /**
@@ -74,8 +82,8 @@ export function resolveLayoutChainFromRegistry(
   registry: ModuleRegistry,
 ): ResolvedRoute {
   const layoutFiles: string[] = [];
-  if (registry["root.tsx"]) layoutFiles.push("root.tsx");
-  else if (registry["root.ts"]) layoutFiles.push("root.ts");
+  const rootFile = rootKeyIn(registry);
+  if (rootFile) layoutFiles.push(rootFile);
 
   for (const dir of layoutDirsFromFilePath(routeFile.filePath)) {
     const tsxKey = `routes/${dir}/layout.tsx`;
@@ -84,7 +92,7 @@ export function resolveLayoutChainFromRegistry(
     else if (registry[tsKey]) layoutFiles.push(tsKey);
   }
 
-  return { ...routeFile, layoutFiles };
+  return { ...routeFile, layoutFiles, rootFile };
 }
 
 /** A `clientLoader` with `hydrate = true` (the server never calls it — only reads the flag). */
@@ -190,7 +198,8 @@ export async function resolveRouteChain(
 ): Promise<LayoutChain> {
   if (registry) {
     const resolved = resolveLayoutChainFromRegistry(routeFile, registry);
-    const [rootKey, ...layoutKeys] = resolved.layoutFiles;
+    const rootKey = resolved.rootFile;
+    const layoutKeys = rootKey ? resolved.layoutFiles.slice(1) : resolved.layoutFiles;
     const rootMod = rootKey ? pickRouteModule(registry[rootKey]) : {};
     const layoutMods = layoutKeys.map((k) => pickRouteModule(registry[k]));
     const routeKey = routeFile.filePath.split("\\").join("/");
@@ -204,14 +213,21 @@ export async function resolveRouteChain(
   }
 
   const resolved = await resolveLayoutChain(routeFile, appDir);
+  // Without a root module every entry is a layout — never treat the first
+  // layout as root (its middleware/loader would run in the wrong slot).
+  const layoutPaths = resolved.rootFile ? resolved.layoutFiles.slice(1) : resolved.layoutFiles;
 
-  const [rootMod, ...layoutMods] = await Promise.all(resolved.layoutFiles.map(importRouteModule));
-  const routeMod = await importRouteModule(resolve(join(appDir, routeFile.filePath)));
+  const [rootMod, layoutMods, routeMod] = await Promise.all([
+    resolved.rootFile ? importRouteModule(resolved.rootFile) : undefined,
+    Promise.all(layoutPaths.map(importRouteModule)),
+    importRouteModule(resolve(join(appDir, routeFile.filePath))),
+  ]);
 
   // Relativize the absolute layout paths back to appDir-relative for messages.
   const appRoot = resolve(appDir);
   const rel = (abs: string) => (abs.startsWith(appRoot + "/") ? abs.slice(appRoot.length + 1) : abs);
-  const [rootFile, ...layoutFiles] = resolved.layoutFiles.map(rel);
+  const rootFile = resolved.rootFile ? rel(resolved.rootFile) : undefined;
+  const layoutFiles = layoutPaths.map(rel);
 
   return {
     root: rootMod ?? {},
@@ -228,7 +244,7 @@ export async function resolveRouteChain(
  */
 export async function resolveRootChain(appDir: string, registry?: ModuleRegistry): Promise<LayoutChain> {
   if (registry) {
-    const rootKey = registry["root.tsx"] ? "root.tsx" : registry["root.ts"] ? "root.ts" : undefined;
+    const rootKey = rootKeyIn(registry);
     return {
       root: rootKey ? pickRouteModule(registry[rootKey]) : {},
       layouts: [],
@@ -236,16 +252,14 @@ export async function resolveRootChain(appDir: string, registry?: ModuleRegistry
       files: { root: rootKey, layouts: [] },
     };
   }
-  for (const name of ["root.tsx", "root.ts"]) {
-    const rootPath = resolve(join(appDir, name));
-    if (await fileExists(rootPath)) {
-      return {
-        root: await importRouteModule(rootPath),
-        layouts: [],
-        route: {},
-        files: { root: name, layouts: [] },
-      };
-    }
+  const name = await resolveRootFile(appDir);
+  if (name) {
+    return {
+      root: await importRouteModule(resolve(join(appDir, name))),
+      layouts: [],
+      route: {},
+      files: { root: name, layouts: [] },
+    };
   }
   return { root: {}, layouts: [], route: {}, files: { layouts: [] } };
 }
