@@ -16,6 +16,8 @@ export interface FetcherFormProps extends Omit<FormHTMLAttributes<HTMLFormElemen
     intent?: string;
     /** See `SubmitOptions.defaultShouldRevalidate`. */
     defaultShouldRevalidate?: boolean;
+    /** How a relative `action` resolves: against this component's route (default) or the URL's path segments. */
+    relative?: "route" | "path";
     children: ReactNode;
 }
 /** The request a fetcher submission sends (after normalizing either call form). */

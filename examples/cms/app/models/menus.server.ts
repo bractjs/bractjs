@@ -157,7 +157,13 @@ export function reorderMenuItems(
 }
 
 function hrefFor(it: MenuItem): string {
-  if (it.type === "custom") return it.url || "#";
+  if (it.type === "custom") {
+    const url = (it.url ?? "").trim();
+    if (!url) return "#";
+    // An admin-entered "contact" means the site's /contact, wherever the menu
+    // renders — <Link> would resolve a bare relative path against the page.
+    return /^(?:\/|#|\?|[a-z][a-z0-9+.-]*:)/i.test(url) ? url : `/${url}`;
+  }
   if (it.type === "category") {
     const slug = db
       .query<{ slug: string }, [string]>("SELECT slug FROM categories WHERE id = ?")

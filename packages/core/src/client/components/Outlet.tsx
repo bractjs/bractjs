@@ -11,6 +11,8 @@ import {
   BractJSContext,
   type BractJSContextValue,
   LoaderSliceContext,
+  type RouteLevel,
+  RouteLevelContext,
   OutletLevelContext,
 } from "../../shared/context.ts";
 import {
@@ -134,13 +136,15 @@ function OutletInner(): ReactElement | null {
         return (
           <OutletLevelContext.Provider value={level + 1}>
             <LoaderSliceContext.Provider value={failure.index}>
-              <RouteErrorBoundary fallback={DefaultErrorFallback}>
-                <Suspense fallback={null}>
-                  {renderErrorBoundary(Boundary, failure.error, {
-                    params: routerCtx?.params ?? bractCtx?.params,
-                  })}
-                </Suspense>
-              </RouteErrorBoundary>
+              <RouteLevelContext.Provider value={layoutLevel(failure.index)}>
+                <RouteErrorBoundary fallback={DefaultErrorFallback}>
+                  <Suspense fallback={null}>
+                    {renderErrorBoundary(Boundary, failure.error, {
+                      params: routerCtx?.params ?? bractCtx?.params,
+                    })}
+                  </Suspense>
+                </RouteErrorBoundary>
+              </RouteLevelContext.Provider>
             </LoaderSliceContext.Provider>
           </OutletLevelContext.Provider>
         );
@@ -153,7 +157,9 @@ function OutletInner(): ReactElement | null {
     return (
       <OutletLevelContext.Provider value={level + 1}>
         <LoaderSliceContext.Provider value={dataIndex}>
-          <Component {...componentProps(routerCtx, bractCtx, dataIndex)} />
+          <RouteLevelContext.Provider value={layoutLevel(dataIndex)}>
+            <Component {...componentProps(routerCtx, bractCtx, dataIndex)} />
+          </RouteLevelContext.Provider>
         </LoaderSliceContext.Provider>
       </OutletLevelContext.Provider>
     );
@@ -162,9 +168,20 @@ function OutletInner(): ReactElement | null {
   // renders) reads the route's data, not the enclosing layout's.
   return (
     <LoaderSliceContext.Provider value={null}>
-      <RouteOutlet routerCtx={routerCtx} bractCtx={bractCtx} />
+      <RouteLevelContext.Provider value={LEAF}>
+        <RouteOutlet routerCtx={routerCtx} bractCtx={bractCtx} />
+      </RouteLevelContext.Provider>
     </LoaderSliceContext.Provider>
   );
+}
+
+const LEAF: RouteLevel = { kind: "leaf" };
+// One stable object per layout index: a fresh `{ kind, index }` on every
+// router render would change every consumer's context value (and with it the
+// identity of resolvers, fetcher forms, effects keyed on them).
+const LAYOUT_LEVELS: RouteLevel[] = [];
+function layoutLevel(index: number): RouteLevel {
+  return (LAYOUT_LEVELS[index] ??= { kind: "layout", index });
 }
 
 type LayoutModule = { default?: ComponentType; ErrorBoundary?: unknown };

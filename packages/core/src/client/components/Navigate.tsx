@@ -1,11 +1,14 @@
 import { useContext, useEffect, useRef } from "react";
-import { type PathObject, pathToString, resolveHref } from "../nav-utils.ts";
+import { useResolveTo } from "../hooks/useResolveTo.ts";
+import { type PathObject, resolveHref } from "../nav-utils.ts";
 import { NavigationContext } from "../router.tsx";
 
 export interface NavigateProps {
   to: string | Partial<PathObject>;
   replace?: boolean;
   state?: unknown;
+  /** How a relative `to` resolves: against this component's route (default) or the URL's path segments. */
+  relative?: "route" | "path";
 }
 
 /**
@@ -13,10 +16,10 @@ export interface NavigateProps {
  * Renders nothing and does nothing during SSR — redirect in a loader or
  * `beforeLoad` instead when the server should send a 3xx.
  */
-export function Navigate({ to, replace, state }: NavigateProps): null {
+export function Navigate({ to, replace, state, relative }: NavigateProps): null {
   const navCtx = useContext(NavigationContext);
   const done = useRef(false);
-  const href = pathToString(to);
+  const href = useResolveTo()(to, relative);
   useEffect(() => {
     if (!navCtx || done.current) return;
     done.current = true;

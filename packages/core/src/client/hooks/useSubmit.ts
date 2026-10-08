@@ -3,6 +3,7 @@ import { fetcherStore } from "../fetcher-store.ts";
 import { NavigationContext } from "../router.tsx";
 import { normalizeSubmission, type SubmitOptions, type SubmitTarget } from "../submission.ts";
 import { fetcherSubmit } from "./useFetcher.ts";
+import { useResolveTo } from "./useResolveTo.ts";
 
 export type SubmitFunction = (target: SubmitTarget, options?: SubmitOptions) => Promise<void>;
 
@@ -28,13 +29,14 @@ export type SubmitFunction = (target: SubmitTarget, options?: SubmitOptions) => 
 export function useSubmit(): SubmitFunction {
   const navCtx = useContext(NavigationContext);
   const autoKey = useId();
+  const resolve = useResolveTo();
   // `navigate: false` without a fetcherKey uses an auto-keyed fetcher: remove
   // it from useFetchers() when the component unmounts.
   useEffect(() => () => fetcherStore.remove(`__submit${autoKey}`), [autoKey]);
   return useCallback<SubmitFunction>(
     async (target, options = {}) => {
       if (!navCtx) return;
-      const n = normalizeSubmission(target, options);
+      const n = normalizeSubmission(target, options, (action) => resolve(action, options.relative));
       if (options.navigate === false) {
         await fetcherSubmit(options.fetcherKey ?? `__submit${autoKey}`, {
           url: n.url,
@@ -65,6 +67,6 @@ export function useSubmit(): SubmitFunction {
         viewTransition: options.viewTransition,
       });
     },
-    [navCtx, autoKey],
+    [navCtx, autoKey, resolve],
   );
 }

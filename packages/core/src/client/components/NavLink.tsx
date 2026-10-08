@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactNode, useContext } from "react";
 import { useLocation } from "../hooks/useLocation.ts";
-import { type PathObject, parseTo, pathToString } from "../nav-utils.ts";
+import { useResolveTo } from "../hooks/useResolveTo.ts";
+import { type PathObject, parseTo } from "../nav-utils.ts";
 import type { RegisteredRoutes } from "../registry.ts";
 import { NavigationContext } from "../router.tsx";
 import { Link, type LinkProps } from "./Link.tsx";
@@ -53,7 +54,9 @@ export function NavLink<TTo extends RegisteredRoutes = RegisteredRoutes>({
 }: NavLinkProps<TTo>) {
   const location = useLocation();
   const navCtx = useContext(NavigationContext);
-  const targetPath = parseTo(pathToString(rest.to as string | Partial<PathObject>)).pathname;
+  // The same resolution <Link> applies, so "active" compares like with like.
+  const resolve = useResolveTo();
+  const targetPath = parseTo(resolve(rest.to as string | Partial<PathObject>, rest.relative)).pathname;
   const isActive = matches(location.pathname, targetPath, end, caseSensitive);
   const pendingPath = navCtx?.state === "loading" ? navCtx.detail?.location?.pathname : undefined;
   const isPending = pendingPath !== undefined && matches(pendingPath, targetPath, end, caseSensitive);

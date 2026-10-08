@@ -1,6 +1,7 @@
 import { useCallback, useContext } from "react";
 import { buildPath } from "../build-path.ts";
 import { type PathObject, pathToString, resolveHref } from "../nav-utils.ts";
+import { useResolveTo } from "./useResolveTo.ts";
 import type { ParamsFor, RegisteredRoutes, SearchOutputFor } from "../registry.ts";
 import { NavigationContext } from "../router.tsx";
 import { withSearch } from "../search-serializer.ts";
@@ -23,7 +24,7 @@ export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes
   defaultShouldRevalidate?: boolean;
   /** Accepted for React Router compatibility; no effect. */
   preventScrollReset?: boolean;
-  /** Accepted for React Router compatibility; no effect. */
+  /** How a relative `to` resolves: against the calling component's route (default) or the URL's path segments. */
   relative?: "route" | "path";
   /** Accepted for React Router compatibility; no effect. */
   flushSync?: boolean;
@@ -53,6 +54,7 @@ export interface NavigateFn {
  */
 export function useNavigate(): NavigateFn {
   const navCtx = useContext(NavigationContext);
+  const resolve = useResolveTo();
   return useCallback(
     (to: string | number | Partial<PathObject>, options?: NavigateOptions) => {
       if (typeof to === "number") {
@@ -60,9 +62,14 @@ export function useNavigate(): NavigateFn {
         if (typeof window !== "undefined") window.history.go(to);
         return Promise.resolve();
       }
-      const path = pathToString(to);
-      const base = options?.params ? buildPath(path, options.params as Record<string, string>) : path;
-      const href = withSearch(base, options?.search as Record<string, unknown> | undefined);
+      const path = typeof to === "string" || to.pathname !== undefined ? pathToString(to) : null;
+      const base =
+        path !== null && options?.params ? buildPath(path, options.params as Record<string, string>) : path;
+      // A relative target resolves against this component's route (React Router).
+      const href = withSearch(
+        resolve(base ?? (to as Partial<PathObject>), options?.relative),
+        options?.search as Record<string, unknown> | undefined,
+      );
       if (!navCtx) return Promise.resolve();
       return navCtx.navigate(resolveHref(href), {
         replace: options?.replace,
@@ -71,6 +78,6 @@ export function useNavigate(): NavigateFn {
         viewTransition: options?.viewTransition,
       });
     },
-    [navCtx],
+    [navCtx, resolve],
   ) as NavigateFn;
 }

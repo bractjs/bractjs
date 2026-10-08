@@ -33,12 +33,15 @@ interface FormProps extends Omit<FormHTMLAttributes<HTMLFormElement>, "method" |
     defaultShouldRevalidate?: boolean;
     /** Accepted for React Router compatibility; no effect. */
     preventScrollReset?: boolean;
-    /** Accepted for React Router compatibility; no effect. */
+    /**
+     * How a relative `action` / `formaction` resolves: against this form's route
+     * (`"route"`, default) or the URL's path segments (`"path"`).
+     */
     relative?: "route" | "path";
     /** Animate the resulting page update with the View Transitions API (ignored where unsupported). */
     viewTransition?: boolean;
     onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
     children: ReactNode;
 }
-export declare function Form({ method, action, intent, encType, navigate, fetcherKey, replace, state, reloadDocument, defaultShouldRevalidate, preventScrollReset: _preventScrollReset, relative: _relative, viewTransition, onSubmit, children, ...rest }: FormProps): import("react").JSX.Element;
+export declare function Form({ method, action, intent, encType, navigate, fetcherKey, replace, state, reloadDocument, defaultShouldRevalidate, preventScrollReset: _preventScrollReset, relative, viewTransition, onSubmit, children, ...rest }: FormProps): import("react").JSX.Element;
 export {};

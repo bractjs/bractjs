@@ -175,9 +175,13 @@ test.describe("missing tasks", () => {
     await expect(page.getByRole("heading", { name: "Task not found" })).toBeVisible();
     await hydrated(page);
     // The boundary is interactive after hydration: its link soft-navigates home.
+    // It is `to=".."`, resolved against the route (React Router) — the board.
+    const back = page.getByRole("link", { name: "Back to the board" });
+    await expect(back).toHaveAttribute("href", "/");
     await markDocument(page);
-    await page.getByRole("link", { name: "Back to the board" }).click();
+    await back.click();
     await expect(page.getByRole("heading", { name: "Todo board" })).toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
     await expectSameDocument(page);
   });
 
