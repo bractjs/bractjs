@@ -1,3 +1,4 @@
+import { getCspNonce } from "./csp.ts";
 import { isExplicitDev } from "./env.ts";
 
 /** Seconds, or a number with a unit: `"30s"`, `"5m"`, `"1h"`, `"7d"`. */
@@ -160,13 +161,50 @@ export function privateWhenSettingCookies(res: Response, request: Request): Resp
       );
     }
   }
+  return withCacheControl(res, rewritten);
+}
+
+/** Change headers in place, copying the Response when they are immutable (e.g. from fetch()). */
+function withHeaders(res: Response, change: (headers: Headers) => void): Response {
   try {
-    res.headers.set("Cache-Control", rewritten);
+    change(res.headers);
     return res;
   } catch {
-    // Immutable headers (e.g. a Response from fetch()): copy them.
     const headers = new Headers(res.headers);
-    headers.set("Cache-Control", rewritten);
+    change(headers);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   }
+}
+
+function withCacheControl(res: Response, value: string): Response {
+  return withHeaders(res, (h) => h.set("Cache-Control", value));
+}
+
+// CDN-specific freshness that overrides Cache-Control at the edge.
+const CDN_CACHE_HEADERS = ["CDN-Cache-Control", "Surrogate-Control"];
+
+/**
+ * SECURITY(medium): a CSP nonce only protects anything while it is secret and
+ * single-use. A document served with this request's nonce must not be stored
+ * by a shared cache — a CDN would hand the same nonce to every visitor (and,
+ * for prerendered/ISR pages, pair the cached body with one visitor's header).
+ * When `csp()` set a nonce for an HTML response that a shared cache could
+ * store — any explicit freshness that isn't `private` / `no-store` (a plain
+ * `max-age=N` counts) — it becomes `private, max-age=0, must-revalidate`, and
+ * CDN-only headers (`CDN-Cache-Control`, `Surrogate-Control`) are dropped.
+ * `private` and `no-store` are kept as they are. Applied to every response,
+ * after global middleware.
+ */
+export function privateWhenNonced(res: Response, context: Record<string, unknown>): Response {
+  if (!getCspNonce(context)) return res;
+  if (!(res.headers.get("Content-Type") ?? "").includes("text/html")) return res;
+  const cc = res.headers.get("Cache-Control");
+  const cdn = CDN_CACHE_HEADERS.some((h) => res.headers.has(h));
+  const d = cc ? parse(cc) : null;
+  const alreadyPrivate = !!d && (d.has("private") || d.has("no-store"));
+  if (!cdn && (!d || alreadyPrivate)) return res;
+  return withHeaders(res, (h) => {
+    for (const name of CDN_CACHE_HEADERS) h.delete(name);
+    if (d && !alreadyPrivate) h.set("Cache-Control", "private, max-age=0, must-revalidate");
+  });
 }

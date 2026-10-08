@@ -21,6 +21,8 @@ export async function renderSpaShell(
   appDir: string,
   manifest: ServerManifest,
   registry?: ModuleRegistry,
+  /** The CSP nonce for the shell's scripts — the server passes the placeholder it swaps per request. */
+  nonce?: string,
 ): Promise<string> {
   let RootComponent: ComponentType = () => null;
   let RootLayout: ComponentType<{ children?: ReactNode }> | undefined;
@@ -70,6 +72,7 @@ export async function renderSpaShell(
     manifest,
     meta: [],
     ssrMode: "spa",
+    nonce,
   });
   return await res.text();
 }

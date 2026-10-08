@@ -265,7 +265,14 @@ export async function runBuild(config: BuildConfig): Promise<void> {
         ]),
       ),
     };
-    const html = await renderSpaShell(appDir, serverManifest);
+    // With a CSP nonce placeholder, stamped on the file: the server puts each
+    // request's nonce in as it serves the shell.
+    const { createNoncePlaceholder, stampNoncePlaceholder } = await import("../server/csp.ts");
+    const placeholder = createNoncePlaceholder();
+    const html = stampNoncePlaceholder(
+      await renderSpaShell(appDir, serverManifest, undefined, placeholder),
+      placeholder,
+    );
     await Bun.write(join(buildDir, "client", "__spa.html"), html);
     console.log(`[bract] SPA shell → ${join(buildDir, "client", "__spa.html")}`);
   }

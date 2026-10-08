@@ -11,4 +11,6 @@ import { type ServerManifest } from "./render.ts";
  * markup are not compatible with SPA mode. Loaders/actions stay fully
  * functional at runtime: SPA mode means "no document SSR", not "no server".
  */
-export declare function renderSpaShell(appDir: string, manifest: ServerManifest, registry?: ModuleRegistry): Promise<string>;
+export declare function renderSpaShell(appDir: string, manifest: ServerManifest, registry?: ModuleRegistry, 
+/** The CSP nonce for the shell's scripts — the server passes the placeholder it swaps per request. */
+nonce?: string): Promise<string>;

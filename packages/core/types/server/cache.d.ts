@@ -54,3 +54,16 @@ export declare function mergeCacheControl(...values: Array<string | null | undef
  * Applied to every response, after global middleware.
  */
 export declare function privateWhenSettingCookies(res: Response, request: Request): Response;
+/**
+ * SECURITY(medium): a CSP nonce only protects anything while it is secret and
+ * single-use. A document served with this request's nonce must not be stored
+ * by a shared cache — a CDN would hand the same nonce to every visitor (and,
+ * for prerendered/ISR pages, pair the cached body with one visitor's header).
+ * When `csp()` set a nonce for an HTML response that a shared cache could
+ * store — any explicit freshness that isn't `private` / `no-store` (a plain
+ * `max-age=N` counts) — it becomes `private, max-age=0, must-revalidate`, and
+ * CDN-only headers (`CDN-Cache-Control`, `Surrogate-Control`) are dropped.
+ * `private` and `no-store` are kept as they are. Applied to every response,
+ * after global middleware.
+ */
+export declare function privateWhenNonced(res: Response, context: Record<string, unknown>): Response;

@@ -1,3 +1,7 @@
+/** Mark `request` as a render-for-cache request (the server's own), rendered with `placeholder`. Returns it. */
+export declare function markCachedRender(request: Request, placeholder: string): Request;
+/** The nonce placeholder `request` renders with, when the server made it to render a page for a cache. */
+export declare function cachedRenderPlaceholder(request: Request): string | undefined;
 /** Sent by prerendering: "tell me if this page is an ISR page". */
 export declare const PRERENDER_HEADER = "X-BractJS-Prerender";
 /** The handler's answer: the route's `config.revalidate`, in seconds. */
@@ -17,16 +21,24 @@ export declare function parseRevalidate(value: unknown, path: string): number;
 export interface IsrOptions {
     /** Read a build-time file under `_prerender/` (embedded or on disk); null when absent. */
     load(rel: string): Promise<string | null>;
-    /** Render `path` fresh, bypassing the prerender cache: the document and its `/_data` payload. */
+    /**
+     * Render `path` fresh, bypassing the prerender cache: the document and its
+     * `/_data` payload, and the CSP nonce placeholder both were rendered with.
+     */
     render(path: string): Promise<{
         html: Response;
         data: Response;
+        placeholder?: string;
     }>;
     now?: () => number;
 }
 export interface Isr {
-    /** The ISR response for a document (`kind: "html"`) or `/_data` request, or null when `path` isn't an ISR page. */
-    serve(path: string, kind: "html" | "data"): Promise<Response | null>;
+    /**
+     * The ISR response for a document (`kind: "html"`) or `/_data` request, or
+     * null when `path` isn't an ISR page. `nonce`: the request's CSP nonce, put
+     * in place of the placeholder the cached copy was rendered with.
+     */
+    serve(path: string, kind: "html" | "data", nonce?: string): Promise<Response | null>;
     /** Regenerate `path` now. Resolves false when it isn't an ISR page or rendering failed. */
     revalidate(path: string): Promise<boolean>;
 }

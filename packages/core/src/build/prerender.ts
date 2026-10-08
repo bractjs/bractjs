@@ -1,6 +1,14 @@
 import { type I18nConfig, localizePath } from "../shared/i18n.ts";
 import { join } from "node:path";
-import { ISR_MANIFEST, type IsrManifest, parseRevalidate, PRERENDER_HEADER, REVALIDATE_HEADER } from "../server/isr.ts";
+import { createNoncePlaceholder, stampNoncePlaceholder } from "../server/csp.ts";
+import {
+  ISR_MANIFEST,
+  type IsrManifest,
+  markCachedRender,
+  parseRevalidate,
+  PRERENDER_HEADER,
+  REVALIDATE_HEADER,
+} from "../server/isr.ts";
 import { buildFetchHandler } from "../server/serve.ts";
 import type { ServerManifest } from "../server/render.ts";
 
@@ -80,19 +88,23 @@ export async function runPrerender(options: PrerenderOptions): Promise<Prerender
   for (const path of paths) {
     const out = prerenderPaths(path);
 
-    const htmlRes = await handler(new Request(origin + path, { headers: { [PRERENDER_HEADER]: "1" } }));
+    // Rendered for the cache: CSP nonces become a fresh, unguessable
+    // placeholder the server swaps for each visitor's own nonce. The document
+    // file is stamped with it (stampNoncePlaceholder) so the server knows which.
+    const placeholder = createNoncePlaceholder();
+    const htmlRes = await handler(
+      markCachedRender(new Request(origin + path, { headers: { [PRERENDER_HEADER]: "1" } }), placeholder),
+    );
     if (htmlRes.status !== 200) {
       throw new Error(`[bractjs] prerender: GET ${path} returned ${htmlRes.status}`);
     }
     const revalidate = htmlRes.headers.get(REVALIDATE_HEADER);
     if (revalidate !== null) isrRoutes[path] = parseRevalidate(revalidate, path);
     const htmlFile = join(buildDir, "client", "_prerender", out.html);
-    await Bun.write(htmlFile, await htmlRes.text());
+    await Bun.write(htmlFile, stampNoncePlaceholder(await htmlRes.text(), placeholder));
     written.push(htmlFile);
 
-    const dataRes = await handler(
-      new Request(origin + "/_data?path=" + encodeURIComponent(path)),
-    );
+    const dataRes = await handler(markCachedRender(new Request(origin + "/_data?path=" + encodeURIComponent(path)), placeholder));
     if (dataRes.status === 200) {
       const dataFile = join(buildDir, "client", "_prerender", out.data);
       await Bun.write(dataFile, await dataRes.text());

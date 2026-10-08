@@ -9,7 +9,26 @@
 // request handler. A failed regeneration keeps the old copy. The cache is per
 // process: each instance of a scaled-out app regenerates on its own.
 
+import { applyCspNonce, readNonceStamp } from "./csp.ts";
 import { DOCUMENT_SECURITY_HEADERS } from "./render.ts";
+
+// Requests the server makes to render a page for a CACHE (prerendering at
+// build time, ISR regeneration), each with the per-render CSP nonce
+// placeholder (createNoncePlaceholder) the cached copy is served through.
+// Tracked by object identity, not a header: a header any client could send
+// would let a visitor obtain — and a shared cache store — a placeholder page.
+const cachedRenders = new WeakMap<Request, string>();
+
+/** Mark `request` as a render-for-cache request (the server's own), rendered with `placeholder`. Returns it. */
+export function markCachedRender(request: Request, placeholder: string): Request {
+  cachedRenders.set(request, placeholder);
+  return request;
+}
+
+/** The nonce placeholder `request` renders with, when the server made it to render a page for a cache. */
+export function cachedRenderPlaceholder(request: Request): string | undefined {
+  return cachedRenders.get(request);
+}
 
 /** Sent by prerendering: "tell me if this page is an ISR page". */
 export const PRERENDER_HEADER = "X-BractJS-Prerender";
@@ -43,6 +62,10 @@ interface Entry {
   generatedAt: number;
   html: string | null;
   data: string | null;
+  /** The CSP nonce placeholder `html` was rendered with (see createNoncePlaceholder). */
+  placeholder?: string;
+  /** …and `data` (it can lag: a regeneration whose `/_data` failed keeps the previous copy). */
+  dataPlaceholder?: string;
   loaded: boolean;
   inflight?: Promise<boolean>;
 }
@@ -50,14 +73,21 @@ interface Entry {
 export interface IsrOptions {
   /** Read a build-time file under `_prerender/` (embedded or on disk); null when absent. */
   load(rel: string): Promise<string | null>;
-  /** Render `path` fresh, bypassing the prerender cache: the document and its `/_data` payload. */
-  render(path: string): Promise<{ html: Response; data: Response }>;
+  /**
+   * Render `path` fresh, bypassing the prerender cache: the document and its
+   * `/_data` payload, and the CSP nonce placeholder both were rendered with.
+   */
+  render(path: string): Promise<{ html: Response; data: Response; placeholder?: string }>;
   now?: () => number;
 }
 
 export interface Isr {
-  /** The ISR response for a document (`kind: "html"`) or `/_data` request, or null when `path` isn't an ISR page. */
-  serve(path: string, kind: "html" | "data"): Promise<Response | null>;
+  /**
+   * The ISR response for a document (`kind: "html"`) or `/_data` request, or
+   * null when `path` isn't an ISR page. `nonce`: the request's CSP nonce, put
+   * in place of the placeholder the cached copy was rendered with.
+   */
+  serve(path: string, kind: "html" | "data", nonce?: string): Promise<Response | null>;
   /** Regenerate `path` now. Resolves false when it isn't an ISR page or rendering failed. */
   revalidate(path: string): Promise<boolean>;
 }
@@ -105,7 +135,7 @@ export function createIsr(options: IsrOptions): Isr {
   function regenerate(path: string, entry: Entry): Promise<boolean> {
     entry.inflight ??= (async () => {
       try {
-        const { html, data } = await options.render(path);
+        const { html, data, placeholder } = await options.render(path);
         if (html.status !== 200) {
           console.error(
             `[bractjs] ISR: regenerating ${path} answered ${html.status}; serving the previous copy`,
@@ -116,14 +146,15 @@ export function createIsr(options: IsrOptions): Isr {
           entry.generatedAt = now();
           return false;
         }
+        const freshData = data.status === 200;
         const [htmlText, dataText] = await Promise.all([
           html.text(),
-          data.status === 200
-            ? data.text()
-            : (data.body?.cancel() ?? Promise.resolve()).then(() => entry.data),
+          freshData ? data.text() : (data.body?.cancel() ?? Promise.resolve()).then(() => entry.data),
         ]);
         entry.html = htmlText;
         entry.data = dataText;
+        entry.placeholder = placeholder;
+        if (freshData) entry.dataPlaceholder = placeholder;
         entry.generatedAt = now();
         entry.loaded = true;
         return true;
@@ -139,7 +170,7 @@ export function createIsr(options: IsrOptions): Isr {
   }
 
   return {
-    async serve(rawPath, kind) {
+    async serve(rawPath, kind, nonce) {
       const path = normalizeIsrPath(rawPath);
       const entry = (await table()).get(path);
       if (!entry) return null;
@@ -148,7 +179,12 @@ export function createIsr(options: IsrOptions): Isr {
         const [html, data] = await Promise.all([options.load(files.html), options.load(files.data)]);
         // A concurrent regeneration may have filled it meanwhile.
         if (!entry.loaded) {
-          entry.html = html;
+          // The build-time copy carries its placeholder in a leading stamp.
+          const stamped = html === null ? null : readNonceStamp(html);
+          entry.html = stamped?.body ?? null;
+          entry.placeholder = stamped?.placeholder;
+          // Prerendering renders a page's document and /_data with one placeholder.
+          entry.dataPlaceholder = stamped?.placeholder;
           entry.data = data;
           entry.loaded = true;
         }
@@ -156,7 +192,8 @@ export function createIsr(options: IsrOptions): Isr {
       if (now() - entry.generatedAt >= entry.revalidate * 1000) void regenerate(path, entry);
       const body = kind === "html" ? entry.html : entry.data;
       if (body === null) return null;
-      return new Response(body, {
+      const placeholder = kind === "html" ? entry.placeholder : entry.dataPlaceholder;
+      return new Response(applyCspNonce(body, placeholder, nonce), {
         headers: {
           ...DOCUMENT_SECURITY_HEADERS,
           "Content-Type": kind === "html" ? "text/html; charset=utf-8" : "application/json",

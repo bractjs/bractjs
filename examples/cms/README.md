@@ -125,8 +125,11 @@ bun run typecheck
   `route("POST", "/api/…")` would be CSRF-protected by default — opt out with
   `{ csrf: false }` only for a credential-free public/webhook endpoint.
 - **Response caching** — the public `/posts` index exports `headers()` to send
-  `Cache-Control: public, s-maxage=60, stale-while-revalidate=300` for CDNs. The
-  session-gated `/admin` routes deliberately stay uncached.
+  `Cache-Control: public, s-maxage=60, stale-while-revalidate=300`. Because this
+  app registers `csp()`, every HTML document carries a per-request nonce, so the
+  framework sends it as `private, max-age=0, must-revalidate` instead (a CDN must
+  not hand one visitor's nonce to everyone); without `csp()` the header goes out
+  as written. The session-gated `/admin` routes deliberately stay uncached.
 
 ## Production & single-binary
 
