@@ -8,6 +8,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useSyncExternalStore,
 } from "react";
 import {
@@ -20,6 +21,7 @@ import { reviveDeferred } from "../deferred-revive.ts";
 import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
 import { assignExternal, toSamePath } from "../nav-utils.ts";
 import { softNavigate, triggerRevalidation } from "../revalidation.ts";
+import { type ResolveToFn, useResolveTo } from "./useResolveTo.ts";
 import {
   normalizeSubmission,
   type SubmitOptions as RRSubmitOptions,
@@ -44,6 +46,8 @@ export interface FetcherFormProps extends Omit<FormHTMLAttributes<HTMLFormElemen
   intent?: string;
   /** See `SubmitOptions.defaultShouldRevalidate`. */
   defaultShouldRevalidate?: boolean;
+  /** How a relative `action` resolves: against this component's route (default) or the URL's path segments. */
+  relative?: "route" | "path";
   children: ReactNode;
 }
 
@@ -181,11 +185,24 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
     return () => fetcherStore.remove(key);
   }, [key, isKeyed]);
 
-  const load = useCallback((path: string): Promise<void> => fetcherLoad(key, path), [key]);
+  // fetcher.load(href) / submit(…, { action }) / <fetcher.Form action> resolve a
+  // relative target against this component's route, as React Router does.
+  // Read through a ref: `load`, `submit` and `fetcher.Form` must keep their
+  // identity across renders (a new Form component type would remount the form
+  // and drop typed input; effects keyed on load/submit would re-fire).
+  const resolve = useResolveTo();
+  const resolveRef = useRef<ResolveToFn>(resolve);
+  useEffect(() => {
+    resolveRef.current = resolve;
+  }, [resolve]);
+  const load = useCallback(
+    (path: string): Promise<void> => fetcherLoad(key, resolveRef.current(path)),
+    [key],
+  );
 
   const submit = useCallback(
     (target: SubmitTarget | string, submitOpts?: SubmitOptions | RRSubmitOptions): Promise<void> =>
-      fetcherSubmit(key, toFetcherRequest(target, submitOpts)),
+      fetcherSubmit(key, toFetcherRequest(target, submitOpts, resolveRef.current)),
     [key],
   ) as FetcherResult["submit"];
 
@@ -199,13 +216,17 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
       action,
       intent,
       defaultShouldRevalidate,
+      relative,
       children,
       ...rest
     }: FetcherFormProps) {
       function handleSubmit(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
         const target = e.currentTarget;
-        const url = action ?? window.location.pathname + window.location.search;
+        const url =
+          action !== undefined
+            ? resolveRef.current(action, relative)
+            : window.location.pathname + window.location.search;
         if (method === "get") {
           // React Router: a GET fetcher form loads `action?<fields>`.
           void load(normalizeSubmission(new FormData(target), { action: url, method: "get" }).url);
@@ -248,6 +269,7 @@ export function useFetcher<T = unknown>(opts?: UseFetcherOptions): FetcherResult
 function toFetcherRequest(
   target: SubmitTarget | string,
   opts?: SubmitOptions | RRSubmitOptions,
+  resolve: ResolveToFn = (to) => (typeof to === "string" ? to : ""),
 ): FetcherRequest {
   const rr = opts as RRSubmitOptions | undefined;
   const isTextual = rr?.encType === "application/json" || rr?.encType === "text/plain";
@@ -261,7 +283,7 @@ function toFetcherRequest(
           ? o.body
           : new URLSearchParams(o.body);
     return {
-      url: target,
+      url: resolve(target),
       method: (o.method ?? "post").toUpperCase(),
       body,
       formData: body instanceof FormData ? body : undefined,
@@ -269,7 +291,7 @@ function toFetcherRequest(
     };
   }
   // React Router form: submit(target, { method, action, encType }).
-  const n = normalizeSubmission(target, { method: "post", ...rr });
+  const n = normalizeSubmission(target, { method: "post", ...rr }, (action) => resolve(action, rr?.relative));
   return {
     url: n.url,
     method: n.method,

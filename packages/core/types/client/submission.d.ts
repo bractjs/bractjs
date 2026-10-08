@@ -21,7 +21,7 @@ export interface SubmitOptions {
     defaultShouldRevalidate?: boolean;
     /** Accepted for React Router compatibility; no effect. */
     preventScrollReset?: boolean;
-    /** Accepted for React Router compatibility; no effect. */
+    /** How a relative `action` resolves: against the calling component's route (default) or the URL's path segments. */
     relative?: "route" | "path";
     /** Accepted for React Router compatibility; no effect. */
     flushSync?: boolean;
@@ -44,5 +44,10 @@ export interface NormalizedSubmission {
     /** The raw text payload, for `encType: "text/plain"`. */
     text?: string;
 }
-/** Turn any React Router submit target + options into a concrete request. */
-export declare function normalizeSubmission(target: SubmitTarget, options?: SubmitOptions): NormalizedSubmission;
+/**
+ * Turn any React Router submit target + options into a concrete request.
+ * `resolveAction` resolves whichever action applies — `options.action`, the
+ * submitter's `formaction` or the form's `action` — relative to the caller's
+ * route (hooks pass `useResolveTo()`); without one, the current URL is used.
+ */
+export declare function normalizeSubmission(target: SubmitTarget, options?: SubmitOptions, resolveAction?: (action: string) => string): NormalizedSubmission;

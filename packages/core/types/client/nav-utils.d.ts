@@ -44,6 +44,28 @@ export declare function pathToString(to: string | Partial<PathObject>): string;
  * `toSamePath()`).
  */
 export declare function resolveHref(to: string): string;
+/**
+ * React Router's `resolveTo`: resolve a relative `to` against the route
+ * hierarchy, not the URL. `routePathnames` are the pathnames of the matched
+ * routes that contribute a path, outermost first (root "/" … the current
+ * route); `..` climbs one ROUTE (`relative="route"`, the default) or one URL
+ * segment (`isPathRelative`, `relative="path"`). A `to` with no pathname
+ * (`?q`, `#h`) keeps the current location's pathname. Absolute paths pass
+ * through.
+ */
+export declare function resolveTo(toArg: string | Partial<PathObject>, routePathnames: string[], locationPathname: string, isPathRelative?: boolean): PathObject;
+/**
+ * The pathname each matched module contributes, for {@link resolveTo}:
+ * `ids` are `useMatches()` ids (appDir-relative files), outermost first, cut
+ * at the calling component's level; `lastIsLeaf` when that is the route
+ * itself, which resolves against the whole (locale-free) location pathname —
+ * splat segments included, as in React Router. A layout gets the part of the
+ * URL its folder covers, taken from the URL itself (so encoding is kept, and
+ * decoded params never leak into hrefs). Pathless entries — route-group
+ * layouts, an index route below its folder's layout — collapse into the
+ * previous one, like React Router's path-contributing matches.
+ */
+export declare function routePathnamesFor(ids: readonly string[], locationPathname: string, params: Record<string, string | undefined>, lastIsLeaf: boolean): string[];
 /** Random short key identifying a history entry (scroll restoration identity). */
 export declare function createLocationKey(): string;
 /**

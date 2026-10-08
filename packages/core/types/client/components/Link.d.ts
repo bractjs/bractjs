@@ -42,11 +42,15 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<AnchorHTM
     reloadDocument?: boolean;
     /** Accepted for React Router compatibility; no effect. */
     preventScrollReset?: boolean;
-    /** Accepted for React Router compatibility; no effect. */
+    /**
+     * How a relative `to` resolves (React Router): against the route this link
+     * renders under (`"route"`, default — `..` climbs one route) or the URL's
+     * path segments (`"path"` — `..` drops one segment).
+     */
     relative?: "route" | "path";
     /** Accepted for React Router compatibility; no effect. */
     discover?: "render" | "none";
     children: ReactNode;
 };
 export type { LinkProps };
-export declare function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({ to, params, search, prefetch, viewTransition, replace, state, defaultShouldRevalidate, unstable_defaultShouldRevalidate, reloadDocument, preventScrollReset: _preventScrollReset, relative: _relative, discover: _discover, onClick, children, ...rest }: LinkProps<TTo>): import("react").JSX.Element;
+export declare function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({ to, params, search, prefetch, viewTransition, replace, state, defaultShouldRevalidate, unstable_defaultShouldRevalidate, reloadDocument, preventScrollReset: _preventScrollReset, relative, discover: _discover, onClick, children, ...rest }: LinkProps<TTo>): import("react").JSX.Element;

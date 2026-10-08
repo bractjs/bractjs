@@ -244,7 +244,8 @@ function MenuList({
     <ul className={ulClass || undefined}>
       {items.map((n) => (
         <li key={n.id} className={[itemClass, n.cssClass].filter(Boolean).join(" ") || undefined}>
-          <Link to={n.href}>{n.label}</Link>
+          {/* An item whose target is gone (deleted page/category) is not a link. */}
+          {n.href === "#" ? <span>{n.label}</span> : <Link to={n.href}>{n.label}</Link>}
           {n.children.length > 0 ? (
             <MenuList
               items={n.children}

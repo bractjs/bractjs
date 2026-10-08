@@ -1,5 +1,6 @@
 import { type FormEvent, type FormHTMLAttributes, type ReactNode, useContext, useEffect, useId } from "react";
 import { fetcherStore } from "../fetcher-store.ts";
+import { useResolveTo } from "../hooks/useResolveTo.ts";
 import { fetcherSubmit } from "../hooks/useFetcher.ts";
 import { NavigationContext, RouterContext } from "../router.tsx";
 import { normalizeSubmission, type SubmitEncType } from "../submission.ts";
@@ -40,7 +41,10 @@ interface FormProps extends Omit<FormHTMLAttributes<HTMLFormElement>, "method" |
   defaultShouldRevalidate?: boolean;
   /** Accepted for React Router compatibility; no effect. */
   preventScrollReset?: boolean;
-  /** Accepted for React Router compatibility; no effect. */
+  /**
+   * How a relative `action` / `formaction` resolves: against this form's route
+   * (`"route"`, default) or the URL's path segments (`"path"`).
+   */
   relative?: "route" | "path";
   /** Animate the resulting page update with the View Transitions API (ignored where unsupported). */
   viewTransition?: boolean;
@@ -62,7 +66,7 @@ export function Form({
   reloadDocument,
   defaultShouldRevalidate,
   preventScrollReset: _preventScrollReset,
-  relative: _relative,
+  relative,
   viewTransition,
   onSubmit,
   children,
@@ -75,6 +79,10 @@ export function Form({
   // auto-keyed fetcher: drop it from useFetchers() with the form, as an
   // unkeyed useFetcher() does. (Before the early return: hooks run always.)
   useEffect(() => () => fetcherStore.remove(`__form${autoKey}`), [autoKey]);
+  // A relative `action` / `formaction` resolves against this form's route
+  // (React Router). Before the early return: hooks run always.
+  const resolve = useResolveTo();
+  const resolvedAction = action === undefined ? undefined : resolve(action, relative);
   // The hidden intent input, rendered first so it's part of every submission
   // (JS and native). `key` keeps React happy alongside arbitrary children.
   const intentInput =
@@ -83,7 +91,7 @@ export function Form({
   // SSR (and reloadDocument): render a plain form — the browser submits it.
   if (!routerCtx || !navCtx || reloadDocument) {
     return (
-      <form method={method} action={action} encType={encType} onSubmit={onSubmit} {...rest}>
+      <form method={method} action={resolvedAction} encType={encType} onSubmit={onSubmit} {...rest}>
         {intentInput}
         {children}
       </form>
@@ -106,7 +114,11 @@ export function Form({
     const formMethod = (submitter?.getAttribute("formmethod") as FormMethod | null) ?? method;
     // Default to the full current URL (pathname + search) so actions can read
     // the same search params their page was rendered with.
-    const url = submitter?.getAttribute("formaction") ?? action ?? location.pathname + location.search;
+    const formaction = submitter?.getAttribute("formaction");
+    const url =
+      formaction != null
+        ? resolve(formaction, relative)
+        : (resolvedAction ?? location.pathname + location.search);
     const n = normalizeSubmission(formData, { action: url, method: formMethod, encType });
 
     if (!navigate) {
@@ -148,7 +160,7 @@ export function Form({
   return (
     <form
       method={method}
-      action={action}
+      action={resolvedAction}
       encType={encType}
       onSubmit={(e) => {
         void handleSubmit(e);

@@ -1,5 +1,6 @@
 import { type AnchorHTMLAttributes, type ReactNode, useCallback, useContext, useEffect, useRef } from "react";
 import { buildPath } from "../build-path.ts";
+import { useResolveTo } from "../hooks/useResolveTo.ts";
 import { type PathObject, pathToString, resolveHref, toSamePath } from "../nav-utils.ts";
 import { observeOnce, prefetchRoute } from "../prefetch.ts";
 import type { ParamsFor, RegisteredRoutes, SearchOutputFor } from "../registry.ts";
@@ -58,7 +59,11 @@ type LinkProps<TTo extends RegisteredRoutes = RegisteredRoutes> = Omit<
   reloadDocument?: boolean;
   /** Accepted for React Router compatibility; no effect. */
   preventScrollReset?: boolean;
-  /** Accepted for React Router compatibility; no effect. */
+  /**
+   * How a relative `to` resolves (React Router): against the route this link
+   * renders under (`"route"`, default — `..` climbs one route) or the URL's
+   * path segments (`"path"` — `..` drops one segment).
+   */
   relative?: "route" | "path";
   /** Accepted for React Router compatibility; no effect. */
   discover?: "render" | "none";
@@ -84,7 +89,7 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
   unstable_defaultShouldRevalidate,
   reloadDocument,
   preventScrollReset: _preventScrollReset,
-  relative: _relative,
+  relative,
   discover: _discover,
   onClick,
   children,
@@ -95,11 +100,16 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
   const routerCtx = useContext(RouterContext);
   const isLoading = navCtx?.state === "loading";
 
+  const resolve = useResolveTo();
   // Resolve the final href once: substitute params into a dynamic pattern, or
-  // pass an already-built string straight through; then apply `search`.
-  const toStr = pathToString(to);
-  const base = params ? buildPath(toStr, params as Record<string, string>) : toStr;
-  const href = withSearch(base, search as Record<string, unknown> | undefined);
+  // pass an already-built string straight through; resolve a relative target
+  // against this link's route (React Router); then apply `search`.
+  const toStr = typeof to === "string" || to.pathname !== undefined ? pathToString(to) : null;
+  const base = toStr !== null && params ? buildPath(toStr, params as Record<string, string>) : toStr;
+  const href = withSearch(
+    resolve(base ?? (to as Partial<PathObject>), relative),
+    search as Record<string, unknown> | undefined,
+  );
 
   const anchorRef = useRef<HTMLAnchorElement>(null);
   const intentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -136,7 +146,7 @@ export function Link<TTo extends RegisteredRoutes = RegisteredRoutes>({
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     if (e.button !== 0) return;
     if (rest.target && rest.target !== "_self") return;
-    // Relative `to` ("edit", "../list") resolves like the anchor's href would.
+    // `href` is already resolved; resolveHref only normalizes what's left.
     const safe = toSamePath(resolveHref(href));
     // SECURITY(high): an off-origin target (https://…, mailto:, javascript:…)
     // is left to the browser's own handling of the <a href>. React has already

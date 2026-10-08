@@ -53,6 +53,23 @@ export declare const OutletLevelContext: import("react").Context<number>;
  * provider, so it keeps reading the route's data as it always has.
  */
 export declare const LoaderSliceContext: import("react").Context<number | null>;
+/**
+ * Which matched module a component renders under, for route-relative links
+ * (React Router's contextual route): root (the default — root.tsx itself sits
+ * outside every provider), the layout at `index` in the chain (its index into
+ * `loaderData.layouts` / `useMatches()[1 + index]`), or the leaf route.
+ * Separate from the two contexts above: with no layout, the leaf and root are
+ * indistinguishable through them.
+ */
+export type RouteLevel = {
+    kind: "root";
+} | {
+    kind: "layout";
+    index: number;
+} | {
+    kind: "leaf";
+};
+export declare const RouteLevelContext: import("react").Context<RouteLevel>;
 interface BractJSProviderProps {
     value: BractJSContextValue;
     children: ReactNode;

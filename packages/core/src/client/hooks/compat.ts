@@ -2,44 +2,43 @@
 // components keep compiling and behaving.
 
 import { useContext } from "react";
-import { type PathObject, parseTo, pathToString } from "../nav-utils.ts";
+import { type PathObject, parseTo } from "../nav-utils.ts";
 import { RouterContext } from "../router.tsx";
 import { useLocation } from "./useLocation.ts";
-
-/** Resolve `to` against a pathname the way an `<a href>` would ("edit", "../x", "?q"). */
-function resolveAgainst(to: string, from: string): string {
-  if (to.startsWith("/")) return to;
-  try {
-    const u = new URL(to, `http://x${from}`);
-    return u.pathname + u.search + u.hash;
-  } catch {
-    return to;
-  }
-}
+import { type RelativeRoutingType, useResolveTo } from "./useResolveTo.ts";
 
 /**
- * React Router's `useResolvedPath(to)`: `to` resolved against the current
- * location, as `{ pathname, search, hash }`. SSR-safe (uses the request URL).
+ * React Router's `useResolvedPath(to, { relative })`: `to` resolved against
+ * the route this component renders under (`relative: "path"`: against the
+ * URL's segments), as `{ pathname, search, hash }`. SSR-safe.
  */
-export function useResolvedPath(to: string | Partial<PathObject>): PathObject {
-  const location = useLocation();
-  return parseTo(resolveAgainst(pathToString(to), location.pathname + location.search));
+export function useResolvedPath(
+  to: string | Partial<PathObject>,
+  options?: { relative?: RelativeRoutingType },
+): PathObject {
+  const resolve = useResolveTo();
+  return parseTo(resolve(to, options?.relative));
 }
 
-/** React Router's `useHref(to)`: the resolved URL string for `to`. */
-export function useHref(to: string | Partial<PathObject>): string {
-  const p = useResolvedPath(to);
+/** React Router's `useHref(to, { relative })`: the resolved URL string for `to`. */
+export function useHref(
+  to: string | Partial<PathObject>,
+  options?: { relative?: RelativeRoutingType },
+): string {
+  const p = useResolvedPath(to, options);
   return p.pathname + p.search + p.hash;
 }
 
 /**
- * React Router's `useFormAction(action?)`: the URL a `<Form>` posts to —
- * `action` resolved against the current location, or the current URL.
+ * React Router's `useFormAction(action?, { relative })`: the URL a `<Form>`
+ * posts to — `action` resolved like a link, or (no action) the current URL:
+ * only the page's own route runs actions, so the default is always the page.
  */
-export function useFormAction(action?: string): string {
+export function useFormAction(action?: string, options?: { relative?: RelativeRoutingType }): string {
   const location = useLocation();
+  const resolve = useResolveTo();
   if (action === undefined) return location.pathname + location.search;
-  return resolveAgainst(action, location.pathname + location.search);
+  return resolve(action, options?.relative);
 }
 
 /**

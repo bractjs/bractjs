@@ -39,7 +39,7 @@ export interface SubmitOptions {
   defaultShouldRevalidate?: boolean;
   /** Accepted for React Router compatibility; no effect. */
   preventScrollReset?: boolean;
-  /** Accepted for React Router compatibility; no effect. */
+  /** How a relative `action` resolves: against the calling component's route (default) or the URL's path segments. */
   relative?: "route" | "path";
   /** Accepted for React Router compatibility; no effect. */
   flushSync?: boolean;
@@ -88,8 +88,17 @@ function objectToSearchParams(obj: Record<string, unknown>): URLSearchParams {
   return params;
 }
 
-/** Turn any React Router submit target + options into a concrete request. */
-export function normalizeSubmission(target: SubmitTarget, options: SubmitOptions = {}): NormalizedSubmission {
+/**
+ * Turn any React Router submit target + options into a concrete request.
+ * `resolveAction` resolves whichever action applies — `options.action`, the
+ * submitter's `formaction` or the form's `action` — relative to the caller's
+ * route (hooks pass `useResolveTo()`); without one, the current URL is used.
+ */
+export function normalizeSubmission(
+  target: SubmitTarget,
+  options: SubmitOptions = {},
+  resolveAction?: (action: string) => string,
+): NormalizedSubmission {
   let action = options.action;
   let method = options.method;
   let encType = options.encType;
@@ -123,7 +132,7 @@ export function normalizeSubmission(target: SubmitTarget, options: SubmitOptions
   }
 
   const upper = (method ?? "get").toUpperCase();
-  const base = action ?? currentUrl();
+  const base = action !== undefined ? (resolveAction ? resolveAction(action) : action) : currentUrl();
 
   // JSON / text payloads (React Router `encType`), never for GET.
   if (upper !== "GET" && encType === "application/json" && raw !== undefined) {

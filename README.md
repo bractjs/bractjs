@@ -2004,7 +2004,7 @@ Each request gets a server span that continues an incoming `traceparent` and is 
 
 **Revalidation control (React Router 8).** `fetcher.reset()` clears a fetcher back to idle. `defaultShouldRevalidate={false}` on `<Link>`, `<Form>`, `navigate()`, `fetcher.submit()` or `useSubmit()` is passed to routes' `shouldRevalidate`; routes without one follow it directly.
 
-**Hooks and components.** `useSubmit`, `useRouteLoaderData`, `useOutletContext` (+ `<Outlet context>`), `useAsyncValue`, `useAsyncError`, `useHref`, `useResolvedPath`, `useFormAction`, `useNavigationType`, `<NavLink>` and `<Navigate>` all exist.
+**Hooks and components.** `useSubmit`, `useRouteLoaderData`, `useOutletContext` (+ `<Outlet context>`), `useAsyncValue`, `useAsyncError`, `useHref`, `useResolvedPath`, `useFormAction`, `useNavigationType`, `<NavLink>` and `<Navigate>` all exist. A relative `to` or `action` (`"edit"`, `".."`, `"?page=2"`) resolves as in React Router: against the route the component renders under — root, a layout, or the page — with `..` climbing one route; pass `relative="path"` to climb URL segments instead. This applies to `<Link>`, `<NavLink>`, `<Form>`, `<Navigate>`, `useNavigate()`, `useSubmit()` and fetchers.
 
 - `useSearchParams()` destructures as a tuple.
 - `useNavigation()` includes `formData` and `location`.

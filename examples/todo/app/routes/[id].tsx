@@ -74,7 +74,9 @@ export function ErrorBoundary({ error }: { error: unknown }) {
       </span>
       <h1 className="text-2xl font-bold tracking-tight">Task not found</h1>
       <p className="text-muted">{message} It may have been deleted.</p>
-      <Link to="/" className={backLink}>
+      {/* Route-relative (React Router): `..` climbs one route — from this page,
+          which has no layout above it, that is the board. */}
+      <Link to=".." className={backLink}>
         <ArrowLeft aria-hidden size={16} strokeWidth={2.5} />
         Back to the board
       </Link>

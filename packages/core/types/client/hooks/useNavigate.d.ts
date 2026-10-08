@@ -16,7 +16,7 @@ export interface NavigateOptions<TTo extends RegisteredRoutes = RegisteredRoutes
     defaultShouldRevalidate?: boolean;
     /** Accepted for React Router compatibility; no effect. */
     preventScrollReset?: boolean;
-    /** Accepted for React Router compatibility; no effect. */
+    /** How a relative `to` resolves: against the calling component's route (default) or the URL's path segments. */
     relative?: "route" | "path";
     /** Accepted for React Router compatibility; no effect. */
     flushSync?: boolean;

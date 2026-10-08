@@ -619,14 +619,16 @@ describe("SSR hooks and components", () => {
     expect(html).toContain('class="on"');
   });
 
-  test("useHref / useResolvedPath / useFormAction resolve relative paths", () => {
+  test("useHref / useResolvedPath / useFormAction resolve relative paths (React Router)", () => {
+    // No matched routes here: a relative target resolves against the current
+    // pathname, the way React Router resolves it from the route that matched it.
     function C() {
       return <p>{`${useHref("edit")}|${useResolvedPath("../x?y=1").pathname}|${useFormAction()}`}</p>;
     }
     const html = render(<C />, {
       location: { pathname: "/posts/1", search: "?a=b", hash: "", state: null, key: "d" },
     });
-    expect(html).toContain("/posts/edit|/x|/posts/1?a=b");
+    expect(html).toContain("/posts/1/edit|/x|/posts/1?a=b");
   });
 
   test("Await renders element children with useAsyncValue", async () => {

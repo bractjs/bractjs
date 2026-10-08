@@ -1,7 +1,7 @@
 import { type I18nConfig, splitLocale } from "../shared/i18n.ts";
 import type { ServerManifest } from "../server/render.ts";
 import { buildTrie, matchRoute, type TrieNode } from "../server/matcher.ts";
-import type { RouteFile, Segment } from "../server/scanner.ts";
+import { filePathToPattern, pathToSegments, type RouteFile } from "../shared/route-patterns.ts";
 
 // ── Redirect normalization ─────────────────────────────────────────────────
 
@@ -97,6 +97,148 @@ export function resolveHref(to: string): string {
   }
 }
 
+// ── Relative paths (React Router semantics) ────────────────────────────────
+
+/** Like React Router's `parsePath`: no pathname key when the string has none ("?q", "#h", ""). */
+function parsePathRR(to: string): Partial<PathObject> {
+  const out: Partial<PathObject> = {};
+  let rest = to;
+  const hashIdx = rest.indexOf("#");
+  if (hashIdx >= 0) {
+    out.hash = rest.slice(hashIdx);
+    rest = rest.slice(0, hashIdx);
+  }
+  const searchIdx = rest.indexOf("?");
+  if (searchIdx >= 0) {
+    out.search = rest.slice(searchIdx);
+    rest = rest.slice(0, searchIdx);
+  }
+  if (rest) out.pathname = rest;
+  return out;
+}
+
+function normalizeSearch(search = ""): string {
+  return !search || search === "?" ? "" : search.startsWith("?") ? search : "?" + search;
+}
+
+function normalizeHash(hash = ""): string {
+  return !hash || hash === "#" ? "" : hash.startsWith("#") ? hash : "#" + hash;
+}
+
+function resolvePathname(relativePath: string, fromPathname: string): string {
+  const segments = fromPathname.replace(/\/+$/, "").split("/");
+  for (const segment of relativePath.split("/")) {
+    if (segment === "..") {
+      // Keep the leading "" (the root): `..` past the root stays at "/".
+      if (segments.length > 1) segments.pop();
+    } else if (segment !== ".") {
+      segments.push(segment);
+    }
+  }
+  return segments.length > 1 ? segments.join("/") : "/";
+}
+
+/**
+ * React Router's `resolveTo`: resolve a relative `to` against the route
+ * hierarchy, not the URL. `routePathnames` are the pathnames of the matched
+ * routes that contribute a path, outermost first (root "/" … the current
+ * route); `..` climbs one ROUTE (`relative="route"`, the default) or one URL
+ * segment (`isPathRelative`, `relative="path"`). A `to` with no pathname
+ * (`?q`, `#h`) keeps the current location's pathname. Absolute paths pass
+ * through.
+ */
+export function resolveTo(
+  toArg: string | Partial<PathObject>,
+  routePathnames: string[],
+  locationPathname: string,
+  isPathRelative = false,
+): PathObject {
+  const to: Partial<PathObject> = typeof toArg === "string" ? parsePathRR(toArg) : { ...toArg };
+  const isEmptyPath = toArg === "" || to.pathname === "";
+  const toPathname = isEmptyPath ? "/" : to.pathname;
+
+  let from: string;
+  if (toPathname == null) {
+    from = locationPathname;
+  } else {
+    let routeIndex = routePathnames.length - 1;
+    // Leading `..` segments climb the route hierarchy, one route each.
+    if (!isPathRelative && toPathname.startsWith("..")) {
+      const toSegments = toPathname.split("/");
+      while (toSegments[0] === "..") {
+        toSegments.shift();
+        routeIndex -= 1;
+      }
+      to.pathname = toSegments.join("/");
+    }
+    from = routeIndex >= 0 ? routePathnames[routeIndex] : "/";
+  }
+
+  const rel = to.pathname;
+  // A relative target never leaves the origin: repeated leading slashes (a
+  // crafted `//host` location, `.//host`) collapse to one.
+  const pathname = (rel ? (rel.startsWith("/") ? rel : resolvePathname(rel, from)) : from).replace(
+    /^\/{2,}/,
+    "/",
+  );
+  const path: PathObject = { pathname, search: normalizeSearch(to.search), hash: normalizeHash(to.hash) };
+  // Trailing slashes: kept when `to` has one, or for "." / "" when the current URL has one.
+  const explicitTrailing = !!toPathname && toPathname !== "/" && toPathname.endsWith("/");
+  const currentTrailing = (isEmptyPath || toPathname === ".") && locationPathname.endsWith("/");
+  if (!path.pathname.endsWith("/") && (explicitTrailing || currentTrailing)) path.pathname += "/";
+  return path;
+}
+
+/**
+ * The pathname each matched module contributes, for {@link resolveTo}:
+ * `ids` are `useMatches()` ids (appDir-relative files), outermost first, cut
+ * at the calling component's level; `lastIsLeaf` when that is the route
+ * itself, which resolves against the whole (locale-free) location pathname —
+ * splat segments included, as in React Router. A layout gets the part of the
+ * URL its folder covers, taken from the URL itself (so encoding is kept, and
+ * decoded params never leak into hrefs). Pathless entries — route-group
+ * layouts, an index route below its folder's layout — collapse into the
+ * previous one, like React Router's path-contributing matches.
+ */
+export function routePathnamesFor(
+  ids: readonly string[],
+  locationPathname: string,
+  params: Record<string, string | undefined>,
+  lastIsLeaf: boolean,
+): string[] {
+  const urlSegments = locationPathname.split("/").filter(Boolean);
+  const trim = (p: string) => (p.length > 1 ? p.replace(/\/+$/, "") : p);
+  const out: string[] = [];
+  ids.forEach((rawId, i) => {
+    let pathname: string;
+    if (i === 0) {
+      pathname = "/";
+    } else if (lastIsLeaf && i === ids.length - 1) {
+      pathname = locationPathname;
+      // A leaf with a path of its own (an absent `[[page]]` included) is a route
+      // level of its own, as in React Router; only an index route is pathless.
+      if (out.length > 0 && !/(?:^|\/)_index(?:\.mdx)?\.tsx?$/.test(rawId)) {
+        out.push(pathname);
+        return;
+      }
+    } else {
+      // `routes/blog/layout.tsx` covers what its folder's index route would.
+      const dir = /^(.*)\/layout\.tsx?$/.exec(rawId.split("\\").join("/"))?.[1];
+      if (!dir) return; // unknown module id: contributes no path
+      let consumed = 0;
+      for (const seg of pathToSegments(filePathToPattern(`${dir}/_index.tsx`))) {
+        if (typeof seg === "string" || "param" in seg) consumed += 1;
+        else if ("optional" in seg) consumed += params[seg.optional] === undefined ? 0 : 1;
+        else consumed = urlSegments.length;
+      }
+      pathname = "/" + urlSegments.slice(0, consumed).join("/");
+    }
+    if (out.length > 0 && trim(out[out.length - 1]) === trim(pathname)) return;
+    out.push(pathname);
+  });
+  return out;
+}
+
 /** Random short key identifying a history entry (scroll restoration identity). */
 export function createLocationKey(): string {
   try {
@@ -130,17 +272,6 @@ export function dataRedirectTarget(res: Response): string | null {
  * the wrong chunk hydrated against the server's data. Parity by construction.
  */
 
-/** Manifest pattern syntax → scanner segments ("" is the index route). */
-function patternSegments(pattern: string): Segment[] {
-  if (pattern === "") return [];
-  return pattern.split("/").map((seg) => {
-    if (seg.startsWith("[...") && seg.endsWith("]")) return { catchAll: seg.slice(4, -1) };
-    if (seg.startsWith("[[") && seg.endsWith("]]")) return { optional: seg.slice(2, -2) };
-    if (seg.startsWith("[") && seg.endsWith("]")) return { param: seg.slice(1, -1) };
-    return seg;
-  });
-}
-
 // One trie per manifest, rebuilt when its route table changes (the dev server
 // swaps routes in place on add/remove, so key on the pattern list, not identity).
 const trieCache = new WeakMap<ServerManifest, { key: string; trie: TrieNode }>();
@@ -153,7 +284,7 @@ function trieFor(manifest: ServerManifest): TrieNode {
   const routes: RouteFile[] = patterns.map((p) => ({
     filePath: manifest.routes[p]?.file ?? p,
     urlPattern: p,
-    segments: patternSegments(p),
+    segments: pathToSegments(p),
   }));
   const trie = buildTrie(routes);
   trieCache.set(manifest, { key, trie });
