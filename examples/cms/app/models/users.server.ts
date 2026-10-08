@@ -93,7 +93,7 @@ export async function createUser(input: {
   const hash = await Bun.password.hash(input.password);
   db.run(
     "INSERT INTO users (id, username, passwordHash, displayName, role, email, provider, createdAt) VALUES (?,?,?,?,?,?,?,?)",
-    [id, input.username, hash, input.displayName, input.role ?? "admin", email, "password", nowTs()],
+    [id, input.username, hash, input.displayName, input.role ?? "editor", email, "password", nowTs()],
   );
   return { ok: true, user: getUserById(id)! };
 }

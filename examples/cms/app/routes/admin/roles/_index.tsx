@@ -1,6 +1,7 @@
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
 import { Form, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
+import { canGrantRole } from "../../../authz.server.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { type FormState, fromValidationError } from "../../../form.ts";
 import {
@@ -31,9 +32,13 @@ export async function loader({ request }: LoaderArgs): Promise<Data> {
 }
 
 export async function action({ request, formData }: ActionArgs): Promise<FormState | Response> {
-  await requirePermission(request, "roles.manage");
+  const me = await requirePermission(request, "roles.manage");
   if (String(formData.get("intent")) === "delete") {
-    const res = deleteRole(String(formData.get("id") ?? ""));
+    const id = String(formData.get("id") ?? "");
+    // Deleting a role takes its access from everyone holding it.
+    if (!canGrantRole(me, id))
+      return flashFail({ error: "You can only delete roles whose permissions you hold yourself." });
+    const res = deleteRole(id);
     return res.ok ? flashRedirect("/admin/roles", "Role deleted") : flashFail({ error: res.reason });
   }
   let data: NamedInput;

@@ -1,6 +1,7 @@
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
 import { Form, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
+import { canGrantRole } from "../../../authz.server.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { type FormState, fromValidationError } from "../../../form.ts";
 import { listRoles, type Role, setUserRoles } from "../../../models/rbac.server.ts";
@@ -16,16 +17,21 @@ export async function loader({ request }: LoaderArgs): Promise<Data> {
 }
 
 export async function action({ request, formData }: ActionArgs): Promise<FormState | Response> {
-  await requirePermission(request, "users.manage");
+  const me = await requirePermission(request, "users.manage");
   let data: UserInput;
   try {
     data = await validate<UserInput>(UserCreateSchema, formData);
   } catch (err) {
     return flashFail(await fromValidationError(err));
   }
+  // Subset rule: only roles whose permissions you hold yourself.
+  const roleIds = formData.getAll("roles").map(String);
+  if (!roleIds.every((r) => canGrantRole(me, r))) {
+    return flashFail({ error: "You can only grant roles whose permissions you hold yourself." });
+  }
   const res = await createUser(data);
   if (!res.ok || !res.user) return flashFail({ error: res.reason, fieldErrors: { username: [res.reason!] } });
-  setUserRoles(res.user.id, formData.getAll("roles").map(String));
+  setUserRoles(res.user.id, roleIds);
   return flashRedirect("/admin/users", "User created");
 }
 

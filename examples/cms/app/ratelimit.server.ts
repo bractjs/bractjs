@@ -38,6 +38,18 @@ export function clientIp(req: Request): string {
 }
 
 /**
+ * The client address to tell attackers apart for the per-user sign-in lock:
+ * the forwarded address behind a trusted proxy, else the socket address. Not
+ * for the IP-only limiters (see clientIp): behind an unconfigured proxy every
+ * visitor shares the proxy's address, which here only makes the per-user lock
+ * coarser (≈ username-only, as before), never a global bucket.
+ */
+export function lockoutIp(req: Request): string {
+  const address = TRUST_PROXY ? getClientAddress(req, { trustProxy: true }) : getClientAddress(req);
+  return address ?? UNKNOWN_IP;
+}
+
+/**
  * Check an IP-keyed limiter — a no-op pass for UNKNOWN_IP, which would
  * otherwise be one global bucket shared by every visitor (a lockout DoS).
  */

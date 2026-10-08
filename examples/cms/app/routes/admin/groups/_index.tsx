@@ -1,6 +1,7 @@
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
 import { Form, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
+import { canGrantGroup, leavesNoAdministrator } from "../../../authz.server.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { type FormState, fromValidationError } from "../../../form.ts";
 import {
@@ -37,9 +38,14 @@ export async function loader({ request }: LoaderArgs): Promise<Data> {
 }
 
 export async function action({ request, formData }: ActionArgs): Promise<FormState | Response> {
-  await requirePermission(request, "roles.manage");
+  const me = await requirePermission(request, "roles.manage");
   if (String(formData.get("intent")) === "delete") {
-    deleteGroup(String(formData.get("id") ?? ""));
+    const id = String(formData.get("id") ?? "");
+    if (!canGrantGroup(me, id))
+      return flashFail({ error: "You can only delete groups whose permissions you hold yourself." });
+    if (leavesNoAdministrator({ kind: "deleteGroup", groupId: id }))
+      return flashFail({ error: "Can’t delete the group that gives the last administrator access." });
+    deleteGroup(id);
     return flashRedirect("/admin/groups", "Group deleted");
   }
   let data: NamedInput;

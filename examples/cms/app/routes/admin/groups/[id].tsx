@@ -1,6 +1,7 @@
 import type { ActionArgs, LoaderArgs } from "@bractjs/bractjs";
 import { Form, HttpError, Link, useActionData, useLoaderData, validate } from "@bractjs/bractjs";
 import { requirePermission } from "../../../auth.server.ts";
+import { addedIds, canGrantGroup, leavesNoAdministrator } from "../../../authz.server.ts";
 import { flashFail, flashRedirect } from "../../../flash.server.ts";
 import { type FormState, fromValidationError } from "../../../form.ts";
 import {
@@ -34,9 +35,24 @@ export async function loader({ request, params }: LoaderArgs): Promise<Data> {
 }
 
 export async function action({ request, params, formData }: ActionArgs): Promise<FormState | Response> {
-  await requirePermission(request, "roles.manage");
+  const me = await requirePermission(request, "roles.manage");
   const group = getGroup(params.id);
   if (!group) throw new HttpError(404, "Group not found.");
+  // Subset rule, both ways: a group that grants (or would grant) access you
+  // don't hold is not yours to change — adding members would hand that access
+  // out, removing roles would take it from people with more access than you.
+  const roleIds = formData.getAll("roles").map(String);
+  const memberIds = formData.getAll("members").map(String);
+  if (!canGrantGroup(me, group.id) || !canGrantGroup(me, group.id, roleIds)) {
+    return flashFail({ error: "You can only manage groups whose permissions you hold yourself." });
+  }
+  // No self-edit of access: you can't add yourself to a group.
+  if (addedIds(memberIds, groupMemberIds(group.id)).includes(me.id)) {
+    return flashFail({ error: "You can’t add yourself to a group — ask another administrator." });
+  }
+  if (leavesNoAdministrator({ kind: "group", groupId: group.id, roleIds, memberIds })) {
+    return flashFail({ error: "At least one user must keep the Administrator role." });
+  }
   let data: NamedInput;
   try {
     data = await validate<NamedInput>(GroupSchema, formData);
@@ -45,8 +61,8 @@ export async function action({ request, params, formData }: ActionArgs): Promise
   }
   const res = updateGroup(group.id, data);
   if (!res.ok) return flashFail({ error: res.reason });
-  setGroupRoles(group.id, formData.getAll("roles").map(String));
-  setGroupMembers(group.id, formData.getAll("members").map(String));
+  setGroupRoles(group.id, roleIds);
+  setGroupMembers(group.id, memberIds);
   return flashRedirect("/admin/groups", "Group saved");
 }
 

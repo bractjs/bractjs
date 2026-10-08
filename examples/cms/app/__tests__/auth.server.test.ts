@@ -106,6 +106,50 @@ test("checkLoginRate: anonymous junk logins can't lock out everyone (no shared '
   }
 });
 
+test("checkLoginRate: one client's junk attempts don't lock the user out from another client", async () => {
+  await _resetLoginRateLimits();
+  try {
+    for (let i = 0; i < 10; i++) await checkLoginRate("admin", UNKNOWN_IP, "198.51.100.1");
+    expect((await checkLoginRate("admin", UNKNOWN_IP, "198.51.100.1")).ok).toBe(false);
+    expect((await checkLoginRate("admin", UNKNOWN_IP, "198.51.100.2")).ok).toBe(true);
+    // Without a known client address the lock stays username-wide.
+    for (let i = 0; i < 10; i++) await checkLoginRate("solo", UNKNOWN_IP, UNKNOWN_IP);
+    expect((await checkLoginRate("solo", UNKNOWN_IP, "198.51.100.3")).ok).toBe(true);
+    expect((await checkLoginRate("solo", UNKNOWN_IP, UNKNOWN_IP)).ok).toBe(false);
+  } finally {
+    await _resetLoginRateLimits();
+  }
+});
+
+test("checkLoginRate: a per-username ceiling bounds a brute force spread over many addresses", async () => {
+  await _resetLoginRateLimits();
+  try {
+    for (let i = 0; i < 100; i++) await checkLoginRate("target", UNKNOWN_IP, `10.0.${i >> 8}.${i & 255}`);
+    expect((await checkLoginRate("target", UNKNOWN_IP, "10.9.9.9")).ok).toBe(false);
+  } finally {
+    await _resetLoginRateLimits();
+  }
+});
+
+test("a locked-out sign-in answers 429 with Retry-After", async () => {
+  const { callAction } = await import("@bractjs/bractjs/testing");
+  const { action } = await import("../routes/admin/login.tsx");
+  await _resetLoginRateLimits();
+  try {
+    const attempt = () =>
+      callAction(action, {
+        formData: { username: "lockme", password: "wrong-password" },
+      }) as Promise<unknown>;
+    for (let i = 0; i < 10; i++) await attempt();
+    const res = (await attempt()) as { data: { error: string }; init: ResponseInit };
+    expect(res.init.status).toBe(429);
+    expect(Number(new Headers(res.init.headers).get("Retry-After"))).toBeGreaterThan(0);
+    expect(res.data.error).toMatch(/Too many sign-in attempts/);
+  } finally {
+    await _resetLoginRateLimits();
+  }
+});
+
 test("the pending-MFA cookie expires server-side after 10 minutes, whatever the browser keeps", async () => {
   const u = (await make()).user!;
   const cookie = await beginPendingMfa(u.id);

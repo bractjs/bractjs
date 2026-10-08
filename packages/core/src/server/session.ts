@@ -85,13 +85,29 @@ interface InternalSession extends Session {
 // Cookies issued before this key existed carry none and stay readable.
 const EXPIRES_KEY = "__bract_exp";
 
+// UTF-8 → base64url. `btoa(json)` alone throws InvalidCharacterError on any
+// character outside Latin-1 ("’", "ü", an emoji), so storing such a value —
+// a flash message, a display name — failed the whole response.
 function encode(data: SessionData): string {
-  return btoa(JSON.stringify(data)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const bytes = new TextEncoder().encode(JSON.stringify(data));
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+
+const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 function decode(encoded: string): SessionData {
   const pad = "=".repeat((4 - (encoded.length % 4)) % 4);
-  const parsed = JSON.parse(atob(encoded.replace(/-/g, "+").replace(/_/g, "/") + pad)) as SessionData;
+  const binary = atob(encoded.replace(/-/g, "+").replace(/_/g, "/") + pad);
+  let json: string;
+  try {
+    json = utf8.decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
+  } catch {
+    // Issued by the earlier Latin-1 encoder (any non-ASCII byte that isn't valid UTF-8).
+    json = binary;
+  }
+  const parsed = JSON.parse(json) as SessionData;
   // Defense-in-depth: the payload is HMAC-verified before we get here, so this
   // only matters if a signing secret leaks — but a session blob carrying a
   // "__proto__" key must never pollute Object.prototype when read/spread.

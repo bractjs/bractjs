@@ -24,7 +24,7 @@ import {
 } from "./models/users.server.ts";
 import type { OAuthProvider } from "./oauth.server.ts";
 import type { Permission } from "./permissions.ts";
-import { checkIpLimit, createRateLimiter } from "./ratelimit.server.ts";
+import { checkIpLimit, createRateLimiter, UNKNOWN_IP } from "./ratelimit.server.ts";
 
 // SESSION_SECRET is validated in env.server.ts (boot fails in prod if it's weak).
 const secrets = [SESSION_SECRET];
@@ -79,32 +79,53 @@ export async function requirePermission(request: Request, permission: Permission
 
 // ── Factor-1 (password) brute-force throttle ─────────────────────────────────
 // The MFA limiters only kick in AFTER a correct password, so without this the
-// password itself could be guessed without limit. Keyed primarily by username
-// (not spoofable, unlike a client IP); the IP bucket is secondary and only
-// meaningful behind a trusted proxy (see clientIp / TRUST_PROXY).
+// password itself could be guessed without limit.
+//
+// The per-user lock is keyed by (username, client address): one client's junk
+// attempts lock out THAT client, not the real user signing in from elsewhere
+// (a username-only lock let anyone lock the admin out with 10 bad passwords).
+// Without a known client address it falls back to username-only. A higher
+// per-username ceiling still bounds a brute force spread across many
+// addresses. The IP bucket is secondary and only meaningful behind a trusted
+// proxy (see clientIp / TRUST_PROXY).
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const loginPerUser = createRateLimiter(10, LOGIN_WINDOW_MS); // attempts / username / 15 min
+const loginPerUser = createRateLimiter(10, LOGIN_WINDOW_MS); // attempts / (username, client) / 15 min
+const loginPerUserCeiling = createRateLimiter(100, LOGIN_WINDOW_MS); // attempts / username, all clients
 const loginPerIp = createRateLimiter(30, LOGIN_WINDOW_MS); // attempts / IP / 15 min
+
+const userKey = (username: string, client: string): string => {
+  const name = username.trim().toLowerCase();
+  return client === UNKNOWN_IP ? name : `${name}@${client}`;
+};
 
 export type LoginRate = { ok: true } | { ok: false; retryAfterMs: number };
 
-/** Throttle a password attempt. Call before authenticatePassword. */
-export async function checkLoginRate(username: string, ip: string): Promise<LoginRate> {
-  const u = await loginPerUser.check(username.trim().toLowerCase());
+/**
+ * Throttle a password attempt. Call before authenticatePassword. `ip`: the
+ * IP-limiter address (clientIp); `client`: the address the per-user lock is
+ * keyed by (lockoutIp) — UNKNOWN_IP keeps the username-only lock.
+ */
+export async function checkLoginRate(username: string, ip: string, client: string = ip): Promise<LoginRate> {
+  const u = await loginPerUser.check(userKey(username, client));
   if (!u.ok) return { ok: false, retryAfterMs: u.retryAfterMs };
+  if (client !== UNKNOWN_IP) {
+    const all = await loginPerUserCeiling.check(username.trim().toLowerCase());
+    if (!all.ok) return { ok: false, retryAfterMs: all.retryAfterMs };
+  }
   const i = await checkIpLimit(loginPerIp, ip);
   if (!i.ok) return { ok: false, retryAfterMs: i.retryAfterMs };
   return { ok: true };
 }
 
-/** Clear the per-username counter after a successful sign-in (don't penalize the legit user). */
-export async function clearLoginRate(username: string): Promise<void> {
-  await loginPerUser.reset(username.trim().toLowerCase());
+/** Clear this client's per-user counter after a successful sign-in (don't penalize the legit user). */
+export async function clearLoginRate(username: string, client: string = UNKNOWN_IP): Promise<void> {
+  await loginPerUser.reset(userKey(username, client));
 }
 
 /** Test seam: clear login throttle windows between cases. */
 export async function _resetLoginRateLimits(): Promise<void> {
   await loginPerUser.reset();
+  await loginPerUserCeiling.reset();
   await loginPerIp.reset();
 }
 
