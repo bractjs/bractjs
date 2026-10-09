@@ -6,7 +6,13 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-**Upgrading** — behavior changes to check:
+_Nothing yet._
+
+---
+
+## [0.9.0] — 2026-10-08
+
+**Upgrading from 0.8** — behavior changes to check (details below):
 
 - `bractjs start` now **refuses to start** when `app/server.ts` fails to import (it used to warn and serve without that file's global middleware). Set `NODE_ENV=development` to keep the old warn-and-continue while debugging.
 - `/_data` redirects are delivered as `204 No Content` + `X-BractJS-Redirect` (the envelope `/_action` already used), never as a raw 3xx. Only the framework's own client reads `/_data`; the `@bractjs/bractjs/testing` `data()` helper now throws "redirected to …" for a gated route.
