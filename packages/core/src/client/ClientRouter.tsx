@@ -38,6 +38,7 @@ import {
   dataRedirectTarget,
   matchPatternForPath,
   parseTo,
+  readActionBody,
   toSamePath,
 } from "./nav-utils.ts";
 import { type RevalidationInfo, registerNavigator, registerRevalidator } from "./revalidation.ts";
@@ -796,6 +797,22 @@ export function ClientRouter({
       // React Router-style blockers: the browser already moved, so put the
       // current entry back, and let `proceed()` re-run the navigation.
       const current = locationRef.current;
+      // A hash-only change (a plain <a href="#section">, or Back to one) is
+      // the same document: no loaders to re-run. The browser's entry for it
+      // carries no state, so give it its own key — committing with "default"
+      // would make ScrollRestoration jump to the first page's saved position
+      // instead of the anchor.
+      if (
+        !st?.__bractKey &&
+        window.location.pathname === current.pathname &&
+        window.location.search === current.search
+      ) {
+        const key = createLocationKey();
+        history.replaceState({ __bractKey: key, __bractState: null }, "", window.location.href);
+        setNavigationType("POP");
+        setLocation(toLocation(target, { key, state: null }));
+        return;
+      }
       const nextLocation = toLocation(target, init);
       const blocker = findBlocker({ currentLocation: current, nextLocation, historyAction: "POP" });
       if (blocker) {
@@ -941,7 +958,7 @@ export function ClientRouter({
             window.location.assign(res.url);
             return REDIRECTED;
           }
-          return res.json();
+          return readActionBody(res);
         };
 
         // clientAction (RR7-style): if the target route exports one, it runs in

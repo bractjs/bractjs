@@ -1,5 +1,7 @@
 import { matchPath } from "./api-route.ts";
 import { isSameOriginHandshake } from "./csrf.ts";
+import { isHttpError } from "../shared/errors.ts";
+import { toHttpError } from "../shared/data.ts";
 import {
   createMiddlewareContext,
   type MiddlewareContext,
@@ -201,12 +203,21 @@ export async function handleWebSocketRequest(
   }
   const ep = endpoint;
   const ctx = createMiddlewareContext(request, params, context);
-  return runRouteMiddleware(ep.middleware, ctx, async () => {
-    const data = ep.handlers.upgrade ? await ep.handlers.upgrade(ctx) : undefined;
-    if (data instanceof Response) return data;
-    if (!upgrade({ handlers: ep.handlers, data })) {
-      return new Response("Upgrade Required", { status: 426, headers: { Upgrade: "websocket" } });
-    }
-    return upgradedResponse();
-  });
+  try {
+    return await runRouteMiddleware(ep.middleware, ctx, async () => {
+      const data = ep.handlers.upgrade ? await ep.handlers.upgrade(ctx) : undefined;
+      if (data instanceof Response) return data;
+      if (!upgrade({ handlers: ep.handlers, data })) {
+        return new Response("Upgrade Required", { status: 426, headers: { Upgrade: "websocket" } });
+      }
+      return upgradedResponse();
+    });
+  } catch (err) {
+    // A middleware/upgrade that THROWS its refusal (a Response, an HttpError,
+    // `data(…, { status })`) answers with it, as on pages and /api — not a 500.
+    if (err instanceof Response) return err;
+    const httpError = isHttpError(err) ? err : await toHttpError(err);
+    if (httpError) return new Response(httpError.message, { status: httpError.status });
+    throw err;
+  }
 }

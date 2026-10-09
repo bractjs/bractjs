@@ -6,7 +6,28 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+**Behaviour changes to check:**
+
+- **A document `POST` to a route with no `action` export now answers `405 Method Not Allowed`** (React Router parity). It answered `200` — `<Form>` reported success for a mutation that never ran. Methods other than `GET`/`HEAD`/`POST`/`PUT`/`PATCH`/`DELETE` (`OPTIONS`, `PROPFIND`, …) on a page also get a `405` instead of running its loaders and rendering a document; `cors()` still answers preflights first.
+- **Typed `/api` form and multipart bodies are no longer capped at 1 MiB** by the `Content-Length` pre-check (it applies to JSON bodies only, as on `/_action`); they are bounded by the adapter's request cap (`maxRequestBodySize`, 16 MiB default). An upload endpoint over `/api` could not accept files over 1 MiB.
+- **`cors()` merges `Origin` into an existing `Vary`** instead of replacing it, so a route's own `Vary: Cookie` / `Accept-Language` survives on a shared-cacheable page.
+
+### Fixed
+
+- **Security (high): quadratic form parsing.** `validate()` / `safeValidate()` re-copied the value array on every repeated field name, so an unauthenticated ~1 MiB `a=&a=&…` body blocked the event loop for about a minute. `/_action`'s multipart decoding likewise rescanned the whole body once per form marker. Both are linear now.
+- **Security (medium): `/_image`'s in-memory cache is bounded by bytes** (64 MiB, entries over 8 MiB go to the disk cache only), not only by entry count — ~120 variants of one upload at `w=3840&format=png` could fill gigabytes of RAM.
+- **`defer()` promises that reject early no longer surface as unhandled rejections** — on Node (`appFetchHandler`, Lambda, Vercel builds) that terminated the process; under `createServer` it double-reported the error to `onError`.
+- **`<Image>` never rendered for widths off the `/_image` ladder** (`width={48}`, or any width ≤ 213): it requested `w=48`, which the endpoint refuses. Widths now snap to the smallest ladder step that is at least the declared width.
+- **Production builds compiled route modules against the wrong JSX runtime when `NODE_ENV` was not `production`** (`NODE_ENV=test bractjs build` in CI): the shaken chunks imported `jsxDEV`, which is `undefined` in React's production runtime, and every route threw on the client. The rewrite now follows the bundle's mode, not the build process's `NODE_ENV`.
+- **`process.env.*` in route modules and `root.tsx` was not rewritten by the `clientEnv` allowlist** (the route-shake plugin answered first). In dev an allow-listed key was a `ReferenceError` in the browser; non-allow-listed keys were never neutralised to `"undefined"` there. The rewrite now runs inside the route-shake step (`routeShakePlugin(appDir, { env })`), including the dev HMR module swap.
+- **A route file named `routes/root.tsx` was taken for the app root** by the production build (basename match) and overwrote the root chunk; the match is by full output path now, as in dev.
+- **A route's ErrorBoundary stayed on screen after navigating to a sibling route**: the boundary never reset. It clears when the location key changes.
+- **`"use server"` actions, `/_stream` and WebSocket upgrades turned a thrown `Response`, `HttpError` or `data(…, { status })` from their route middleware or body into a generic 500**; they now answer with it, as pages and `/api` do. A returned `data(value, { status, headers })` from a `"use server"` action or `/api` handler applies its init instead of being serialised as a wrapper object.
+- **`onError` is now called for `"use server"` action, `/_stream` and `/api` handler failures**, as the documented contract says.
+- **`extractExports` now sees `export async function*`** (a `"use server"` generator got no client proxy, so importing it failed the build) and no longer emits `export const default` for `export { x as default }` in server-module stubs.
+- **A hash-only history change (`<a href="#section">`, Back to one) no longer re-runs every loader** or hands ScrollRestoration the initial page's key.
+- Client submits now read plain-text error replies (the 403 CSRF, 413 and `rateLimit()` 429 bodies) as `{ error }` instead of throwing a JSON `SyntaxError`; a bare `yield` on `/_stream` sends `null` instead of an unparseable `undefined`; `fetcher.submit(url, { method: "get", body })` keeps its fields in the query string; `defineActions()` and the client route lookup ignore prototype keys (`intent=constructor`, `/constructor`); the `/_image` spawn semaphore can no longer admit one process over its cap; `.ts` route and layout files are transpiled as TS, not TSX; `loadManifest()` caches per build directory.
+- `examples/cms`: the login form caps the username (64) and password (1024) lengths before they become rate-limiter keys.
 
 ---
 

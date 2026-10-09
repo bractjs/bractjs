@@ -1,5 +1,5 @@
 import { isDataWithResponseInit, toHttpError } from "../shared/data.ts";
-import { isHttpError, isRedirect } from "../shared/errors.ts";
+import { HttpError, isHttpError, isRedirect } from "../shared/errors.ts";
 import type { ActionArgs, LoaderArgs, RouteModule } from "../shared/route-types.ts";
 import { type RouteContext, withContextAccessors } from "../shared/router-context.ts";
 import type { ContextFactory } from "./context.ts";
@@ -173,7 +173,9 @@ export async function runLoaders(
 // ── runAction ──────────────────────────────────────────────────────────────
 
 export async function runAction(routeModule: RouteModule, args: ActionArgs, id = "route"): Promise<unknown> {
-  if (!routeModule.action) return null;
+  // No `action` export: say so (React Router answers 405 too). Answering 200
+  // made <Form> report success for a mutation that never ran.
+  if (!routeModule.action) throw new HttpError(405, "Method Not Allowed");
   const action = routeModule.action as (a: ActionArgs) => Promise<unknown>;
 
   try {

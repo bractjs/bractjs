@@ -3,7 +3,14 @@ import { join } from "node:path";
 import type { ImageFormat, ImageTransformParams, TransformResult } from "./types.ts";
 
 const MAX_MEM = 200;
+// SECURITY(medium): bound the cache by BYTES as well as entries. One source
+// image yields ~120 variants (quality × format × fit per width), each up to
+// MAX_OUTPUT_BYTES, so an entry cap alone let an unauthenticated client fill
+// gigabytes of RAM through /_image.
+const MAX_MEM_BYTES = 64 * 1024 * 1024;
+const MAX_ENTRY_BYTES = 8 * 1024 * 1024;
 const mem = new Map<string, { result: TransformResult; hits: number }>();
+let memBytes = 0;
 
 async function cacheKey(src: string, params: ImageTransformParams): Promise<string> {
   const raw = new TextEncoder().encode(JSON.stringify({ src, ...params }));
@@ -31,7 +38,15 @@ export async function setInMemory(
   result: TransformResult,
 ): Promise<void> {
   const key = await cacheKey(src, params);
-  if (mem.size >= MAX_MEM) {
+  const size = result.data.byteLength;
+  // Oversized variants are served from the disk cache instead.
+  if (size > MAX_ENTRY_BYTES) return;
+  const existing = mem.get(key);
+  if (existing) {
+    memBytes -= existing.result.data.byteLength;
+    mem.delete(key);
+  }
+  while (mem.size > 0 && (mem.size >= MAX_MEM || memBytes + size > MAX_MEM_BYTES)) {
     let minKey = "";
     let minHits = Infinity;
     for (const [k, v] of mem) {
@@ -40,9 +55,17 @@ export async function setInMemory(
         minKey = k;
       }
     }
-    if (minKey) mem.delete(minKey);
+    memBytes -= mem.get(minKey)!.result.data.byteLength;
+    mem.delete(minKey);
   }
   mem.set(key, { result, hits: 0 });
+  memBytes += size;
+}
+
+/** Test hook: drop every in-memory variant. */
+export function clearMemoryCache(): void {
+  mem.clear();
+  memBytes = 0;
 }
 
 export async function getFromDisk(

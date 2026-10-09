@@ -9,9 +9,10 @@ export { hasClientDirective, hasServerDirective };
 
 export function extractExports(src: string): string[] {
   const names: string[] = [];
-  for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s+(\w+)/gm)) names.push(m[1]);
+  // `function*` too: a "use server" async generator is what /_stream serves.
+  for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s*\*?\s*(\w+)/gm)) names.push(m[1]);
   for (const m of src.matchAll(/^export\s+(?:let|const|var)\s+(\w+)\s*=/gm)) names.push(m[1]);
-  for (const m of src.matchAll(/^export\s+default\s+(?:async\s+)?function\s+(\w+)/gm)) names.push(m[1]);
+  for (const m of src.matchAll(/^export\s+default\s+(?:async\s+)?function\s*\*?\s*(\w+)/gm)) names.push(m[1]);
   for (const m of src.matchAll(/^export\s+class\s+(\w+)/gm)) names.push(m[1]);
   for (const m of src.matchAll(/^export\s*\{([^}]+)\}/gm)) {
     for (const part of m[1].split(",")) {
@@ -66,8 +67,14 @@ export const useClientStubPlugin: BunPlugin = {
     build.onLoad({ filter: /\.(tsx?|jsx?)$/ }, async ({ path }) => {
       const src = await Bun.file(path).text();
       if (!hasClientDirective(src)) return undefined;
-      const stubs = extractExports(src).map((n) => `export const ${n} = () => null;`).join("\n");
-      return { contents: stubs || "export {};", loader: "ts" };
+      const names = extractExports(src);
+      const stubs = names
+        .filter((n) => n !== "default")
+        .map((n) => `export const ${n} = () => null;`)
+        .join("\n");
+      // `export { X as default }` must become a default stub, not `export const default`.
+      const withDefault = names.includes("default") ? `${stubs}\nexport default () => null;` : stubs;
+      return { contents: withDefault || "export {};", loader: "ts" };
     });
   },
 };
@@ -143,7 +150,9 @@ export function createUseServerProxyPlugin(appDir?: string): BunPlugin {
       build.onLoad({ filter: /\.(tsx?|jsx?)$/ }, async ({ path }) => {
         const src = await Bun.file(path).text();
         if (!hasServerDirective(src)) return undefined;
-        const names = extractExports(src);
+        // A default export can't be proxied by name (`export const default` is a
+        // syntax error); the registry keys actions by their named exports.
+        const names = extractExports(src).filter((n) => n !== "default");
         if (names.length === 0) return { contents: "export {};", loader: "ts" };
         const key = pathKeyForAction(path, appDir);
         // Still proxied (server source never ships), but the server won't

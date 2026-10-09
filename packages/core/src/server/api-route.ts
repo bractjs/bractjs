@@ -7,6 +7,8 @@ import {
   runRouteMiddleware,
 } from "./middleware.ts";
 import { hasForbiddenKey } from "./proto-guard.ts";
+import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
+import { isDataWithResponseInit, toHttpError } from "../shared/data.ts";
 import { isHttpError } from "../shared/errors.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -124,6 +126,8 @@ export async function handleApiRequest(
   request: Request,
   /** The request's context from global middleware, shared with endpoint middleware. */
   context: Record<string, unknown> = {},
+  /** `BractJSConfig.onError`: told about handler failures, as for route loaders/actions. */
+  onError?: OnErrorHook,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   for (const def of routeRegistry) {
@@ -148,18 +152,20 @@ export async function handleApiRequest(
     const invoke = async (): Promise<Response> => {
       let input: unknown;
       if (request.method !== "GET" && request.method !== "DELETE") {
-        // Trust an advertised Content-Length up front so oversized payloads
-        // are rejected before we buffer them.
-        const clRaw = request.headers.get("Content-Length");
-        if (clRaw) {
-          const cl = Number(clRaw);
-          if (Number.isFinite(cl) && cl > MAX_BODY_BYTES) {
-            return new Response("Payload Too Large", { status: 413 });
-          }
-        }
-
         const ct = request.headers.get("Content-Type") ?? "";
         if (ct.includes("application/json")) {
+          // Trust an advertised Content-Length up front so oversized payloads
+          // are rejected before we buffer them. JSON only: form/multipart
+          // bodies (file uploads) are bounded by the adapter's request cap
+          // instead, as on /_action — a 1 MiB ceiling made every upload
+          // endpoint reject files over 1 MiB.
+          const clRaw = request.headers.get("Content-Length");
+          if (clRaw) {
+            const cl = Number(clRaw);
+            if (Number.isFinite(cl) && cl > MAX_BODY_BYTES) {
+              return new Response("Payload Too Large", { status: 413 });
+            }
+          }
           const text = await request.text();
           // Defense in depth: clients can lie about Content-Length.
           if (text.length > MAX_BODY_BYTES) {
@@ -186,6 +192,8 @@ export async function handleApiRequest(
       // cookie, a file download…). Response.json(response) would serialize the
       // object itself to `{}` and drop its status and headers.
       if (result instanceof Response) return result;
+      // `return data(value, { status, headers })`: status/headers for the reply.
+      if (isDataWithResponseInit(result)) return Response.json(result.data ?? null, result.init ?? undefined);
       // Response.json(undefined) throws ("not JSON serializable"): a void
       // handler (DELETE with no body) answers `null`, not a 500.
       return Response.json(result === undefined ? null : result);
@@ -200,11 +208,13 @@ export async function handleApiRequest(
         : await invoke();
     } catch (err) {
       if (err instanceof Response) return err;
-      // HttpError carries its own status (parity with /_action and route handlers).
-      if (isHttpError(err)) return Response.json({ error: err.message }, { status: err.status });
+      // HttpError / thrown data() carry their own status (parity with /_action and route handlers).
+      const httpError = isHttpError(err) ? err : await toHttpError(err);
+      if (httpError) return Response.json({ error: httpError.message }, { status: httpError.status });
       // SECURITY(high): never leak internal error details in production.
       // Dev mode keeps the message for DX; prod returns a generic 500.
       console.error("[bractjs] api route error:", err);
+      await fireOnError(onError, err, request);
       const msg = isExplicitDev()
         ? err instanceof Error
           ? err.message

@@ -2,14 +2,19 @@
 // graph through the package barrel, where node:async_hooks is an empty shim.
 import * as asyncHooks from "node:async_hooks";
 import { type ActionGateOptions, runActionGate } from "./action-handler.ts";
+import { toHttpError } from "../shared/data.ts";
+import { isHttpError, isRedirect } from "../shared/errors.ts";
+import { sanitizeRedirect } from "./response.ts";
 import { resolveActionEntry } from "./action-registry.ts";
 import { csrfHint } from "./csrf.ts";
 import { isExplicitDev } from "./env.ts";
+import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 
 // ── SSE helpers ────────────────────────────────────────────────────────────
 
 function sseChunk(event: string, data: unknown): string {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  // `undefined` (a bare `yield`) has no JSON form; send null so the client can parse it.
+  return `event: ${event}\ndata: ${JSON.stringify(data ?? null)}\n\n`;
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
@@ -76,7 +81,7 @@ export async function handleStreamRequest(
 
   // SECURITY(high): same route middleware as /_action (see action-middleware.ts).
   // It runs before the stream opens; a middleware rejection is the response.
-  return runActionGate(request, entry, gate, async () => streamAction(entry.fn));
+  return runActionGate(request, entry, gate, async () => streamAction(entry.fn, request, gate?.onError));
 }
 
 /**
@@ -92,7 +97,7 @@ function captureContext(): <R>(fn: () => R) => R {
   return typeof snapshot === "function" ? snapshot() : (fn) => fn();
 }
 
-function streamAction(action: () => Promise<unknown>): Response {
+function streamAction(action: () => Promise<unknown>, request: Request, onError?: OnErrorHook): Response {
   const encoder = new TextEncoder();
   // Pull-driven: the generator advances one value per chunk the client reads,
   // so a slow reader is backpressure, not an ever-growing server-side queue;
@@ -102,9 +107,31 @@ function streamAction(action: () => Promise<unknown>): Response {
   let cancelled = false;
   let inContext: <R>(fn: () => R) => R = (fn) => fn();
 
-  const fail = (controller: ReadableStreamDefaultController<Uint8Array>, err: unknown): void => {
+  const fail = async (
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    err: unknown,
+  ): Promise<void> => {
     // The client went away: there is no one to tell, and it is not a server error.
     if (cancelled) return;
+    // Control flow, as on /_action: an HttpError / thrown error Response /
+    // `data(…, { status })` carries its own status and message (never a
+    // server error); a redirect reports its (origin-checked) location.
+    if (isRedirect(err)) {
+      const redirect = sanitizeRedirect(err, request.url).headers.get("Location");
+      controller.enqueue(
+        encoder.encode(sseChunk("error", { message: "Redirect", status: err.status, redirect })),
+      );
+      controller.close();
+      return;
+    }
+    const httpError = isHttpError(err) ? err : await toHttpError(err);
+    if (httpError) {
+      controller.enqueue(
+        encoder.encode(sseChunk("error", { message: httpError.message, status: httpError.status })),
+      );
+      controller.close();
+      return;
+    }
     // Never expose internal error details to clients in production.
     const message = isExplicitDev()
       ? err instanceof Error
@@ -112,6 +139,7 @@ function streamAction(action: () => Promise<unknown>): Response {
         : String(err)
       : "Internal server error";
     console.error("[bractjs] stream action error:", err);
+    await fireOnError(onError, err, request);
     controller.enqueue(encoder.encode(sseChunk("error", { message })));
     controller.close();
   };
@@ -148,7 +176,7 @@ function streamAction(action: () => Promise<unknown>): Response {
           single = { value: result };
         }
       } catch (err) {
-        fail(controller, err);
+        await fail(controller, err);
       }
     },
     async pull(controller) {
@@ -171,7 +199,7 @@ function streamAction(action: () => Promise<unknown>): Response {
         controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
         controller.close();
       } catch (err) {
-        fail(controller, err);
+        await fail(controller, err);
       }
     },
     async cancel() {

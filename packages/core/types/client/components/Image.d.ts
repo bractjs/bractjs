@@ -16,4 +16,6 @@ export interface ImageProps {
     className?: string;
     style?: CSSProperties;
 }
+/** The smallest ladder width that is at least `w` (the largest when `w` exceeds the ladder). */
+export declare function ladderWidth(w: number): number;
 export declare function Image({ src, alt, width, height, quality, format, fit, priority, sizes, className, style, }: ImageProps): import("react").JSX.Element;

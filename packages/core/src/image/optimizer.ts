@@ -22,14 +22,20 @@ async function acquireSlot(): Promise<void> {
     inFlight++;
     return;
   }
+  // The releasing caller transfers its slot to us (see releaseSlot).
   await new Promise<void>((resolve) => waiters.push(resolve));
-  inFlight++;
 }
 
 function releaseSlot(): void {
-  inFlight--;
   const next = waiters.shift();
-  if (next) next();
+  if (next) {
+    // Hand the slot straight over: the waiter already counts as in flight
+    // (acquireSlot increments only on the uncontended path), so a caller
+    // arriving before it resumes can't slip into the same slot.
+    next();
+    return;
+  }
+  inFlight--;
 }
 
 // Probe for an available ImageMagick binary once, then cache the result.

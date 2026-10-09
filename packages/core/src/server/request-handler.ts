@@ -402,6 +402,11 @@ async function route(
   // else (assets, fetches, crawlers asking for JSON) gets a plain 404.
   const matched = matchRoute(matchPathname, trie);
   if (!matched && !isDocumentRequest(request)) return error("Not Found", 404);
+  // Pages answer GET/HEAD and the mutating methods only: an OPTIONS/PROPFIND
+  // must not run middleware and every loader and get a 200 document back.
+  if (request.method !== "GET" && request.method !== "HEAD" && !MUTATING_METHODS.has(request.method)) {
+    return error("Method Not Allowed", 405);
+  }
   const match = matched ?? { routeFile: undefined, params: {} as Record<string, string> };
   setRoutePattern(match.routeFile ? routePatternOf(match.routeFile.segments) : undefined);
 

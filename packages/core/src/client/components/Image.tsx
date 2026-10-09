@@ -21,6 +21,11 @@ export interface ImageProps {
 
 const WIDTHS = [320, 640, 768, 1024, 1280, 1536, 1920];
 
+/** The smallest ladder width that is at least `w` (the largest when `w` exceeds the ladder). */
+export function ladderWidth(w: number): number {
+  return WIDTHS.find((step) => step >= w) ?? WIDTHS[WIDTHS.length - 1];
+}
+
 function imgUrl(src: string, w: number, q: number, format: ImageFormat, fit: ImageFit): string {
   const sp = new URLSearchParams({
     src,
@@ -49,12 +54,13 @@ export function Image({
   // generating unnecessarily large variants.
   const widths = width ? WIDTHS.filter((w) => w <= Math.ceil(width * 1.5)) : WIDTHS;
 
-  // Ensure at least one srcset entry even if widths filtered to empty.
-  const srcWidths = widths.length > 0 ? widths : [width ?? 1280];
+  // /_image only serves widths on its ladder: a raw `width` (48, 800…) would
+  // get a 400 and the image would never load, so snap to the ladder.
+  const srcWidths = widths.length > 0 ? widths : [ladderWidth(width ?? 1280)];
 
   const srcset = srcWidths.map((w) => `${imgUrl(src, w, quality, format, fit)} ${w}w`).join(", ");
 
-  const defaultSrc = imgUrl(src, width ?? 1280, quality, format, fit);
+  const defaultSrc = imgUrl(src, ladderWidth(width ?? 1280), quality, format, fit);
 
   return (
     <img

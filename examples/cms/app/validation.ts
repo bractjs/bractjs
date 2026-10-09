@@ -71,7 +71,11 @@ export const LoginSchema: SchemaLike<LoginInput> = {
     const username = trimmed(o, "username");
     const password = str(o, "password");
     if (!username) issues.push({ path: ["username"], message: "Username is required." });
+    // Caps before the rate limiter keys on the username: an unbounded value
+    // would be held in memory for the whole throttle window, per request.
+    else if (username.length > 64) issues.push({ path: ["username"], message: "Username is too long." });
     if (!password) issues.push({ path: ["password"], message: "Password is required." });
+    else if (password.length > 1024) issues.push({ path: ["password"], message: "Password is too long." });
     return issues.length
       ? { success: false, error: { issues } }
       : { success: true, data: { username, password } };

@@ -1,4 +1,5 @@
 import { type MiddlewareContext, type MiddlewareFn } from "./middleware.ts";
+import { type OnErrorHook } from "./lifecycle.ts";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface ApiRouteOptions {
     /**
@@ -69,7 +70,9 @@ export declare function route<TMethod extends HttpMethod, TPath extends string, 
  */
 export declare function handleApiRequest(request: Request, 
 /** The request's context from global middleware, shared with endpoint middleware. */
-context?: Record<string, unknown>): Promise<Response | null>;
+context?: Record<string, unknown>, 
+/** `BractJSConfig.onError`: told about handler failures, as for route loaders/actions. */
+onError?: OnErrorHook): Promise<Response | null>;
 /**
  * Match a pathname against a route pattern; returns the `:param` values
  * (null-prototype object) or null when it doesn't match.

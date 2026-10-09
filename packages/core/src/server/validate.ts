@@ -39,8 +39,11 @@ function toPlainObject(input: FormData | Record<string, unknown>): Record<string
     const out = Object.create(null) as Record<string, unknown>;
     for (const [key, value] of input.entries()) {
       if (key in out) {
+        // Append in place: re-spreading the array on every repeat made a body
+        // of N same-named fields cost O(N²) (seconds of blocked event loop).
         const existing = out[key];
-        out[key] = Array.isArray(existing) ? [...existing, value] : [existing, value];
+        if (Array.isArray(existing)) existing.push(value);
+        else out[key] = [existing, value];
       } else {
         out[key] = value;
       }

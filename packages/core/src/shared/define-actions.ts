@@ -25,7 +25,8 @@ export function defineActions<M extends Record<string, IntentHandler>>(
   const dispatch = async (args: ActionArgs): Promise<Out> => {
     const raw = args.formData.get("intent");
     const intent = typeof raw === "string" ? raw : "";
-    const handler = handlers[intent];
+    // Own keys only: `intent=constructor` must not resolve Object.prototype.
+    const handler = Object.hasOwn(handlers, intent) ? handlers[intent] : undefined;
     if (!handler) {
       const known = Object.keys(handlers);
       const message = isExplicitDev()

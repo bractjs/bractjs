@@ -67,6 +67,12 @@ export declare function resolveTo(toArg: string | Partial<PathObject>, routePath
  */
 export declare function routePathnamesFor(ids: readonly string[], locationPathname: string, params: Record<string, string | undefined>, lastIsLeaf: boolean): string[];
 /** Random short key identifying a history entry (scroll restoration identity). */
+/**
+ * The body of an action response. JSON when it says so; a plain-text reply
+ * (the framework's 403 CSRF / 413 / `rateLimit()` 429 bodies) used to be fed
+ * to `res.json()` and threw a SyntaxError instead of reaching the form.
+ */
+export declare function readActionBody(res: Response): Promise<unknown>;
 export declare function createLocationKey(): string;
 /**
  * The redirect target of a `/_data` (or action) response, or `null` when it

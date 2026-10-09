@@ -240,6 +240,19 @@ export function routePathnamesFor(
 }
 
 /** Random short key identifying a history entry (scroll restoration identity). */
+/**
+ * The body of an action response. JSON when it says so; a plain-text reply
+ * (the framework's 403 CSRF / 413 / `rateLimit()` 429 bodies) used to be fed
+ * to `res.json()` and threw a SyntaxError instead of reaching the form.
+ */
+export async function readActionBody(res: Response): Promise<unknown> {
+  const type = res.headers.get("Content-Type") ?? "";
+  if (/\bjson\b/i.test(type)) return res.json();
+  const text = await res.text();
+  if (res.status >= 400) return { error: text || res.statusText || `HTTP ${res.status}` };
+  return text === "" ? null : text;
+}
+
 export function createLocationKey(): string {
   try {
     return crypto.randomUUID().slice(0, 8);
@@ -299,7 +312,7 @@ export function matchPatternForPath(pathname: string, manifest: ServerManifest):
   if (clientI18n) pathname = splitLocale(pathname, clientI18n).pathname;
   // Exact static match wins outright (most specific) — also a fast path.
   const normalized = pathname.replace(/^\//, "");
-  if (normalized in manifest.routes) return normalized;
+  if (Object.hasOwn(manifest.routes, normalized)) return normalized;
   return matchRoute(pathname, trieFor(manifest))?.routeFile.urlPattern ?? null;
 }
 

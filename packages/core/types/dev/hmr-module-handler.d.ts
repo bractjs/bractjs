@@ -6,4 +6,6 @@
  *
  * Security: rejects any path that resolves outside appDir.
  */
-export declare function handleHmrModuleRequest(url: URL, appDir: string): Promise<Response>;
+export declare function handleHmrModuleRequest(url: URL, appDir: string, 
+/** `BractJSConfig.clientEnv`: the `process.env.*` keys the module may inline (as the rebuilder does). */
+clientEnv?: string[]): Promise<Response>;

@@ -46,7 +46,8 @@ export const serverOnlyPlugin: BunPlugin = {
 // ── Server-only module stub ────────────────────────────────────────────────
 
 const SERVER_FILE_RE = /\.server\.(tsx?|jsx?)$/;
-const DEFAULT_EXPORT_RE = /^export\s+default\b/m;
+// `export default …` or `export { x as default }`.
+const DEFAULT_EXPORT_RE = /^export\s+default\b|^export\s*\{[^}]*\bas\s+default\b/m;
 
 // Runtime stub injected for every named/default export of a `*.server.ts`
 // module on the client. It is a callable Proxy that throws on call AND on
@@ -93,7 +94,8 @@ export const serverModuleStubPlugin: BunPlugin = {
       // it to the use-server proxy plugin, which replaces its exports with
       // /_action fetch proxies (no server source reaches the client either way).
       if (hasServerDirective(src)) return undefined;
-      const names = extractExports(src);
+      // "default" (from `export { x as default }`) is emitted below, not as `export const default`.
+      const names = extractExports(src).filter((n) => n !== "default");
       const lines = [SERVER_STUB_FACTORY];
       for (const name of names) {
         lines.push(`export const ${name} = __bractServerStub(${JSON.stringify(name)});`);
@@ -110,6 +112,24 @@ export const serverModuleStubPlugin: BunPlugin = {
 };
 
 // ── Client env allowlist ───────────────────────────────────────────────────
+
+/**
+ * The client env rewrite itself (also applied by `routeShakePlugin`, whose
+ * onLoad answers for route modules before this plugin's would).
+ *
+ * SECURITY(medium): textual regex replace runs over the whole source,
+ * including inside string literals and comments. A bare `process.env.X`
+ * anywhere in user code — even in a documentation string — becomes the
+ * literal value (or "undefined"). This is acceptable for client builds
+ * because unwanted occurrences only yield the string "undefined", never a
+ * server secret. The allowedKeys gate is the authoritative leak check; never
+ * widen it without auditing callers.
+ */
+export function rewriteClientEnv(src: string, allowedKeys: string[], envValues: Record<string, string>): string {
+  return src.replace(/process\.env\.([A-Z_][A-Z0-9_]*)/g, (_match, key: string) =>
+    allowedKeys.includes(key) ? JSON.stringify(envValues[key] ?? "") : '"undefined"',
+  );
+}
 
 /**
  * Replaces process.env.KEY with string literals for allowed keys.
@@ -134,21 +154,7 @@ export function clientEnvPlugin(
         if (args.path.includes("/node_modules/")) return undefined;
         if (args.path.startsWith(getFrameworkSrcRoot())) return undefined;
         const src = await Bun.file(args.path).text();
-        // SECURITY(medium): textual regex replace runs over the whole source,
-        // including inside string literals and comments. A bare `process.env.X`
-        // anywhere in user code — even in a documentation string — becomes
-        // the literal value (or "undefined"). This is acceptable for client
-        // builds because unwanted occurrences only yield the string
-        // "undefined", never a server secret. The allowedKeys gate is the
-        // authoritative leak check; never widen it without auditing callers.
-        const contents = src.replace(
-          /process\.env\.([A-Z_][A-Z0-9_]*)/g,
-          (_match, key: string) =>
-            allowedKeys.includes(key)
-              ? JSON.stringify(envValues[key] ?? "")
-              : '"undefined"',
-        );
-        return { contents, loader: args.loader };
+        return { contents: rewriteClientEnv(src, allowedKeys, envValues), loader: args.loader };
       });
     },
   };

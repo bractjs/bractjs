@@ -2,6 +2,7 @@ import type { BunPlugin } from "bun";
 import { realpathSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
 import { hasServerDirective } from "../../shared/directives.ts";
+import { rewriteClientEnv } from "../env-plugin.ts";
 
 /**
  * Route-module exports that only ever run on the server. Client bundles strip
@@ -32,7 +33,26 @@ export const SERVER_ONLY_ROUTE_EXPORTS = [
  * `"use server"` file must become fetch proxies, never be shaken (the
  * directive check below is defense in depth for that case).
  */
-export function routeShakePlugin(appDir: string): BunPlugin {
+export interface RouteShakeOptions {
+  /**
+   * Emit the production JSX runtime. The client bundle always defines
+   * `process.env.NODE_ENV = "production"`, under which React's dev runtime
+   * export (`jsxDEV`) is `undefined` — so this must follow the BUNDLE's mode,
+   * not the build process's NODE_ENV (`NODE_ENV=test bractjs build` in CI).
+   * Default: `process.env.NODE_ENV === "production"`.
+   */
+  production?: boolean;
+  /**
+   * Apply the `process.env.*` client allowlist rewrite to the shaken source.
+   * Bun uses the first onLoad that answers, so `clientEnvPlugin` never sees
+   * the route modules this plugin loads; pass its arguments here instead.
+   */
+  env?: { allowedKeys: string[]; values: Record<string, string> };
+}
+
+export function routeShakePlugin(appDir: string, options: RouteShakeOptions = {}): BunPlugin {
+  const production = options.production ?? process.env.NODE_ENV === "production";
+  const env = options.env;
   let absAppDir = isAbsolute(appDir) ? appDir : resolve(appDir);
   try {
     // Bun.build hands onLoad realpaths — a symlinked appDir (or macOS's
@@ -45,13 +65,17 @@ export function routeShakePlugin(appDir: string): BunPlugin {
   const rootTsx = resolve(absAppDir, "root.tsx");
   const rootTs = resolve(absAppDir, "root.ts");
 
-  const transpiler = new Bun.Transpiler({
-    loader: "tsx",
-    exports: { eliminate: [...SERVER_ONLY_ROUTE_EXPORTS] },
-    trimUnusedImports: true,
-    autoImportJSX: true,
-    tsconfig: JSON.stringify({ compilerOptions: { jsx: "react-jsx", jsxImportSource: "react" } }),
-  });
+  const transpilerFor = (loader: "ts" | "tsx") =>
+    new Bun.Transpiler({
+      loader,
+      exports: { eliminate: [...SERVER_ONLY_ROUTE_EXPORTS] },
+      trimUnusedImports: true,
+      autoImportJSX: true,
+      tsconfig: JSON.stringify({ compilerOptions: { jsx: "react-jsx", jsxImportSource: "react" } }),
+    });
+  // Plain `.ts` route/layout files must not be parsed as TSX (`<T>x` casts).
+  const tsx = transpilerFor("tsx");
+  const ts = transpilerFor("ts");
 
   return {
     name: "bract:route-shake",
@@ -61,7 +85,9 @@ export function routeShakePlugin(appDir: string): BunPlugin {
         if (path !== rootTsx && path !== rootTs && !path.startsWith(routesDir)) return;
         const src = await Bun.file(path).text();
         if (hasServerDirective(src)) return;
-        return { contents: shakeRouteModuleSource(src, transpiler), loader: "js" };
+        let contents = shakeRouteModuleSource(src, path.endsWith(".ts") ? ts : tsx, production);
+        if (env) contents = rewriteClientEnv(contents, env.allowedKeys, env.values);
+        return { contents, loader: "js" };
       });
     },
   };
@@ -79,9 +105,13 @@ export function routeShakePlugin(appDir: string): BunPlugin {
  * jsx/jsxs distinction only affects dev-time key warnings, so the swap is
  * behavior-preserving.
  */
-export function shakeRouteModuleSource(src: string, transpiler: Bun.Transpiler): string {
+export function shakeRouteModuleSource(
+  src: string,
+  transpiler: Bun.Transpiler,
+  production: boolean = process.env.NODE_ENV === "production",
+): string {
   let code = transpiler.transformSync(src);
-  if (process.env.NODE_ENV === "production") {
+  if (production) {
     code = code.replaceAll('"react/jsx-dev-runtime"', '"react/jsx-runtime"').replaceAll("jsxDEV as ", "jsx as ");
   }
   return code;

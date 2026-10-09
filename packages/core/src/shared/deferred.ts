@@ -18,7 +18,17 @@ export function defer<T extends Record<string, unknown>>(data: T): DeferredData<
 
   for (const key of Object.keys(data)) {
     const value = data[key];
-    result[key] = value instanceof Promise ? new Deferred(value) : value;
+    if (value instanceof Promise) {
+      // Mark the rejection handled now. The server only subscribes (settle)
+      // once every loader has finished and the shell has rendered; a promise
+      // that rejects before then would otherwise surface as an unhandled
+      // rejection — on Node (appFetchHandler) that terminates the process.
+      // The derived promise is dropped; consumers still see the rejection.
+      value.catch(() => {});
+      result[key] = new Deferred(value);
+    } else {
+      result[key] = value;
+    }
   }
 
   return result as DeferredData<T>;

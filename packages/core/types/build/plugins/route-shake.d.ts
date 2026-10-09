@@ -18,7 +18,26 @@ export declare const SERVER_ONLY_ROUTE_EXPORTS: readonly ["loader", "action", "h
  * `"use server"` file must become fetch proxies, never be shaken (the
  * directive check below is defense in depth for that case).
  */
-export declare function routeShakePlugin(appDir: string): BunPlugin;
+export interface RouteShakeOptions {
+    /**
+     * Emit the production JSX runtime. The client bundle always defines
+     * `process.env.NODE_ENV = "production"`, under which React's dev runtime
+     * export (`jsxDEV`) is `undefined` — so this must follow the BUNDLE's mode,
+     * not the build process's NODE_ENV (`NODE_ENV=test bractjs build` in CI).
+     * Default: `process.env.NODE_ENV === "production"`.
+     */
+    production?: boolean;
+    /**
+     * Apply the `process.env.*` client allowlist rewrite to the shaken source.
+     * Bun uses the first onLoad that answers, so `clientEnvPlugin` never sees
+     * the route modules this plugin loads; pass its arguments here instead.
+     */
+    env?: {
+        allowedKeys: string[];
+        values: Record<string, string>;
+    };
+}
+export declare function routeShakePlugin(appDir: string, options?: RouteShakeOptions): BunPlugin;
 /**
  * Transform one route module's source: eliminate the server-only exports and
  * trim imports that only they used. Exposed for tests and the dev HMR module
@@ -31,4 +50,4 @@ export declare function routeShakePlugin(appDir: string): BunPlugin;
  * jsx/jsxs distinction only affects dev-time key warnings, so the swap is
  * behavior-preserving.
  */
-export declare function shakeRouteModuleSource(src: string, transpiler: Bun.Transpiler): string;
+export declare function shakeRouteModuleSource(src: string, transpiler: Bun.Transpiler, production?: boolean): string;

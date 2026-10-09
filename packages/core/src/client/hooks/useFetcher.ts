@@ -19,7 +19,7 @@ import {
 } from "../client-data.ts";
 import { reviveDeferred } from "../deferred-revive.ts";
 import { type FetcherState, fetcherStore } from "../fetcher-store.ts";
-import { assignExternal, toSamePath } from "../nav-utils.ts";
+import { assignExternal, readActionBody, toSamePath } from "../nav-utils.ts";
 import { softNavigate, triggerRevalidation } from "../revalidation.ts";
 import { type ResolveToFn, useResolveTo } from "./useResolveTo.ts";
 import {
@@ -379,9 +379,19 @@ function followRedirectResponse(res: Response): boolean {
   return false;
 }
 
+/** A GET submission carries its fields in the query string (`submit("/search", { method: "get", body: { q } })`). */
+function withQuery(url: string, body: FetcherRequest["body"]): string {
+  if (!body || typeof body === "string") return url;
+  const [path, existing = ""] = url.split("?");
+  const params = new URLSearchParams(existing);
+  for (const [name, value] of body.entries()) if (typeof value === "string") params.append(name, value);
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 /** Run a submission through the fetcher `key` (a GET becomes a load). */
 export async function fetcherSubmit(key: string, req: FetcherRequest): Promise<void> {
-  if (req.method === "GET") return fetcherLoad(key, req.url);
+  if (req.method === "GET") return fetcherLoad(key, withQuery(req.url, req.body));
   const formMethod = req.method;
   // Expose the submission BEFORE the fetch — this is what optimistic UI
   // renders while the mutation is in flight.
@@ -406,7 +416,7 @@ export async function fetcherSubmit(key: string, req: FetcherRequest): Promise<v
       if (followRedirectResponse(res)) return REDIRECTED;
       // data(null, { status: 204 }) — no body to parse.
       if (res.status === 204) return null;
-      return res.json();
+      return readActionBody(res);
     };
     let data: unknown;
     try {

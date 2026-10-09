@@ -4,7 +4,9 @@ import { csrfForbiddenResponse, isAllowedMutation } from "./csrf.ts";
 import type { ModuleRegistry } from "./layout.ts";
 import { createMiddlewareContext, runRouteMiddleware } from "./middleware.ts";
 import { hasForbiddenKey } from "./proto-guard.ts";
+import { isDataWithResponseInit, toHttpError } from "../shared/data.ts";
 import { isHttpError, isRedirect } from "../shared/errors.ts";
+import { fireOnError, type OnErrorHook } from "./lifecycle.ts";
 import { json, redirectEnvelope, sanitizeRedirect } from "./response.ts";
 
 /** Where `/_action` and `/_stream` find the route middleware guarding an action. */
@@ -16,6 +18,21 @@ export interface ActionGateOptions {
   routeMiddleware?: boolean;
   /** The request's context from global middleware, shared with route middleware as on pages. */
   context?: Record<string, unknown>;
+  /** `BractJSConfig.onError`: told about action failures, as for route actions. */
+  onError?: OnErrorHook;
+}
+
+/**
+ * The response for a gate/action that threw `err`, or null when it is a real
+ * failure: a redirect (enveloped), any other thrown `Response` (the intended
+ * reply, as on pages and /api), an `HttpError`, or a thrown `data(…, { status })`.
+ */
+export async function thrownActionResponse(err: unknown, requestUrl: string): Promise<Response | null> {
+  if (isRedirect(err)) return redirectEnvelope(sanitizeRedirect(err, requestUrl));
+  if (err instanceof Response) return err;
+  const httpError = isHttpError(err) ? err : await toHttpError(err);
+  if (httpError) return json({ error: httpError.message }, { status: httpError.status });
+  return null;
 }
 
 /**
@@ -38,8 +55,8 @@ export async function runActionGate(
     const res = await runRouteMiddleware(chain, createMiddlewareContext(request, {}, gate.context), work);
     return redirectEnvelope(sanitizeRedirect(res, request.url));
   } catch (err) {
-    if (isRedirect(err)) return redirectEnvelope(sanitizeRedirect(err, request.url));
-    if (isHttpError(err)) return json({ error: err.message }, { status: err.status });
+    const thrown = await thrownActionResponse(err, request.url);
+    if (thrown) return thrown;
     throw err;
   }
 }
@@ -67,10 +84,14 @@ export async function handleActionRequest(
 
   // SECURITY(high): the route middleware runs before the body is read, as for
   // typed /api endpoints, so a rejected caller costs no parsing.
-  return runActionGate(request, entry, gate, () => invokeAction(request, entry.fn));
+  return runActionGate(request, entry, gate, () => invokeAction(request, entry.fn, gate?.onError));
 }
 
-async function invokeAction(request: Request, fn: ActionEntry["fn"]): Promise<Response> {
+async function invokeAction(
+  request: Request,
+  fn: ActionEntry["fn"],
+  onError?: OnErrorHook,
+): Promise<Response> {
   let args: unknown[];
   try {
     const ct = request.headers.get("Content-Type") ?? "";
@@ -115,13 +136,17 @@ async function invokeAction(request: Request, fn: ActionEntry["fn"]): Promise<Re
     // `return redirect("/posts")` from an action: the proxy soft-navigates.
     if (isRedirect(result)) return redirectEnvelope(sanitizeRedirect(result, request.url));
     if (result instanceof Response) return result;
+    // `return data(value, { status, headers })`: status/headers for the reply.
+    if (isDataWithResponseInit(result)) return json(result.data ?? null, result.init ?? undefined);
     return json(result ?? null);
   } catch (err) {
-    // `throw redirect(…)` and `throw new HttpError(…)` are control flow, as in
-    // loaders and route actions — not server errors.
-    if (isRedirect(err)) return redirectEnvelope(sanitizeRedirect(err, request.url));
-    if (isHttpError(err)) return json({ error: err.message }, { status: err.status });
+    // `throw redirect(…)`, a thrown Response, `throw new HttpError(…)` and
+    // `throw data(…, { status })` are control flow, as in loaders and route
+    // actions — not server errors.
+    const thrown = await thrownActionResponse(err, request.url);
+    if (thrown) return thrown;
     console.error("[bractjs] server action error:", err);
+    await fireOnError(onError, err, request);
     return new Response("Internal Server Error", { status: 500 });
   }
 }
@@ -151,15 +176,25 @@ function decodeFormArgs(body: FormData): unknown[] | Response {
   if (list.some((v) => hasForbiddenKey(v))) {
     return new Response("Bad Request: forbidden keys", { status: 400 });
   }
+  // Group the `i:name` entries by index in ONE pass over the body. Rescanning
+  // every entry per marker cost (markers × entries), which a request with
+  // thousands of markers and a large body turned into minutes of blocked loop.
+  const forms = new Map<number, FormData>();
+  for (const [key, value] of body.entries()) {
+    const colon = key.indexOf(":");
+    if (colon <= 0) continue;
+    const digits = key.slice(0, colon);
+    const index = Number(digits);
+    // Exactly the `${i}:` prefix the proxy writes ("01:x" is not form 1).
+    if (!Number.isInteger(index) || index < 0 || index >= list.length || String(index) !== digits) continue;
+    let form = forms.get(index);
+    if (!form) forms.set(index, (form = new FormData()));
+    form.append(key.slice(colon + 1), value);
+  }
   return list.map((arg, i) => {
     // Only the marker the proxy writes at this exact position becomes a form.
     if (!isFormMarker(arg, i)) return arg;
-    const form = new FormData();
-    const prefix = `${i}:`;
-    for (const [key, value] of body.entries()) {
-      if (key.startsWith(prefix)) form.append(key.slice(prefix.length), value);
-    }
-    return form;
+    return forms.get(i) ?? new FormData();
   });
 }
 

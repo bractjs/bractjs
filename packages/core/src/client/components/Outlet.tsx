@@ -27,6 +27,8 @@ import { RouterContext, type RouterContextValue } from "../router.tsx";
 
 interface EBProps {
   fallback: ComponentType<{ error: Error }>;
+  /** Changes on every navigation: a shown error is cleared so the next route renders. */
+  resetKey?: string;
   children: ReactNode;
 }
 interface EBState {
@@ -38,6 +40,13 @@ class RouteErrorBoundary extends Component<EBProps, EBState> {
 
   static getDerivedStateFromError(error: Error): EBState {
     return { error };
+  }
+
+  // The boundary sits at the same tree position for every route, so React
+  // keeps its state across navigations: without this, route A's error would
+  // stay on screen after a <Link> to sibling route B until a full reload.
+  componentDidUpdate(prev: EBProps): void {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.setState({ error: null });
   }
 
   render(): ReactNode {
@@ -238,7 +247,7 @@ function RouteOutlet({
       { params: routerCtx?.params },
     );
     return (
-      <RouteErrorBoundary fallback={ErrorFallback}>
+      <RouteErrorBoundary fallback={ErrorFallback} resetKey={routerCtx?.location?.key}>
         <Suspense fallback={null}>{boundary}</Suspense>
       </RouteErrorBoundary>
     );
@@ -249,7 +258,7 @@ function RouteOutlet({
   }
 
   return (
-    <RouteErrorBoundary fallback={ErrorFallback}>
+    <RouteErrorBoundary fallback={ErrorFallback} resetKey={routerCtx?.location?.key}>
       <Suspense fallback={null}>
         <RouteComponent {...(pending ? {} : componentProps(routerCtx, bractCtx, "route"))} />
       </Suspense>

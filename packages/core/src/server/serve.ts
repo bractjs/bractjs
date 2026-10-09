@@ -269,7 +269,12 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
   const moduleRegistry = config.moduleRegistry;
   // Route middleware for "use server" actions: chain derived from each
   // action's defining module (server/action-middleware.ts).
-  const actionGate = { appDir, moduleRegistry, routeMiddleware: config.actionMiddleware !== false };
+  const actionGate = {
+    appDir,
+    moduleRegistry,
+    routeMiddleware: config.actionMiddleware !== false,
+    onError: config.onError,
+  };
   const onError = config.onError;
   // Config-supplied instrumentations replace the previous handler's (a second
   // buildFetchHandler — tests, embedders — must not stack duplicates).
@@ -347,7 +352,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // not turn these on for a production server.
     if (isDevRuntime() && isExplicitDev() && pathname === "/_hmr/module") {
       const { handleHmrModuleRequest } = await import("../dev/hmr-module-handler.ts");
-      return handleHmrModuleRequest(url, appDir);
+      return handleHmrModuleRequest(url, appDir, config.clientEnv ?? []);
     }
 
     // Dev-only: the error overlay's code frames and open-in-editor. The
@@ -393,7 +398,7 @@ export function buildFetchHandler(config: Partial<BractJSConfig>) {
     // Typed API routes (registered via bract.route())
     if (pathname.startsWith("/api")) {
       const { handleApiRequest } = await import("./api-route.ts");
-      const apiRes = await handleApiRequest(request, context);
+      const apiRes = await handleApiRequest(request, context, onError);
       if (apiRes) return apiRes;
     }
 

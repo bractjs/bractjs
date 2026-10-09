@@ -12,7 +12,12 @@ import { routeShakePlugin } from "../build/plugins/route-shake.ts";
  *
  * Security: rejects any path that resolves outside appDir.
  */
-export async function handleHmrModuleRequest(url: URL, appDir: string): Promise<Response> {
+export async function handleHmrModuleRequest(
+  url: URL,
+  appDir: string,
+  /** `BractJSConfig.clientEnv`: the `process.env.*` keys the module may inline (as the rebuilder does). */
+  clientEnv: string[] = [],
+): Promise<Response> {
   const file = url.searchParams.get("file");
   if (!file) {
     return new Response("Missing file param", { status: 400 });
@@ -55,7 +60,14 @@ export async function handleHmrModuleRequest(url: URL, appDir: string): Promise<
     target: "browser",
     minify: false,
     sourcemap: "inline",
-    plugins: [serverModuleStubPlugin, createUseServerProxyPlugin(rootDir), routeShakePlugin(rootDir)],
+    plugins: [
+      serverModuleStubPlugin,
+      createUseServerProxyPlugin(rootDir),
+      routeShakePlugin(rootDir, {
+        production: false,
+        env: { allowedKeys: clientEnv, values: Bun.env as Record<string, string> },
+      }),
+    ],
   });
 
   if (!result.success || result.outputs.length === 0) {

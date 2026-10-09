@@ -1,5 +1,5 @@
 import { rename } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,9 @@ export interface RouteManifest {
 
 // ── Module-scope cache ─────────────────────────────────────────────────────
 
-let cached: RouteManifest | null = null;
+// Per build directory: a second server in the same process (tests, embedders)
+// must not be handed the first app's manifest.
+const cached = new Map<string, RouteManifest>();
 
 // ── Functions ──────────────────────────────────────────────────────────────
 
@@ -93,8 +95,11 @@ export async function writeManifest(
  * Call this at production server startup.
  */
 export async function loadManifest(buildDir: string): Promise<RouteManifest> {
-  if (cached) return cached;
+  const key = resolve(buildDir);
+  const hit = cached.get(key);
+  if (hit) return hit;
   const src = join(buildDir, "route-manifest.json");
-  cached = (await Bun.file(src).json()) as RouteManifest;
-  return cached;
+  const manifest = (await Bun.file(src).json()) as RouteManifest;
+  cached.set(key, manifest);
+  return manifest;
 }

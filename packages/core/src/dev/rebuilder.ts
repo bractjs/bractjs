@@ -120,7 +120,10 @@ export async function rebuildClient(config?: Partial<BractJSConfig>): Promise<Re
         reactDedupePlugin(process.cwd()),
         serverModuleStubPlugin,
         createUseServerProxyPlugin(appDir),
-        routeShakePlugin(appDir),
+        routeShakePlugin(appDir, {
+          production: false,
+          env: { allowedKeys: config?.clientEnv ?? [], values: Bun.env as Record<string, string> },
+        }),
         clientEnvPlugin(config?.clientEnv ?? [], Bun.env as Record<string, string>),
         ...(await tailwindPlugins(config ?? {})),
         ...(config?.plugins ?? []),

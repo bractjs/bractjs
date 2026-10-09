@@ -118,7 +118,7 @@ export async function runBuild(config: BuildConfig): Promise<void> {
       // Bun pairs each JS entry-point output with the CSS bundle it extracted;
       // the mapping is only available via the metafile.
       metafile: true,
-      plugins: [reactDedupePlugin(process.cwd()), serverModuleStubPlugin, createUseServerProxyPlugin(appDir), routeShakePlugin(appDir), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), ...(await tailwindPlugins(config)), ...(config.plugins ?? [])],
+      plugins: [reactDedupePlugin(process.cwd()), serverModuleStubPlugin, createUseServerProxyPlugin(appDir), routeShakePlugin(appDir, { production: true, env: { allowedKeys: config.clientEnv ?? [], values: Bun.env as Record<string, string> } }), clientEnvPlugin(config.clientEnv ?? [], Bun.env as Record<string, string>), ...(await tailwindPlugins(config)), ...(config.plugins ?? [])],
     });
   } finally {
     await rm(shimPath, { force: true });
@@ -210,7 +210,10 @@ export async function runBuild(config: BuildConfig): Promise<void> {
     const publicPath = await hashAndRename(artifact.path, hash);
 
     const layoutSource = layoutSources.find((f) => rel === outputRelPath(appDirClean, f));
-    if (outBase === rootBase) {
+    // Match the root by its full output path (as the dev rebuilder does), not
+    // its basename: a route named routes/root.tsx would otherwise be taken for
+    // the root and overwrite rootChunk.
+    if (rootBase !== null && rel === join(appDirClean, `${rootBase}.js`)) {
       rootChunk = publicPath;
       rootCss = css;
     } else if (layoutSource) {

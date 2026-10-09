@@ -14,6 +14,19 @@ export interface CorsOptions {
  * Always sets `Vary: Origin` so caches don't serve a cross-origin response to
  * the wrong site.
  */
+/**
+ * Set the CORS headers and MERGE `Origin` into `Vary`: overwriting it would
+ * drop a route's own `Vary: Cookie` / `Accept-Language`, and a shared cache
+ * could then serve one visitor's variant of a public page to everyone.
+ */
+function applyCors(headers: Headers, corsHeaders: Record<string, string>): void {
+  for (const [k, v] of Object.entries(corsHeaders)) headers.set(k, v);
+  const vary = headers.get("Vary");
+  if (!vary) headers.set("Vary", "Origin");
+  else if (vary.trim() !== "*" && !/(^|,)\s*origin\s*(,|$)/i.test(vary))
+    headers.set("Vary", `${vary}, Origin`);
+}
+
 export function cors(options: CorsOptions): MiddlewareFn {
   const allowedOrigins = Array.isArray(options.origin) ? options.origin : [options.origin];
   const allowedMethods = options.methods?.join(", ") ?? "GET, POST, PUT, DELETE, PATCH, OPTIONS";
@@ -32,7 +45,6 @@ export function cors(options: CorsOptions): MiddlewareFn {
     const corsHeaders: Record<string, string> = {
       "Access-Control-Allow-Methods": allowedMethods,
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      Vary: "Origin",
     };
     if (wildcard) {
       corsHeaders["Access-Control-Allow-Origin"] = "*";
@@ -43,7 +55,7 @@ export function cors(options: CorsOptions): MiddlewareFn {
 
     // Preflight
     if (ctx.request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      return new Response(null, { status: 204, headers: { ...corsHeaders, Vary: "Origin" } });
     }
 
     const response = await next();
@@ -51,12 +63,12 @@ export function cors(options: CorsOptions): MiddlewareFn {
     // `new Response(response.body, response)` makes the original Response
     // unusable to anyone holding a reference (single-shot stream).
     try {
-      for (const [k, v] of Object.entries(corsHeaders)) response.headers.set(k, v);
+      applyCors(response.headers, corsHeaders);
       return response;
     } catch {
       // Immutable headers (Response.redirect(), a Response from fetch()): copy.
       const copy = new Response(response.body, response);
-      for (const [k, v] of Object.entries(corsHeaders)) copy.headers.set(k, v);
+      applyCors(copy.headers, corsHeaders);
       return copy;
     }
   };

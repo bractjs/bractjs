@@ -25,6 +25,19 @@ export declare const serverOnlyPlugin: BunPlugin;
  */
 export declare const serverModuleStubPlugin: BunPlugin;
 /**
+ * The client env rewrite itself (also applied by `routeShakePlugin`, whose
+ * onLoad answers for route modules before this plugin's would).
+ *
+ * SECURITY(medium): textual regex replace runs over the whole source,
+ * including inside string literals and comments. A bare `process.env.X`
+ * anywhere in user code — even in a documentation string — becomes the
+ * literal value (or "undefined"). This is acceptable for client builds
+ * because unwanted occurrences only yield the string "undefined", never a
+ * server secret. The allowedKeys gate is the authoritative leak check; never
+ * widen it without auditing callers.
+ */
+export declare function rewriteClientEnv(src: string, allowedKeys: string[], envValues: Record<string, string>): string;
+/**
  * Replaces process.env.KEY with string literals for allowed keys.
  * All other process.env.* references become the string "undefined".
  */
