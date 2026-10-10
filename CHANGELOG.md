@@ -6,6 +6,12 @@ All notable changes to BractJS are documented here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.10.0] — 2026-10-09
+
 **Behaviour changes to check:**
 
 - **A document `POST` to a route with no `action` export now answers `405 Method Not Allowed`** (React Router parity). It answered `200` — `<Form>` reported success for a mutation that never ran. Methods other than `GET`/`HEAD`/`POST`/`PUT`/`PATCH`/`DELETE` (`OPTIONS`, `PROPFIND`, …) on a page also get a `405` instead of running its loaders and rendering a document; `cors()` still answers preflights first.
