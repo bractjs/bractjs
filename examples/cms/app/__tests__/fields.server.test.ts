@@ -17,6 +17,7 @@ import {
   setFieldValue,
   updateGroup,
 } from "../models/fields.server.ts";
+import { createPage, deletePage } from "../models/pages.server.ts";
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
 function group(target: "post" | "page" | "category" = "post") {
@@ -84,7 +85,9 @@ test("saveEntityFields reads cf:<id> inputs (single via get, repeatable via getA
 });
 
 test("resolveEntityFields resolves text + a post link, skipping dangling refs", () => {
-  const post = db.query<{ id: string; slug: string }, []>("SELECT id, slug FROM posts LIMIT 1").get()!;
+  const post = db
+    .query<{ id: string; slug: string }, []>("SELECT id, slug FROM posts WHERE status = 'published' LIMIT 1")
+    .get()!;
   const g = group();
   addField(g.id, { label: "Note", name: "note", type: "text", repeatable: false });
   addField(g.id, { label: "Related", name: "related", type: "post", repeatable: true });
@@ -97,4 +100,44 @@ test("resolveEntityFields resolves text + a post link, skipping dangling refs", 
   expect(noteR.values).toEqual([{ type: "text", text: "see also" }]);
   const relR = resolved.find((r) => r.field.id === related!.id)!;
   expect(relR.values).toEqual([{ type: "post", title: expect.any(String), url: `/posts/${post.slug}` }]);
+});
+
+test("unpublished references are not resolved (draft post, draft page, page under a draft)", () => {
+  const draft = db.query<{ id: string }, []>("SELECT id FROM posts WHERE status = 'draft' LIMIT 1").get()!;
+  const page = (status: "draft" | "published", parentId: string | null) =>
+    createPage({
+      title: `P-${rnd()}`,
+      slug: `p-${rnd()}`,
+      body: "",
+      status,
+      parentId,
+      featuredMediaId: null,
+      menuOrder: 0,
+      seoTitle: "",
+      seoDescription: "",
+    }).id!;
+  const published = page("published", null);
+  const draftChild = page("draft", published);
+  const publishedUnderDraft = page("published", draftChild);
+  try {
+    const g = group();
+    addField(g.id, { label: "Related", name: "related", type: "post", repeatable: false });
+    addField(g.id, { label: "Pages", name: "pages", type: "page", repeatable: true });
+    const [related, pages] = listFields(g.id);
+    const eid = `e-${rnd()}`;
+    setFieldValue("post", eid, related!.id, draft.id);
+    setFieldValue("post", eid, pages!.id, [draftChild, publishedUnderDraft, published]);
+    const resolved = resolveEntityFields("post", eid);
+    // The draft post yields no value, so its field is omitted entirely.
+    expect(resolved.find((r) => r.field.id === related!.id)).toBeUndefined();
+    const pagesR = resolved.find((r) => r.field.id === pages!.id)!;
+    expect(pagesR.values.map((v) => (v as { url: string | null }).url)).toEqual([
+      `/${db.query<{ slug: string }, [string]>("SELECT slug FROM pages WHERE id = ?").get(published)!.slug}`,
+    ]);
+    deleteGroup(g.id);
+  } finally {
+    deletePage(publishedUnderDraft);
+    deletePage(draftChild);
+    deletePage(published);
+  }
 });

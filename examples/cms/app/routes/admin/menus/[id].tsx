@@ -55,8 +55,13 @@ export async function action({ request, params, formData }: ActionArgs): Promise
           cssClass: String(o.cssClass ?? ""),
         };
       });
-      reorderMenuItems(menu.id, nodes);
-    } catch {
+      if (!reorderMenuItems(menu.id, nodes)) {
+        return flashFail({
+          error: "The menu layout didn’t match this menu’s items — nothing was saved. Reload and try again.",
+        });
+      }
+    } catch (err) {
+      console.error("[cms] menu reorder failed:", err);
       return flashFail({ error: "Couldn’t save the menu layout." });
     }
     return flashStay("Menu layout saved");

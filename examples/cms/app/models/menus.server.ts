@@ -128,11 +128,14 @@ export function menuTree(menuId: string): MenuItemNode[] {
  * Replace a menu's item structure from the tree editor: delete items no longer
  * present, then re-parent / re-order / re-label the rest. `parentId` is validated
  * to belong to this menu (or null), so a payload can't move items across menus.
+ *
+ * Returns false — and writes nothing — when the payload matched none of this
+ * menu's items (a stale or foreign layout), so the caller can say so.
  */
 export function reorderMenuItems(
   menuId: string,
   nodes: Array<{ id: string; parentId: string | null; position: number; label: string; cssClass: string }>,
-): void {
+): boolean {
   const owned = new Set(
     db
       .query<{ id: string }, [string]>("SELECT id FROM menu_items WHERE menuId = ?")
@@ -142,7 +145,7 @@ export function reorderMenuItems(
   const keep = new Set(nodes.map((n) => n.id).filter((id) => owned.has(id)));
   // Safety: a payload that matches none of this menu's items is malformed —
   // never let it wipe the menu. (Empty a menu by deleting the menu itself.)
-  if (owned.size > 0 && keep.size === 0) return;
+  if (owned.size > 0 && keep.size === 0) return false;
   tx(() => {
     for (const id of owned) if (!keep.has(id)) db.run("DELETE FROM menu_items WHERE id = ?", [id]);
     for (const n of nodes) {
@@ -154,9 +157,11 @@ export function reorderMenuItems(
       );
     }
   });
+  return true;
 }
 
-function hrefFor(it: MenuItem): string {
+/** The item's public href; null for a page item whose page isn't published (the item is hidden). */
+function hrefFor(it: MenuItem): string | null {
   if (it.type === "custom") {
     const url = (it.url ?? "").trim();
     if (!url) return "#";
@@ -170,21 +175,25 @@ function hrefFor(it: MenuItem): string {
       .get(it.categoryId ?? "")?.slug;
     return slug ? `/category/${slug}` : "#";
   }
-  return it.pageId ? (pagePath(it.pageId) ?? "#") : "#";
+  if (!it.pageId) return "#";
+  return publishedPagePath(it.pageId);
 }
 
-/** Resolve a location's nested items + the menu's CSS classes for public rendering. */
+/**
+ * Resolve a location's nested items + the menu's CSS classes for public
+ * rendering. An item pointing at an unpublished page is left out together
+ * with its subtree (its children are usually that page's sub-pages; promoting
+ * them would surface orphaned links).
+ */
 export function resolvedMenu(location: MenuLocation): ResolvedMenu {
   const menu = getMenuByLocation(location);
   if (!menu) return { menuClass: "", submenuClass: "", itemClass: "", items: [] };
   const resolve = (nodes: MenuItemNode[]): MenuNode[] =>
-    nodes.map((it) => ({
-      id: it.id,
-      label: it.label,
-      href: hrefFor(it),
-      cssClass: it.cssClass,
-      children: resolve(it.children),
-    }));
+    nodes.flatMap((it) => {
+      const href = hrefFor(it);
+      if (href === null) return [];
+      return [{ id: it.id, label: it.label, href, cssClass: it.cssClass, children: resolve(it.children) }];
+    });
   return {
     menuClass: menu.menuClass,
     submenuClass: menu.submenuClass,
@@ -193,15 +202,21 @@ export function resolvedMenu(location: MenuLocation): ResolvedMenu {
   };
 }
 
-/** Build a page's full slug path by walking parents (kept here to avoid a model cycle). */
-function pagePath(pageId: string): string | null {
+/**
+ * A PUBLISHED page's full slug path by walking parents (kept here to avoid a
+ * model cycle), or null when the page or any ancestor is a draft — the rule
+ * the public page route applies (`getPageByPath(…, { publishedOnly: true })`),
+ * so the site menu never links to, or reveals the path of, unpublished content.
+ */
+function publishedPagePath(pageId: string): string | null {
   const slugs: string[] = [];
-  const q = db.query<{ slug: string; parentId: string | null }, [string]>(
-    "SELECT slug, parentId FROM pages WHERE id = ?",
+  const q = db.query<{ slug: string; parentId: string | null; status: string }, [string]>(
+    "SELECT slug, parentId, status FROM pages WHERE id = ?",
   );
   let current = q.get(pageId) ?? null;
   let guard = 0;
   while (current && guard++ < 50) {
+    if (current.status !== "published") return null;
     slugs.unshift(current.slug);
     current = current.parentId ? (q.get(current.parentId) ?? null) : null;
   }

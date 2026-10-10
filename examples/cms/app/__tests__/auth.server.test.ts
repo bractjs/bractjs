@@ -15,6 +15,8 @@ import {
   setOAuthState,
 } from "../auth.server.ts";
 import { createUser, updateUser } from "../models/users.server.ts";
+import { callAction } from "@bractjs/bractjs/testing";
+import { action as logoutAction } from "../routes/admin/logout.tsx";
 
 const rnd = () => crypto.randomUUID().slice(0, 8);
 const make = () =>
@@ -40,6 +42,26 @@ test("authenticatePassword: wrong password or unknown user returns null", async 
   const u = (await make()).user!;
   expect(await authenticatePassword(u.username, "wrong")).toBeNull();
   expect(await authenticatePassword(`ghost-${rnd()}`, "secret123")).toBeNull();
+});
+
+test("logout revokes a copied session cookie, not just the browser's copy", async () => {
+  const u = (await make()).user!;
+  const set = await loginCookie(u);
+  expect((await getAdmin(reqWith(set)))?.id).toBe(u.id);
+
+  const request = new Request("http://x/admin/logout", {
+    method: "POST",
+    headers: { cookie: cookieHeader(set) },
+  });
+  const res = (await callAction(logoutAction, { request, formData: new FormData() })) as Response;
+  expect(res.status).toBe(302);
+  expect(res.headers.get("Location")).toBe("/admin/login");
+  expect(res.headers.get("Set-Cookie")).toContain("Max-Age=0");
+
+  // The OLD cookie (as copied before logout) is now rejected: the epoch moved on.
+  expect(await getAdmin(reqWith(set))).toBeNull();
+  // A fresh login works again.
+  expect((await getAdmin(reqWith(await loginCookie(u))))?.id).toBe(u.id);
 });
 
 test("session round-trip: loginCookie → getAdmin resolves the user; logout clears it", async () => {

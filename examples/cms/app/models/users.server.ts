@@ -71,6 +71,11 @@ export function getUserSessionEpoch(id: string): number {
   );
 }
 
+/** Revoke every live session of this user: cookies carry the epoch they were issued under. */
+export function bumpSessionEpoch(id: string): void {
+  db.run("UPDATE users SET sessionEpoch = sessionEpoch + 1 WHERE id = ?", [id]);
+}
+
 export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return Bun.password.verify(plain, hash);
 }

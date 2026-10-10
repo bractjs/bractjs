@@ -23,8 +23,16 @@ export async function loader({ request }: LoaderArgs): Promise<LayoutData> {
 
 // Expire the flash cookie on the same response that delivered it, so the toast
 // pops exactly once. Runs on both the full document load and the /_data soft-nav.
-export function headers({ loaderData }: HeadersArgs<LayoutData>) {
-  return loaderData.flash ? { "Set-Cookie": FLASH_CLEAR } : undefined;
+//
+// `actionHeaders` are forwarded: once any module in the chain exports
+// `headers()`, the framework applies an action's `data(value, { headers })`
+// headers to a no-JS document POST only through that export — without this
+// the login throttle's `Retry-After` (and any Set-Cookie an action returns
+// this way) would be dropped on a non-JS submit.
+export function headers({ loaderData, actionHeaders }: HeadersArgs<LayoutData>) {
+  const out = new Headers(actionHeaders);
+  if (loaderData?.flash) out.append("Set-Cookie", FLASH_CLEAR);
+  return out;
 }
 
 export default function AdminLayout() {

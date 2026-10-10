@@ -210,14 +210,21 @@ export type ResolvedValue =
   | { type: "post" | "page" | "category"; title: string; url: string | null };
 export type ResolvedField = { field: Field; values: ResolvedValue[] };
 
-function pagePath(pageId: string): string | null {
-  const q = db.query<{ slug: string; parentId: string | null }, [string]>(
-    "SELECT slug, parentId FROM pages WHERE id = ?",
+/**
+ * A PUBLISHED page's full slug path, or null when the page — or any ancestor —
+ * is a draft (the same rule `getPageByPath(…, { publishedOnly: true })`
+ * applies to the public page route). Custom fields render on public pages, so
+ * a draft must not leak its title or URL through a reference.
+ */
+function publishedPagePath(pageId: string): string | null {
+  const q = db.query<{ slug: string; parentId: string | null; status: string }, [string]>(
+    "SELECT slug, parentId, status FROM pages WHERE id = ?",
   );
   const slugs: string[] = [];
   let cur = q.get(pageId) ?? null;
   let guard = 0;
   while (cur && guard++ < 50) {
+    if (cur.status !== "published") return null;
     slugs.unshift(cur.slug);
     cur = cur.parentId ? (q.get(cur.parentId) ?? null) : null;
   }
@@ -232,21 +239,26 @@ function resolveOne(type: FieldType, raw: string): ResolvedValue | null {
     return m ? { type: "image", url: m.url, alt: m.alt } : null;
   }
   if (type === "post") {
+    // Published only: a draft referenced from a live post stays hidden.
     const p = db
-      .query<{ title: string; slug: string }, [string]>("SELECT title, slug FROM posts WHERE id = ?")
+      .query<{ title: string; slug: string }, [string]>(
+        "SELECT title, slug FROM posts WHERE id = ? AND status = 'published'",
+      )
       .get(raw);
     return p ? { type: "post", title: p.title, url: `/posts/${p.slug}` } : null;
   }
   if (type === "page") {
+    const url = publishedPagePath(raw);
+    if (!url) return null;
     const p = db.query<{ title: string }, [string]>("SELECT title FROM pages WHERE id = ?").get(raw);
-    return p ? { type: "page", title: p.title, url: pagePath(raw) } : null;
+    return p ? { type: "page", title: p.title, url } : null;
   }
   const c = db
     .query<{ name: string; slug: string }, [string]>("SELECT name, slug FROM categories WHERE id = ?")
     .get(raw);
   return c ? { type: "category", title: c.name, url: `/category/${c.slug}` } : null;
 }
-/** Resolved, render-ready custom fields for an entity (skips empty/dangling refs). */
+/** Resolved, render-ready custom fields for an entity (skips empty, dangling and unpublished refs). */
 export function resolveEntityFields(target: EntityType, entityId: string): ResolvedField[] {
   const values = getFieldValues(target, entityId);
   const out: ResolvedField[] = [];
